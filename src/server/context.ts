@@ -1,7 +1,8 @@
 import { COMPACT_PROMPT, renderForTranscript } from '../agent.js';
 import type { LlmClient, Message, ToolSpec } from '../openrouter.js';
 import { buildSystemPrompt } from '../prompt.js';
-import type { Artifact, Bot, Chat, ContextBreakdown, ContextSection, ModelInfo, Project, RecalledMemory, SkillInfo, UiSettings } from '../shared/types.js';
+import type { Artifact, Bot, Doc, Chat, ContextBreakdown, ContextSection, ModelInfo, Project, RecalledMemory, SkillInfo, UiSettings } from '../shared/types.js';
+import { docPrompt } from './docs.js';
 import { skillsPrompt } from './extensions/skills.js';
 
 const DEFAULT_CONTEXT_LENGTH = 128_000;
@@ -22,6 +23,8 @@ export interface ChatSetup {
   artifacts: Artifact[];
   settings: UiSettings;
   toolNames: string[];
+  /** The document a doc chat works on. */
+  doc?: Doc;
 }
 
 interface PromptSection {
@@ -107,6 +110,21 @@ export function promptSections(setup: ChatSetup): PromptSection[] {
     });
   }
 
+  const lessons = (bot.lessons ?? []).slice(-12);
+  if (lessons.length) {
+    sections.push({
+      label: `Lessons from feedback (${lessons.length})`,
+      kind: 'memory',
+      text:
+        '# Lessons from feedback\nThe user rated some of your earlier answers. Keep doing what they liked and avoid what they disliked:\n' +
+        lessons.map((l) => `- ${l.value > 0 ? '(liked)' : '(disliked)'} ${l.text}`).join('\n'),
+    });
+  }
+
+  if (setup.doc && toolNames.includes('DocEdit')) {
+    sections.push({ label: `Document: ${setup.doc.title}`, kind: 'project', text: docPrompt(setup.doc) });
+  }
+
   if (toolNames.includes('Skill') && setup.skills.length) {
     sections.push({ label: `Skills (${setup.skills.length})`, kind: 'tools', text: skillsPrompt(setup.skills) });
   }
@@ -128,7 +146,7 @@ export function systemPrompt(setup: ChatSetup): string {
 
 /** The messages actually sent to the model: the summary (if any) plus the uncompacted tail. */
 export function contextMessages(chat: Chat): Message[] {
-  const tail = chat.messages.slice(chat.contextStart).map(({ ts: _ts, model: _model, memories: _memories, ...m }) => m as Message);
+  const tail = chat.messages.slice(chat.contextStart).map(({ ts: _ts, model: _model, memories: _memories, command: _command, rating: _rating, ...m }) => m as Message);
   if (!chat.summary) return tail;
   return [
     { role: 'user', content: `Earlier parts of this conversation were summarized to save context:\n\n${chat.summary}` },

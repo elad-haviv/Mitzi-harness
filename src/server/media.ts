@@ -121,7 +121,7 @@ export class MediaService {
     if (!id) throw new ToolError('No image model is set up (Settings → Media & voice).');
     const { provider, model, base, key } = this.resolve(id);
     const aspect = opts.aspect ?? '1:1';
-    if (provider.kind === 'openai') {
+    if (provider.kind === 'openai' || provider.kind === 'custom') {
       const size = aspect === '16:9' || aspect === '3:2' ? '1536x1024' : aspect === '9:16' || aspect === '2:3' ? '1024x1536' : '1024x1024';
       const res = await check(
         await fetch(`${base}/images/generations`, {
@@ -238,7 +238,7 @@ export class MediaService {
     if (!s.speechModel) throw new ToolError('No speech model is set up (Settings → Media & voice).');
     const { provider, model, base, key } = this.resolve(s.speechModel);
     const v = voice || s.voice;
-    if (provider.kind === 'openai') {
+    if (provider.kind === 'openai' || provider.kind === 'custom') {
       const res = await check(
         await fetch(`${base}/audio/speech`, {
           method: 'POST',

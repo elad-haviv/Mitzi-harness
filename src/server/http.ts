@@ -1,5 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
-import { existsSync, readFileSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { homedir } from 'node:os';
 import { extname, join, normalize, resolve, sep } from 'node:path';
@@ -18,6 +18,8 @@ import { McpManager } from './mcp/manager.js';
 import { OAuthFlows } from './mcp/oauth.js';
 import { oauthCallback, registerExtensionRoutes } from './routes-ext.js';
 import { ChatRunner, summarizeChat } from './runner.js';
+import { MediaService } from './media.js';
+import { mediaUpdate, registerFeatureRoutes } from './routes-features.js';
 import { newId, now, Store } from './store.js';
 import { clamp, fail, Handler, HttpError, Req, STREAMED, str } from './util.js';
 
@@ -103,7 +105,8 @@ export function createApp(opts: AppOptions) {
     sync: () => syncPlugins(store, plugins, mcp),
     redirectUri: () => `${opts.origin()}/api/oauth/callback`,
   };
-  const runner = new ChatRunner({ store, config, client, catalog, memory, mcp, skills, commands });
+  const media = new MediaService(opts.dataDir, router, () => store.settings.media);
+  const runner = new ChatRunner({ store, config, client, catalog, memory, mcp, skills, commands, media });
   seedBots(store, opts.dataDir);
   ensureDefaultBot(store);
   migrateLegacyMemories(store, memory);
@@ -156,6 +159,7 @@ export function createApp(opts: AppOptions) {
     }
     if (typeof update.embeddingModel === 'string') ui.embeddingModel = update.embeddingModel.trim();
     if (typeof update.recallTokens === 'number') ui.recallTokens = clamp(Math.round(update.recallTokens), 200, 8000);
+    if (update.media) ui.media = mediaUpdate(update.media, store.settings.media);
     store.updateSettings(ui);
     return publicSettings();
   });
@@ -265,19 +269,17 @@ export function createApp(opts: AppOptions) {
     const projectId = query.get('projectId');
     return store.chats
       .all()
-      .filter((c) => !projectId || c.projectId === projectId)
+      // Documents' companion chats live with their document.
+      .filter((c) => (!projectId || c.projectId === projectId) && !c.docId)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .map((c) => ({ ...summarizeChat(c), running: runner.isRunning(c.id) }));
   });
-  route('POST', '/api/chats', ({ body }) => {
-    const project = body?.projectId ? getProject(body.projectId) : undefined;
-    const bot = getBot(str(body?.botId) || DEFAULT_BOT_ID);
-    const chat: Chat = {
+  /** A new, unsaved chat; `fields` override the defaults. */
+  const newChat = (fields: Partial<Chat> = {}): Chat => {
+    const bot = store.bots.get(fields.botId ?? DEFAULT_BOT_ID) ?? getBot(DEFAULT_BOT_ID);
+    return {
       id: newId(),
       title: 'New chat',
-      projectId: project?.id,
-      botId: bot.id,
-      model: str(body?.model) || bot.model || config().model,
       webSearch: false,
       pinned: false,
       messages: [],
@@ -287,8 +289,15 @@ export function createApp(opts: AppOptions) {
       lastPromptTokens: 0,
       createdAt: now(),
       updatedAt: now(),
+      ...fields,
+      botId: bot.id,
+      model: fields.model || bot.model || config().model,
     };
-    return store.chats.put(chat);
+  };
+  route('POST', '/api/chats', ({ body }) => {
+    const project = body?.projectId ? getProject(body.projectId) : undefined;
+    const bot = getBot(str(body?.botId) || DEFAULT_BOT_ID);
+    return store.chats.put(newChat({ projectId: project?.id, botId: bot.id, model: str(body?.model) || undefined }));
   });
   route('GET', '/api/chats/:id', ({ params }) => ({ ...getChat(params.id), running: runner.isRunning(params.id) }));
   route('PATCH', '/api/chats/:id', ({ params, body }) => {
@@ -536,10 +545,14 @@ export function createApp(opts: AppOptions) {
   });
 
   registerExtensionRoutes(route, extensions);
+  const { scheduler } = registerFeatureRoutes(route, { store, runner, client, config, memory, media, newChat });
+  scheduler.start();
 
   // ---- Helpers ---------------------------------------------------------------
 
   function deleteChat(id: string) {
+    const docId = store.chats.get(id)?.docId;
+    if (docId) store.docs.delete(docId);
     for (const a of store.artifacts.all()) if (a.chatId === id) store.artifacts.delete(a.id);
     store.chats.delete(id);
   }
@@ -558,6 +571,8 @@ export function createApp(opts: AppOptions) {
       return sendJson(res, 403, { error: 'Forbidden host' });
     }
 
+    // Generated media have unguessable names, so <img> and <video> tags can load them without the token.
+    if (url.pathname.startsWith('/media/')) return serveMedia(media, url.pathname.slice(7), req, res);
     if (!url.pathname.startsWith('/api/')) return serveStatic(opts.webDir, url.pathname, res);
     // OAuth providers redirect the browser here; the one-time state value authenticates it.
     if (url.pathname === '/api/oauth/callback' && req.method === 'GET') return oauthCallback(extensions, url, res);
@@ -584,7 +599,12 @@ export function createApp(opts: AppOptions) {
       sendJson(res, status, { error: err?.message ?? 'Internal error' });
     }
   };
-  return Object.assign(handle, { dispose: () => mcp.dispose() });
+  return Object.assign(handle, {
+    dispose: () => {
+      scheduler.stop();
+      return mcp.dispose();
+    },
+  });
 }
 
 
@@ -638,6 +658,42 @@ function serveStatic(webDir: string, pathname: string, res: ServerResponse): voi
   res.end(readFileSync(file));
 }
 
+function serveMedia(media: MediaService, name: string, req: IncomingMessage, res: ServerResponse): void {
+  if (!media.exists(name)) return sendJson(res, 404, { error: 'Not found' });
+  const file = join(media.dir, name);
+  const size = statSync(file).size;
+  const headers = {
+    'content-type': MEDIA_MIME[extname(name)] ?? 'application/octet-stream',
+    'cache-control': 'private, max-age=31536000, immutable',
+    'accept-ranges': 'bytes',
+    'x-content-type-options': 'nosniff',
+  };
+  // Video seeking needs range requests.
+  const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range ?? ''));
+  if (range && (range[1] || range[2])) {
+    const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+    const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+    if (start >= size || start > end) {
+      res.writeHead(416, { 'content-range': `bytes */${size}` });
+      return void res.end();
+    }
+    res.writeHead(206, { ...headers, 'content-range': `bytes ${start}-${end}/${size}`, 'content-length': end - start + 1 });
+    return void createReadStream(file, { start, end }).pipe(res);
+  }
+  res.writeHead(200, { ...headers, 'content-length': size });
+  createReadStream(file).pipe(res);
+}
+
+const MEDIA_MIME: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.mp4': 'video/mp4',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.webm': 'audio/webm',
+};
+
 function validateFolder(input: string): string {
   const path = resolve(input.trim().replace(/^~(?=$|\/)/, homedir()));
   if (!existsSync(path) || !statSync(path).isDirectory()) throw new HttpError(400, `Not a directory: ${path}`);
@@ -685,6 +741,7 @@ function applyBot(bot: Bot, body: any, creating: boolean): Bot {
     memory: tools.memory ?? bot.tools?.memory ?? true,
     skills: tools.skills ?? bot.tools?.skills ?? true,
     connectors: tools.connectors ?? bot.tools?.connectors ?? true,
+    media: tools.media ?? bot.tools?.media ?? true,
   };
   if (creating || Array.isArray(body?.starters)) {
     bot.starters = (Array.isArray(body?.starters) ? body.starters : []).filter((s: unknown) => typeof s === 'string' && s.trim()).slice(0, 6);

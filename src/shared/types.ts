@@ -114,6 +114,8 @@ export interface Bot {
   pluginId?: string;
   /** Settings for this bot's memory bank (used when tools.memory is on). */
   memory: BankProfile;
+  /** What the bot learned from the user's ratings, newest last. */
+  lessons?: Lesson[];
   starters: string[];
   createdAt: string;
   updatedAt: string;
@@ -225,7 +227,16 @@ export interface Rating {
   comment?: string;
   /** What the bot took away from the rating, once distilled. */
   lesson?: string;
+  lessonId?: string;
   ratedAt: string;
+}
+
+export interface Lesson {
+  id: string;
+  text: string;
+  value: 1 | -1;
+  chatId: string;
+  createdAt: string;
 }
 
 export type ChatSummary = Omit<Chat, 'messages' | 'summary'> & { messageCount: number };

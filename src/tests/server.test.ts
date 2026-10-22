@@ -381,7 +381,7 @@ test('auto-compaction triggers when the last request was near the limit', async 
 
 test('bots shape new chats and deleting a project removes its chats', async () => {
   const bot = (await call('POST', '/api/bots', { name: 'Pirate', emoji: '🏴‍☠️', systemPrompt: 'Talk like a pirate.', model: 'test/model', tools: { web: false } })).data;
-  assert.deepEqual(bot.tools, { artifacts: true, web: false, memory: true, skills: true, connectors: true });
+  assert.deepEqual(bot.tools, { artifacts: true, web: false, memory: true, skills: true, connectors: true, media: true });
   reply = () => textChunks('Arr');
   const chat = (await call('POST', '/api/chats', { botId: bot.id })).data;
   await stream(`/api/chats/${chat.id}/messages`, { content: 'Ahoy' });

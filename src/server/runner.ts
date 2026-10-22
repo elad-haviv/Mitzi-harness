@@ -4,7 +4,7 @@ import type { Config } from '../config.js';
 import type { ContentPart, LlmClient, Message } from '../openrouter.js';
 import type { RoutingClient } from '../providers.js';
 import { ApprovalAnswer, Approver, Permissions } from '../permissions.js';
-import { Artifact, Attachment, Bot, Chat, ChatMessage, ChatSummary, DEFAULT_BOT_ID, RecalledMemory, StreamEvent } from '../shared/types.js';
+import { Artifact, Attachment, Doc, Bot, Chat, ChatMessage, ChatSummary, DEFAULT_BOT_ID, RecalledMemory, StreamEvent } from '../shared/types.js';
 import { ALL_TOOLS, Tool, toToolSpecs } from '../tools/index.js';
 import { webFetchTool } from '../tools/web.js';
 import type { Todo } from '../tools/types.js';
@@ -16,6 +16,8 @@ import type { McpManager } from './mcp/manager.js';
 import { CommandDef, expandCommand, parseSlash } from './extensions/commands.js';
 import { Skills, skillTool } from './extensions/skills.js';
 import { artifactTool } from './tools.js';
+import { docTools, snapshot } from './docs.js';
+import { MediaService, mediaTools } from './media.js';
 
 const MAX_EVENT_OUTPUT = 20_000;
 
@@ -33,11 +35,17 @@ export interface RunnerDeps {
   mcp: McpManager;
   skills: Skills;
   commands: () => CommandDef[];
+  media: MediaService;
 }
 
 export type RunInput =
   | { kind: 'message'; content: string; attachments: Attachment[]; editIndex?: number }
   | { kind: 'regenerate' };
+
+export interface RunOptions {
+  /** Nobody is watching (scheduled tasks): tools that would ask are allowed or declined automatically. */
+  headless?: { autoApprove: boolean };
+}
 
 interface ActiveRun {
   controller: AbortController;
@@ -140,10 +148,11 @@ export class ChatRunner {
       recalled: chat.messages.findLast((m) => m.role === 'user')?.memories ?? [],
       skills: this.deps.skills.enabled(),
       artifacts: store.artifacts.all().filter((a) => a.chatId === chat.id),
+      doc: chat.docId ? store.docs.get(chat.docId) : undefined,
     };
   }
 
-  tools(chat: Chat, onArtifact: (a: Artifact) => void): Tool[] {
+  tools(chat: Chat, onArtifact: (a: Artifact) => void, onDoc: (d: Doc) => void = () => {}): Tool[] {
     const { store, memory } = this.deps;
     const project = chat.projectId ? store.projects.get(chat.projectId) : undefined;
     const bot = this.botFor(chat);
@@ -151,12 +160,14 @@ export class ChatRunner {
     if (bot.tools.artifacts) tools.push(artifactTool(store, chat.id, chat.projectId, onArtifact));
     if (this.memoryOn(bot)) tools.push(memoryTool(memory, memory.bankFor(bot)));
     if (bot.tools.skills && this.deps.skills.enabled().length) tools.push(skillTool(this.deps.skills));
+    if (bot.tools.media !== false) tools.push(...mediaTools(this.deps.media));
+    if (chat.docId && store.docs.get(chat.docId)) tools.push(...docTools(store, chat.docId, onDoc));
     return tools;
   }
 
   /** All tools for a turn, including connector (MCP) tools, which may need a moment to start. */
-  async allTools(chat: Chat, onArtifact: (a: Artifact) => void, waitMs = 20_000): Promise<{ tools: Tool[]; warnings: string[] }> {
-    const tools = this.tools(chat, onArtifact);
+  async allTools(chat: Chat, onArtifact: (a: Artifact) => void, onDoc?: (d: Doc) => void, waitMs = 20_000): Promise<{ tools: Tool[]; warnings: string[] }> {
+    const tools = this.tools(chat, onArtifact, onDoc);
     if (!this.botFor(chat).tools.connectors) return { tools, warnings: [] };
     const mcp = await this.deps.mcp.tools(waitMs);
     return { tools: [...tools, ...mcp.tools], warnings: mcp.warnings };
@@ -198,7 +209,7 @@ export class ChatRunner {
       .catch((err) => console.warn(`Memory: retain failed for bank ${bot.id}: ${err.message}`));
   }
 
-  async run(chatId: string, input: RunInput, emit: (e: StreamEvent) => void, disconnect: AbortSignal): Promise<void> {
+  async run(chatId: string, input: RunInput, emit: (e: StreamEvent) => void, disconnect: AbortSignal, options: RunOptions = {}): Promise<void> {
     const { store } = this.deps;
     const chat = store.chats.get(chatId);
     if (!chat) throw new Error('Chat not found');
@@ -208,7 +219,7 @@ export class ChatRunner {
     const signal = AbortSignal.any([run.controller.signal, disconnect]);
     this.active.set(chatId, run);
     try {
-      await this.execute(chat, run, input, emit, signal);
+      await this.execute(chat, run, input, emit, signal, options);
     } finally {
       this.active.delete(chatId);
     }
@@ -216,7 +227,7 @@ export class ChatRunner {
     emit({ type: 'done' });
   }
 
-  private async execute(chat: Chat, run: ActiveRun, input: RunInput, emit: (e: StreamEvent) => void, signal: AbortSignal): Promise<void> {
+  private async execute(chat: Chat, run: ActiveRun, input: RunInput, emit: (e: StreamEvent) => void, signal: AbortSignal, options: RunOptions): Promise<void> {
     const { store, catalog } = this.deps;
     const client = this.deps.client();
     const project = chat.projectId ? store.projects.get(chat.projectId) : undefined;
@@ -269,8 +280,15 @@ export class ChatRunner {
       }
     }
 
+    const headless = options.headless;
     const approver: Approver = (req, abort) =>
-      new Promise((resolve, reject) => {
+      headless
+        ? Promise.resolve<ApprovalAnswer>(
+            headless.autoApprove
+              ? { kind: 'yes' }
+              : { kind: 'feedback', text: 'This is an unattended scheduled run, so tools that need approval are unavailable. Do what you can without it.' },
+          )
+        : new Promise((resolve, reject) => {
         const requestId = newId();
         run.pending.set(requestId, (answer) => {
           run.pending.delete(requestId);
@@ -296,7 +314,19 @@ export class ChatRunner {
         });
       });
 
-    const toolset = await this.allTools(chat, (artifact) => emit({ type: 'artifact', artifact }));
+    // Edits to a document are versioned; keep the user's latest edits as their own version first.
+    if (chat.docId) {
+      const doc = store.docs.get(chat.docId);
+      if (doc) {
+        snapshot(doc, 'user');
+        store.docs.put(doc);
+      }
+    }
+    const toolset = await this.allTools(
+      chat,
+      (artifact) => emit({ type: 'artifact', artifact }),
+      (doc) => emit({ type: 'doc', doc }),
+    );
     for (const w of toolset.warnings) emit({ type: 'warn', message: w });
     const tools = toolset.tools;
     const supportsTools = (await catalog.list().catch(() => [])).find((m) => m.id === chat.model)?.tools ?? true;
