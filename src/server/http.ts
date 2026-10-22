@@ -4,7 +4,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { homedir } from 'node:os';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { Config, loadConfig, MITZI_HOME, PERMISSION_MODES, PermissionMode } from '../config.js';
-import { OpenRouterClient } from '../openrouter.js';
+import { PROVIDER_PRESETS, providerView, resolveProviders, RoutingClient, usable } from '../providers.js';
+import type { ProviderConfig, ProviderKind } from '../shared/types.js';
 import type { ApprovalAnswer } from '../permissions.js';
 import { Attachment, BankProfile, BankSummary, Bot, BotTools, Chat, DEFAULT_BOT_ID, MemoryType, Project, PublicSettings, SettingsUpdate, StreamEvent } from '../shared/types.js';
 import { toToolSpecs } from '../tools/index.js';
@@ -51,12 +52,24 @@ export interface AppOptions {
 export function createApp(opts: AppOptions) {
   const store = new Store(opts.dataDir);
   const config = (): Config => loadConfig(process.cwd());
-  const client = () => {
-    const c = config();
-    if (!c.apiKey) throw new HttpError(400, 'Add your OpenRouter API key in Settings to start chatting.');
-    return new OpenRouterClient({ apiKey: c.apiKey, baseUrl: c.baseUrl });
+  // One router per provider configuration; rebuilt (and the model list refreshed) when it changes.
+  let routing: { key: string; client: RoutingClient } | undefined;
+  const router = () => {
+    const providers = resolveProviders(config());
+    const key = JSON.stringify(providers);
+    if (routing?.key !== key) {
+      routing = { key, client: new RoutingClient(providers) };
+      catalog?.invalidate();
+    }
+    return routing.client;
   };
-  const catalog = new ModelCatalog(client);
+  const hasChatProvider = () => router().providers.some((p) => usable(p) && PROVIDER_PRESETS[p.kind]?.chat !== false);
+  const client = () => {
+    if (!hasChatProvider()) throw new HttpError(400, 'Add an API key for OpenRouter or another provider in Settings → Providers to start chatting.');
+    return router();
+  };
+  // eslint-disable-next-line prefer-const
+  let catalog: ModelCatalog = new ModelCatalog(client);
   const memory = new MemoryService(
     join(opts.dataDir, 'banks'),
     () => {
@@ -113,7 +126,7 @@ export function createApp(opts: AppOptions) {
     const c = config();
     return {
       ...store.settings,
-      hasApiKey: !!c.apiKey,
+      hasApiKey: hasChatProvider(),
       hasHindsightKey: !!c.hindsightApiKey,
       apiKeySource: process.env.OPENROUTER_API_KEY ? 'env' : c.apiKey ? 'config' : null,
       defaultModel: c.model,
@@ -151,6 +164,98 @@ export function createApp(opts: AppOptions) {
       return await catalog.list();
     } catch (err: any) {
       throw err instanceof HttpError ? err : new HttpError(502, `Could not load models from OpenRouter: ${err.message}`);
+    }
+  });
+
+  // ---- Providers ---------------------------------------------------------------
+
+  const providersInConfig = (): ProviderConfig[] => (readUserConfig().providers as ProviderConfig[] | undefined) ?? [];
+  const saveProviders = (list: ProviderConfig[]) => {
+    writeUserConfig({ providers: list });
+    catalog.invalidate();
+  };
+  const providerList = () => {
+    const r = router();
+    return r.providers.map((p) => providerView(p, { error: r.errors.get(p.id), modelCount: r.counts.get(p.id) }));
+  };
+
+  route('GET', '/api/providers', () => ({
+    providers: providerList(),
+    presets: (Object.keys(PROVIDER_PRESETS) as ProviderKind[]).map((kind) => {
+      const { name, baseUrl, keyUrl, keyless, chat } = PROVIDER_PRESETS[kind];
+      return { kind, name, baseUrl, keyUrl, keyless: !!keyless, chat };
+    }),
+  }));
+  route('POST', '/api/providers', ({ body }) => {
+    const kind = str(body?.kind) as ProviderKind;
+    if (!PROVIDER_PRESETS[kind]) throw new HttpError(400, 'Unknown provider');
+    const apiKey = str(body?.apiKey).trim() || undefined;
+    if (kind === 'openrouter') {
+      writeUserConfig({ apiKey });
+      catalog.invalidate();
+      return providerList();
+    }
+    const list = providersInConfig();
+    // A configured provider replaces an environment-only one with the same id.
+    const taken = new Set(list.map((p) => p.id));
+    const base = (str(body?.id).trim() || kind).toLowerCase().replace(/[^a-z0-9-]+/g, '-');
+    let id = base;
+    for (let i = 2; taken.has(id); i++) id = `${base}-${i}`;
+    const entry: ProviderConfig = {
+      id,
+      kind,
+      name: str(body?.name).trim() || PROVIDER_PRESETS[kind].name,
+      apiKey,
+      baseUrl: str(body?.baseUrl).trim() || undefined,
+      enabled: true,
+    };
+    if (kind === 'custom' && !entry.baseUrl) throw new HttpError(400, 'Enter the base URL of the OpenAI-compatible API');
+    saveProviders([...list.filter((p) => p.id !== id), entry]);
+    return providerList();
+  });
+  route('PATCH', '/api/providers/:id', ({ params, body }) => {
+    if (params.id === 'openrouter') {
+      if (typeof body?.apiKey === 'string') writeUserConfig({ apiKey: body.apiKey.trim() || undefined });
+      catalog.invalidate();
+      return providerList();
+    }
+    const list = providersInConfig();
+    let entry = list.find((p) => p.id === params.id);
+    if (!entry) {
+      // A provider found only in the environment: start a config entry to hold the change.
+      const env = router().providers.find((p) => p.id === params.id) ?? fail(404, 'Provider not found');
+      entry = { id: env.id, kind: env.kind, name: env.name, enabled: true };
+    }
+    if (typeof body?.apiKey === 'string') entry.apiKey = body.apiKey.trim() || undefined;
+    if (typeof body?.baseUrl === 'string') entry.baseUrl = body.baseUrl.trim() || undefined;
+    if (typeof body?.name === 'string' && body.name.trim()) entry.name = body.name.trim();
+    if (typeof body?.enabled === 'boolean') entry.enabled = body.enabled;
+    saveProviders([...list.filter((p) => p.id !== params.id), entry]);
+    return providerList();
+  });
+  route('DELETE', '/api/providers/:id', ({ params }) => {
+    if (params.id === 'openrouter') {
+      writeUserConfig({ apiKey: undefined });
+    } else {
+      const list = providersInConfig();
+      if (!list.some((p) => p.id === params.id)) throw new HttpError(400, 'This provider comes from an environment variable; unset it to remove the provider.');
+      saveProviders(list.filter((p) => p.id !== params.id));
+    }
+    catalog.invalidate();
+    return providerList();
+  });
+  route('POST', '/api/providers/:id/test', async ({ params }) => {
+    const r = router();
+    const p = r.providers.find((x) => x.id === params.id) ?? fail(404, 'Provider not found');
+    if (!usable(p)) throw new HttpError(400, `Add an API key for ${p.name} first`);
+    if (PROVIDER_PRESETS[p.kind]?.chat === false) return { ok: true, count: 0 };
+    try {
+      const single = new RoutingClient([p, ...r.providers.filter((x) => x.kind === 'openrouter' && x.id !== p.id).map((x) => ({ ...x, enabled: false }))]);
+      const models = await single.listModels();
+      catalog.invalidate();
+      return { ok: true, count: models.length };
+    } catch (err: any) {
+      throw new HttpError(502, err.message);
     }
   });
 
@@ -537,6 +642,14 @@ function validateFolder(input: string): string {
   const path = resolve(input.trim().replace(/^~(?=$|\/)/, homedir()));
   if (!existsSync(path) || !statSync(path).isDirectory()) throw new HttpError(400, `Not a directory: ${path}`);
   return path;
+}
+
+function readUserConfig(): Record<string, unknown> {
+  try {
+    return JSON.parse(readFileSync(join(MITZI_HOME, 'config.json'), 'utf8'));
+  } catch {
+    return {};
+  }
 }
 
 function writeUserConfig(patch: Record<string, unknown>): void {

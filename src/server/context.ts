@@ -1,5 +1,5 @@
 import { COMPACT_PROMPT, renderForTranscript } from '../agent.js';
-import type { Message, OpenRouterClient, ToolSpec } from '../openrouter.js';
+import type { LlmClient, Message, ToolSpec } from '../openrouter.js';
 import { buildSystemPrompt } from '../prompt.js';
 import type { Artifact, Bot, Chat, ContextBreakdown, ContextSection, ModelInfo, Project, RecalledMemory, SkillInfo, UiSettings } from '../shared/types.js';
 import { skillsPrompt } from './extensions/skills.js';
@@ -49,7 +49,7 @@ function basePrompt(setup: ChatSetup): string {
     setup.bot.systemPrompt.trim(),
     'Format responses with GitHub-flavored Markdown: headings for long answers, lists and tables where they help, and fenced code blocks with a language tag. ' +
       'Match length to the question: brief for simple questions, thorough for complex ones. If something is ambiguous, ask.',
-    `Today is ${date}. You are running as ${setup.chat.model} via OpenRouter.`,
+    `Today is ${date}. You are running as the model ${setup.chat.model}.`,
   ];
   if (setup.chat.webSearch) lines.push('Web search results may be provided; cite sources with markdown links.');
   return lines.filter(Boolean).join('\n\n');
@@ -168,7 +168,7 @@ export function contextBreakdown(setup: ChatSetup, specs: ToolSpec[], contextLen
  */
 export async function compactChat(
   chat: Chat,
-  client: OpenRouterClient,
+  client: LlmClient,
   model: string,
   keepRecentTurns: number,
   signal?: AbortSignal,
@@ -198,7 +198,7 @@ export async function compactChat(
   return true;
 }
 
-export async function generateTitle(client: OpenRouterClient, model: string, firstMessage: string, signal?: AbortSignal): Promise<string | undefined> {
+export async function generateTitle(client: LlmClient, model: string, firstMessage: string, signal?: AbortSignal): Promise<string | undefined> {
   try {
     const res = await client.chat({
       model,
@@ -218,24 +218,19 @@ export async function generateTitle(client: OpenRouterClient, model: string, fir
   }
 }
 
-/** Caches OpenRouter's model list. */
+/** Caches the combined model list of all configured providers. */
 export class ModelCatalog {
   private cache?: { at: number; models: ModelInfo[] };
 
-  constructor(private readonly client: () => OpenRouterClient) {}
+  constructor(private readonly client: () => LlmClient) {}
+
+  invalidate(): void {
+    this.cache = undefined;
+  }
 
   async list(): Promise<ModelInfo[]> {
     if (this.cache && Date.now() - this.cache.at < 3_600_000) return this.cache.models;
-    const raw = (await this.client().listModels()) as any[];
-    const models: ModelInfo[] = raw.map((m) => ({
-      id: m.id,
-      name: m.name ?? m.id,
-      contextLength: m.context_length,
-      promptPrice: m.pricing?.prompt !== undefined ? Number(m.pricing.prompt) * 1e6 : undefined,
-      completionPrice: m.pricing?.completion !== undefined ? Number(m.pricing.completion) * 1e6 : undefined,
-      tools: Array.isArray(m.supported_parameters) ? m.supported_parameters.includes('tools') : true,
-      vision: Array.isArray(m.architecture?.input_modalities) ? m.architecture.input_modalities.includes('image') : false,
-    }));
+    const models = await this.client().listModels();
     this.cache = { at: Date.now(), models };
     return models;
   }

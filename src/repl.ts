@@ -1,14 +1,14 @@
 import * as readline from 'node:readline/promises';
 import type { Agent } from './agent.js';
 import { PERMISSION_MODES, PermissionMode } from './config.js';
-import type { OpenRouterClient } from './openrouter.js';
+import type { LlmClient } from './openrouter.js';
 import { listSessions, newSessionId, saveSession, SessionData } from './session.js';
 import { bashTool } from './tools/bash.js';
 import { color, UI } from './ui.js';
 
 export interface ReplOptions {
   agent: Agent;
-  client: OpenRouterClient;
+  client: LlmClient;
   ui: UI;
   rl: readline.Interface;
   session: SessionData;
@@ -125,8 +125,8 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
         const filter = arg.toLowerCase();
         const shown = models.filter((m) => !filter || m.id.toLowerCase().includes(filter) || m.name?.toLowerCase().includes(filter));
         for (const m of shown.slice(0, 60)) {
-          const price = m.pricing ? color.dim(` $${(Number(m.pricing.prompt) * 1e6).toFixed(2)}/$${(Number(m.pricing.completion) * 1e6).toFixed(2)} per Mtok`) : '';
-          const ctx = m.context_length ? color.dim(` ${Math.round(m.context_length / 1000)}k ctx`) : '';
+          const price = m.promptPrice !== undefined ? color.dim(` $${m.promptPrice.toFixed(2)}/$${(m.completionPrice ?? 0).toFixed(2)} per Mtok`) : '';
+          const ctx = m.contextLength ? color.dim(` ${Math.round(m.contextLength / 1000)}k ctx`) : '';
           process.stdout.write(`  ${m.id === agent.model ? color.green('●') : ' '} ${m.id}${ctx}${price}\n`);
         }
         if (shown.length > 60) ui.info(`… ${shown.length - 60} more. Add a filter, e.g. /models claude`);

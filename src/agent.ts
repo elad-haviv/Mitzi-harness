@@ -1,12 +1,12 @@
 import type { Config } from './config.js';
-import type { ContentPart, Message, OpenRouterClient, TextPart, Usage } from './openrouter.js';
+import type { ContentPart, LlmClient, Message, TextPart, Usage } from './openrouter.js';
 import type { PermissionChecker } from './permissions.js';
 import { buildSystemPrompt } from './prompt.js';
 import { toToolSpecs, Tool, ToolContext, ToolError } from './tools/index.js';
 import type { UI } from './ui.js';
 
 export interface AgentDeps {
-  client: OpenRouterClient;
+  client: LlmClient;
   config: Config;
   tools: Tool[];
   permissions: PermissionChecker;

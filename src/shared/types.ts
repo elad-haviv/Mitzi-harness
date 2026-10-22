@@ -20,6 +20,8 @@ export interface UiSettings {
   disabledSkills: string[];
   /** Also load skills from ~/.claude/skills. */
   useClaudeSkills: boolean;
+  /** Models for media generation and voice, as "provider:model" ids (empty = not set up). */
+  media: MediaSettings;
   /** Compact automatically when a request fills this % of the model's context window. */
   autoCompactPercent: number;
   /** User turns kept verbatim when compacting. */
@@ -66,6 +68,8 @@ export interface Project {
 }
 
 export interface BotTools {
+  /** Generate images, video, speech, sound effects and music. */
+  media?: boolean;
   artifacts: boolean;
   web: boolean;
   memory: boolean;
@@ -130,6 +134,8 @@ export type ChatMessage = Message & {
   memories?: RecalledMemory[];
   /** The slash command the user typed, when the content is its expansion. */
   command?: string;
+  /** The user's rating of an assistant answer. */
+  rating?: Rating;
 };
 
 export type MemoryType = 'world' | 'experience' | 'observation';
@@ -204,8 +210,22 @@ export interface Chat {
   allowedRules: string[];
   usage: UsageTotals;
   lastPromptTokens: number;
+  /** Set on chats branched off another chat. */
+  branchedFrom?: { chatId: string; title: string };
+  /** Set on a document's companion chat. */
+  docId?: string;
+  /** Set on chats created by a scheduled task. */
+  taskId?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Rating {
+  value: 1 | -1;
+  comment?: string;
+  /** What the bot took away from the rating, once distilled. */
+  lesson?: string;
+  ratedAt: string;
 }
 
 export type ChatSummary = Omit<Chat, 'messages' | 'summary'> & { messageCount: number };
@@ -242,13 +262,50 @@ export interface LegacyMemory {
 }
 
 export interface ModelInfo {
+  /** Model id as Mitzi uses it: OpenRouter ids as-is, other providers as "provider:model". */
   id: string;
   name: string;
+  /** Display name of the provider that serves it. */
+  provider?: string;
   contextLength?: number;
   promptPrice?: number;
   completionPrice?: number;
   tools: boolean;
   vision: boolean;
+}
+
+export type ProviderKind =
+  | 'openrouter'
+  | 'openai'
+  | 'anthropic'
+  | 'google'
+  | 'xai'
+  | 'groq'
+  | 'mistral'
+  | 'deepseek'
+  | 'together'
+  | 'ollama'
+  | 'lmstudio'
+  | 'elevenlabs'
+  | 'custom';
+
+export interface ProviderConfig {
+  /** Prefix for this provider's model ids, e.g. "openai" in "openai:gpt-5". */
+  id: string;
+  kind: ProviderKind;
+  name: string;
+  apiKey?: string;
+  baseUrl?: string;
+  enabled: boolean;
+}
+
+/** A provider as the browser sees it: the key is never sent back. */
+export interface ProviderView extends Omit<ProviderConfig, 'apiKey'> {
+  hasKey: boolean;
+  keySource?: 'env' | 'config';
+  /** Error from the last attempt to list its models. */
+  error?: string;
+  modelCount?: number;
 }
 
 export interface ContextSection {
@@ -281,6 +338,7 @@ export type StreamEvent =
   | { type: 'todos'; todos: Todo[] }
   | { type: 'status'; message: string }
   | { type: 'recall'; memories: RecalledMemory[] }
+  | { type: 'doc'; doc: Doc }
   | { type: 'warn'; message: string }
   | { type: 'compacted'; contextStart: number }
   | { type: 'chat'; chat: ChatSummary }
@@ -455,4 +513,105 @@ export interface SlashCommandInfo {
   argumentHint?: string;
   /** Plugin name, or "user". */
   source: string;
+}
+
+// ---------- Media, voice ----------
+
+export interface MediaSettings {
+  imageModel: string;
+  videoModel: string;
+  /** Text-to-speech, used for read-aloud, live mode and generated speech. */
+  speechModel: string;
+  voice: string;
+  soundModel: string;
+  musicModel: string;
+  /** Speech-to-text for live mode in browsers without built-in recognition. */
+  transcribeModel: string;
+}
+
+export type MediaKind = 'image' | 'video' | 'speech' | 'sound' | 'music';
+
+// ---------- Documents ----------
+
+export interface DocComment {
+  id: string;
+  /** The passage the comment is about. */
+  quote: string;
+  text: string;
+  author: 'user' | 'assistant';
+  resolved: boolean;
+  replies: { author: 'user' | 'assistant'; text: string; createdAt: string }[];
+  createdAt: string;
+}
+
+export interface DocVersion {
+  id: string;
+  title: string;
+  content: string;
+  author: 'user' | 'assistant';
+  note?: string;
+  createdAt: string;
+}
+
+export interface Doc {
+  id: string;
+  title: string;
+  /** Markdown. */
+  content: string;
+  comments: DocComment[];
+  versions: DocVersion[];
+  /** The chat used to work on the document with a bot. */
+  chatId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type DocSummary = Omit<Doc, 'content' | 'versions' | 'comments'> & { openComments: number; words: number; excerpt: string };
+
+// ---------- Scheduled tasks ----------
+
+export interface TaskSchedule {
+  kind: 'once' | 'interval' | 'daily' | 'weekly' | 'cron';
+  /** once: ISO date-time. */
+  at?: string;
+  /** interval: minutes between runs. */
+  everyMinutes?: number;
+  /** daily / weekly: "HH:MM" local time. */
+  time?: string;
+  /** weekly: days 0 (Sunday) – 6. */
+  days?: number[];
+  /** cron: five fields, local time. */
+  cron?: string;
+}
+
+export interface TaskRun {
+  id: string;
+  startedAt: string;
+  finishedAt?: string;
+  status: 'running' | 'ok' | 'error';
+  chatId?: string;
+  error?: string;
+  /** First lines of the answer. */
+  preview?: string;
+  seen: boolean;
+}
+
+export interface ScheduledTask {
+  id: string;
+  name: string;
+  prompt: string;
+  schedule: TaskSchedule;
+  botId?: string;
+  projectId?: string;
+  model?: string;
+  enabled: boolean;
+  /** Allow tools that would normally ask (nobody is there to approve). */
+  autoApprove: boolean;
+  /** Continue one chat across runs instead of starting a new chat each time. */
+  reuseChat: boolean;
+  chatId?: string;
+  nextRunAt?: string;
+  runs: TaskRun[];
+  createdAt: string;
+  updatedAt: string;
 }

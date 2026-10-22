@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { OpenRouterClient } from '../../openrouter.js';
+import type { LlmClient } from '../../openrouter.js';
 import type { BankProfile, BankStats, MemoryBackendKind, MemoryType, MemoryUnit, RecalledMemory, ReflectResult } from '../../shared/types.js';
 import { newId, now } from '../store.js';
 import { graphSearch, keywordSearch, parseTimeRange, reciprocalRankFusion, semanticSearch, similarity, temporalSearch } from './search.js';
@@ -49,7 +49,7 @@ export interface MemoryBackend {
 }
 
 export interface LlmAccess {
-  client: OpenRouterClient;
+  client: LlmClient;
   /** Model for reflect, which deserves the bot's main model. */
   model: string;
   /** Cheaper model for extraction and consolidation. */

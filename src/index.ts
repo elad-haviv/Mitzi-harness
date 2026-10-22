@@ -4,7 +4,7 @@ import * as readline from 'node:readline/promises';
 import { parseArgs } from 'node:util';
 import { Agent } from './agent.js';
 import { Config, DEFAULT_MODEL, loadConfig, PermissionMode, PERMISSION_MODES } from './config.js';
-import { OpenRouterClient } from './openrouter.js';
+import { RoutingClient, resolveProviders, usable } from './providers.js';
 import { Asker, Permissions, terminalApprover } from './permissions.js';
 import { runRepl } from './repl.js';
 import { listSessions, loadSession, newSessionId, saveSession, SessionData } from './session.js';
@@ -37,7 +37,9 @@ ${color.bold('Options')}
   -h, --help                  Show this help
 
 ${color.bold('Environment')}
-  OPENROUTER_API_KEY          Your OpenRouter API key (required) — https://openrouter.ai/keys
+  OPENROUTER_API_KEY          Your OpenRouter API key — https://openrouter.ai/keys
+  OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, …
+                              Keys for other providers; use their models as e.g. -m openai:gpt-5
   MITZI_MODEL                 Default model id
   OPENROUTER_BASE_URL         Override the API base URL
 
@@ -120,9 +122,9 @@ async function main(): Promise<number> {
     showReasoning: values.reasoning || undefined,
   };
   const config = loadConfig(cwd, overrides);
-  if (!config.apiKey) {
+  if (!resolveProviders(config).some((p) => usable(p) && p.kind !== 'elevenlabs')) {
     process.stderr.write(
-      `${color.red('Missing OpenRouter API key.')}\nGet one at https://openrouter.ai/keys and set it:\n\n  export OPENROUTER_API_KEY=sk-or-...\n\nor add "apiKey" to ~/.mitzi/config.json.\n`,
+      `${color.red('No model provider is set up.')}\nSet a key for OpenRouter (or OpenAI, Anthropic, Gemini, …):\n\n  export OPENROUTER_API_KEY=sk-or-...\n\nor add providers in the app: mitzi ui → Settings → Providers.\n`,
     );
     return 1;
   }
@@ -142,7 +144,7 @@ async function main(): Promise<number> {
   if (session && !values.model) config.model = session.model;
   session ??= { id: newSessionId(), cwd, model: config.model, title: '', createdAt: new Date().toISOString(), updatedAt: '', messages: [] };
 
-  const client = new OpenRouterClient({ apiKey: config.apiKey, baseUrl: config.baseUrl });
+  const client = new RoutingClient(resolveProviders(config));
   const prompt = positionals.join(' ').trim();
 
   if (values.print) {

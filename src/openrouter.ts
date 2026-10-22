@@ -1,3 +1,5 @@
+import type { ModelInfo } from './shared/types.js';
+
 // Minimal streaming client for the OpenRouter chat completions API
 // (OpenAI-compatible, with OpenRouter extensions such as usage accounting).
 
@@ -62,11 +64,11 @@ export interface ChatResult {
   finishReason?: string;
 }
 
-export interface ModelInfo {
-  id: string;
-  name: string;
-  context_length?: number;
-  pricing?: { prompt: string; completion: string };
+/** What the agent needs from a model provider. */
+export interface LlmClient {
+  chat(req: ChatRequest, handlers?: StreamHandlers): Promise<ChatResult>;
+  listModels(): Promise<ModelInfo[]>;
+  embed(model: string, input: string[]): Promise<number[][]>;
 }
 
 export class OpenRouterError extends Error {
@@ -82,20 +84,31 @@ export interface ClientOptions {
   appName?: string;
   appUrl?: string;
   maxRetries?: number;
+  /** OpenRouter extensions (usage accounting, app headers), or plain OpenAI-compatible. */
+  flavor?: 'openrouter' | 'openai';
+  /** Prefix and display name for listed models (non-OpenRouter providers). */
+  providerId?: string;
+  providerName?: string;
+  /** Which listed models can chat (OpenAI-compatible model lists include embeddings, TTS, …). */
+  modelFilter?: (id: string) => boolean;
+  /** Newer OpenAI reasoning models take max_completion_tokens and no temperature. */
+  reasoningModels?: RegExp;
 }
 
-export class OpenRouterClient {
+/** Client for OpenRouter and any OpenAI-compatible chat completions API. */
+export class OpenRouterClient implements LlmClient {
   constructor(private readonly opts: ClientOptions) {}
 
   async chat(req: ChatRequest, handlers: StreamHandlers = {}): Promise<ChatResult> {
+    const openrouter = (this.opts.flavor ?? 'openrouter') === 'openrouter';
+    const reasoning = !!this.opts.reasoningModels?.test(req.model);
     const body = {
       model: req.model,
       messages: req.messages,
       tools: req.tools?.length ? req.tools : undefined,
-      max_tokens: req.maxTokens,
-      temperature: req.temperature,
+      ...(reasoning ? { max_completion_tokens: req.maxTokens } : { max_tokens: req.maxTokens, temperature: req.temperature }),
       stream: true,
-      usage: { include: true },
+      ...(openrouter ? { usage: { include: true } } : { stream_options: { include_usage: true } }),
     };
     const res = await this.post('/chat/completions', body, req.signal);
     if (!res.body) throw new OpenRouterError('Empty response body');
@@ -149,15 +162,42 @@ export class OpenRouterClient {
   }
 
   async listModels(): Promise<ModelInfo[]> {
-    const res = await fetch(`${this.opts.baseUrl}/models`, { headers: this.headers() });
+    const res = await fetch(`${this.opts.baseUrl}/models`, { headers: this.headers(), signal: AbortSignal.timeout(20_000) });
     if (!res.ok) throw new OpenRouterError(`Failed to list models: HTTP ${res.status}`, res.status);
-    const json = (await res.json()) as { data: ModelInfo[] };
-    return json.data;
+    const json = (await res.json()) as { data?: any[] } | any[];
+    const raw = Array.isArray(json) ? json : json.data ?? [];
+    if ((this.opts.flavor ?? 'openrouter') === 'openrouter') {
+      return raw.map((m) => ({
+        id: m.id,
+        name: m.name ?? m.id,
+        provider: 'OpenRouter',
+        contextLength: m.context_length,
+        promptPrice: m.pricing?.prompt !== undefined ? Number(m.pricing.prompt) * 1e6 : undefined,
+        completionPrice: m.pricing?.completion !== undefined ? Number(m.pricing.completion) * 1e6 : undefined,
+        tools: Array.isArray(m.supported_parameters) ? m.supported_parameters.includes('tools') : true,
+        vision: Array.isArray(m.architecture?.input_modalities) ? m.architecture.input_modalities.includes('image') : false,
+      }));
+    }
+    const prefix = this.opts.providerId ? `${this.opts.providerId}:` : '';
+    return raw
+      .map((m) => String(m.id ?? '').replace(/^models\//, ''))
+      .filter((id) => id && (this.opts.modelFilter?.(id) ?? true))
+      .sort()
+      .map((id) => ({
+        id: `${prefix}${id}`,
+        name: id,
+        provider: this.opts.providerName,
+        contextLength: raw.find((m) => String(m.id).endsWith(id))?.context_length ?? raw.find((m) => String(m.id).endsWith(id))?.context_window,
+        tools: true,
+        vision: /vision|gpt-4o|gpt-4\.1|gpt-5|o3|o4|gemini|llava|pixtral|grok-[2-9]|claude/i.test(id),
+      }));
   }
 
   private headers(): Record<string, string> {
+    const auth: Record<string, string> = this.opts.apiKey ? { Authorization: `Bearer ${this.opts.apiKey}` } : {};
+    if ((this.opts.flavor ?? 'openrouter') !== 'openrouter') return { ...auth, 'Content-Type': 'application/json' };
     return {
-      Authorization: `Bearer ${this.opts.apiKey}`,
+      ...auth,
       'Content-Type': 'application/json',
       'HTTP-Referer': this.opts.appUrl ?? 'https://github.com/elad-haviv/Mitzi-harness',
       'X-Title': this.opts.appName ?? 'Mitzi',

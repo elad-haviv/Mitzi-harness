@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Artifact, Bot, Chat, LegacyMemory, MarketplaceInfo, McpServerConfig, PluginInfo, Project, UiSettings } from '../shared/types.js';
+import type { Artifact, Bot, Chat, Doc, LegacyMemory, MarketplaceInfo, McpServerConfig, PluginInfo, Project, ScheduledTask, UiSettings } from '../shared/types.js';
 
 export function newId(): string {
   return `${Date.now().toString(36)}${randomBytes(4).toString('hex')}`;
@@ -68,6 +68,7 @@ const DEFAULT_UI_SETTINGS: UiSettings = {
   recallTokens: 1200,
   disabledSkills: [],
   useClaudeSkills: true,
+  media: { imageModel: '', videoModel: '', speechModel: '', voice: '', soundModel: '', musicModel: '', transcribeModel: '' },
   autoCompactPercent: 80,
   keepRecentTurns: 2,
 };
@@ -80,6 +81,8 @@ export class Store {
   readonly mcpServers: Collection<McpServerConfig>;
   readonly plugins: Collection<PluginInfo>;
   readonly marketplaces: Collection<MarketplaceInfo>;
+  readonly docs: Collection<Doc>;
+  readonly tasks: Collection<ScheduledTask>;
   /** Pre-memory-bank memories, kept only until they're migrated. */
   readonly legacyMemories: Collection<LegacyMemory>;
   private settingsPath: string;
@@ -94,9 +97,12 @@ export class Store {
     this.mcpServers = new Collection(join(root, 'mcp'), 0o600);
     this.plugins = new Collection(join(root, 'plugins'));
     this.marketplaces = new Collection(join(root, 'marketplaces'));
+    this.docs = new Collection(join(root, 'docs'));
+    this.tasks = new Collection(join(root, 'tasks'));
     this.settingsPath = join(root, 'settings.json');
     try {
-      this.uiSettings = { ...DEFAULT_UI_SETTINGS, ...JSON.parse(readFileSync(this.settingsPath, 'utf8')) };
+      const saved = JSON.parse(readFileSync(this.settingsPath, 'utf8'));
+      this.uiSettings = { ...DEFAULT_UI_SETTINGS, ...saved, media: { ...DEFAULT_UI_SETTINGS.media, ...saved.media } };
     } catch {
       this.uiSettings = { ...DEFAULT_UI_SETTINGS };
     }

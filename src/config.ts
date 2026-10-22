@@ -1,12 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import type { ProviderConfig } from './shared/types.js';
 
 export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'yolo';
 export const PERMISSION_MODES: PermissionMode[] = ['default', 'acceptEdits', 'plan', 'yolo'];
 
 export interface Config {
   apiKey: string;
+  /** Model providers besides OpenRouter (keys for OpenAI, Anthropic, Google, …). */
+  providers?: ProviderConfig[];
   /** API key for an external Hindsight memory server, if it needs one. */
   hindsightApiKey?: string;
   baseUrl: string;

@@ -1,7 +1,8 @@
 import { homedir } from 'node:os';
 import { Agent } from '../agent.js';
 import type { Config } from '../config.js';
-import type { ContentPart, Message, OpenRouterClient } from '../openrouter.js';
+import type { ContentPart, LlmClient, Message } from '../openrouter.js';
+import type { RoutingClient } from '../providers.js';
 import { ApprovalAnswer, Approver, Permissions } from '../permissions.js';
 import { Artifact, Attachment, Bot, Chat, ChatMessage, ChatSummary, DEFAULT_BOT_ID, RecalledMemory, StreamEvent } from '../shared/types.js';
 import { ALL_TOOLS, Tool, toToolSpecs } from '../tools/index.js';
@@ -26,7 +27,7 @@ export function summarizeChat(chat: Chat): ChatSummary {
 export interface RunnerDeps {
   store: Store;
   config: () => Config;
-  client: () => OpenRouterClient;
+  client: () => RoutingClient;
   catalog: ModelCatalog;
   memory: MemoryService;
   mcp: McpManager;
@@ -303,7 +304,8 @@ export class ChatRunner {
     const ui = new WebUI(emit);
     const config: Config = {
       ...this.deps.config(),
-      model: chat.webSearch ? `${chat.model}:online` : chat.model,
+      // Web search is OpenRouter's :online feature.
+      model: chat.webSearch && client.isOpenRouter(chat.model) ? `${chat.model}:online` : chat.model,
       temperature: bot.temperature,
       autoCompactTokens: 0, // the runner compacts per chat instead
       maxTurns: 50,
