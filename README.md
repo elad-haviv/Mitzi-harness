@@ -42,9 +42,25 @@ An open-source, Claude-style AI workspace that runs on **any model available thr
 
 **Also included:** light and dark themes, a layout that works on phones, and a cheaper "fast model" setting for titles and summaries.
 
-## Quick start
+## Install
 
-Requires Node.js 20 or newer.
+You need [Node.js 20+](https://nodejs.org) and [git](https://git-scm.com).
+
+**macOS / Linux**, in Terminal:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/elad-haviv/Mitzi-harness/feature/web-ui/install.sh | bash
+```
+
+**Windows**, in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/elad-haviv/Mitzi-harness/feature/web-ui/install.ps1 | iex
+```
+
+The installer puts Mitzi in `~/.mitzi/app` and adds a `mitzi` command. On Windows it also creates Desktop and Start menu shortcuts. Run the same line again to update. Then start the app with `mitzi ui`.
+
+### From source
 
 ```bash
 git clone https://github.com/elad-haviv/Mitzi-harness.git
