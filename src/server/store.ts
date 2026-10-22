@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Artifact, Bot, Chat, LegacyMemory, Project, UiSettings } from '../shared/types.js';
+import type { Artifact, Bot, Chat, LegacyMemory, MarketplaceInfo, McpServerConfig, PluginInfo, Project, UiSettings } from '../shared/types.js';
 
 export function newId(): string {
   return `${Date.now().toString(36)}${randomBytes(4).toString('hex')}`;
@@ -11,9 +11,9 @@ export function now(): string {
   return new Date().toISOString();
 }
 
-function writeAtomic(path: string, data: unknown): void {
+function writeAtomic(path: string, data: unknown, mode?: number): void {
   const tmp = `${path}.${process.pid}.tmp`;
-  writeFileSync(tmp, JSON.stringify(data, null, 1));
+  writeFileSync(tmp, JSON.stringify(data, null, 1), mode ? { mode } : undefined);
   renameSync(tmp, path);
 }
 
@@ -21,7 +21,11 @@ function writeAtomic(path: string, data: unknown): void {
 export class Collection<T extends { id: string }> {
   private readonly items = new Map<string, T>();
 
-  constructor(private readonly dir: string) {
+  /** `mode` sets file permissions, e.g. 0o600 for records holding credentials. */
+  constructor(
+    private readonly dir: string,
+    private readonly mode?: number,
+  ) {
     mkdirSync(dir, { recursive: true });
     for (const f of readdirSync(dir)) {
       if (!f.endsWith('.json')) continue;
@@ -45,7 +49,7 @@ export class Collection<T extends { id: string }> {
   put(item: T): T {
     if (!/^[\w-]+$/.test(item.id)) throw new Error(`Invalid id: ${item.id}`);
     this.items.set(item.id, item);
-    writeAtomic(join(this.dir, `${item.id}.json`), item);
+    writeAtomic(join(this.dir, `${item.id}.json`), item, this.mode);
     return item;
   }
 
@@ -62,6 +66,8 @@ const DEFAULT_UI_SETTINGS: UiSettings = {
   hindsightUrl: '',
   embeddingModel: '',
   recallTokens: 1200,
+  disabledSkills: [],
+  useClaudeSkills: true,
   autoCompactPercent: 80,
   keepRecentTurns: 2,
 };
@@ -71,6 +77,9 @@ export class Store {
   readonly projects: Collection<Project>;
   readonly bots: Collection<Bot>;
   readonly artifacts: Collection<Artifact>;
+  readonly mcpServers: Collection<McpServerConfig>;
+  readonly plugins: Collection<PluginInfo>;
+  readonly marketplaces: Collection<MarketplaceInfo>;
   /** Pre-memory-bank memories, kept only until they're migrated. */
   readonly legacyMemories: Collection<LegacyMemory>;
   private settingsPath: string;
@@ -82,6 +91,9 @@ export class Store {
     this.bots = new Collection(join(root, 'bots'));
     this.artifacts = new Collection(join(root, 'artifacts'));
     this.legacyMemories = new Collection(join(root, 'memories'));
+    this.mcpServers = new Collection(join(root, 'mcp'), 0o600);
+    this.plugins = new Collection(join(root, 'plugins'));
+    this.marketplaces = new Collection(join(root, 'marketplaces'));
     this.settingsPath = join(root, 'settings.json');
     try {
       this.uiSettings = { ...DEFAULT_UI_SETTINGS, ...JSON.parse(readFileSync(this.settingsPath, 'utf8')) };

@@ -1,4 +1,4 @@
-import { Brain, Globe, Layers, MessageSquare, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Brain, Globe, Layers, MessageSquare, Pencil, Plug, Plus, Trash2, WandSparkles, X } from 'lucide-react';
 import { useState } from 'react';
 import { api, BankProfile, Bot, BotTools } from '../api';
 import { ModelPicker } from '../components/ModelPicker';
@@ -45,7 +45,7 @@ export function BotsPage() {
                   <button className="icon-btn sm" aria-label={`Edit ${b.name}`} onClick={() => setEditing(b)}>
                     <Pencil size={14} />
                   </button>
-                  {!b.builtIn && (
+                  {!b.builtIn && !b.pluginId && (
                   <button
                     className="icon-btn sm"
                     aria-label={`Delete ${b.name}`}
@@ -62,12 +62,14 @@ export function BotsPage() {
                 <div className={`bot-emoji${b.builtIn ? ' builtin' : ''}`}>{b.emoji}</div>
                 <div className="tile-title row" style={{ gap: 8 }}>
                   {b.name} {b.builtIn && <span className="badge accent">Default</span>}
+                  {b.pluginId && <span className="badge">Plugin</span>}
                 </div>
                 <div className="tile-desc">{b.description || <span className="muted">No description</span>}</div>
                 <div className="tile-foot">
                   <span className="badge">{b.model ? modelLabel(b.model, models) : 'Default model'}</span>
                   {b.tools.web && <Globe size={13} aria-label="Web" />}
                   {b.tools.artifacts && <Layers size={13} aria-label="Artifacts" />}
+                  {b.tools.connectors && <Plug size={13} aria-label="Connectors" />}
                   {b.tools.memory && (
                     <a href={href({ page: 'memory', botId: b.id })} title="Memory bank" className="muted" style={{ display: 'inline-flex' }}>
                       <Brain size={13} aria-label="Memory bank" />
@@ -106,7 +108,7 @@ function BotEditor({ bot, onClose, onSaved }: { bot?: Bot; onClose(): void; onSa
     systemPrompt: bot?.systemPrompt ?? '',
     model: bot?.model ?? '',
     temperature: bot?.temperature,
-    tools: bot?.tools ?? { artifacts: true, web: true, memory: true },
+    tools: bot?.tools ?? { artifacts: true, web: true, memory: true, skills: true, connectors: true },
     starters: bot?.starters.length ? bot.starters : [''],
     memory: bot?.memory ?? ({ mission: '', disposition: { skepticism: 3, literalism: 3, empathy: 3 }, autoRetain: true } as BankProfile),
   });
@@ -202,6 +204,8 @@ function BotEditor({ bot, onClose, onSaved }: { bot?: Bot; onClose(): void; onSa
               ['artifacts', <Layers size={18} key="a" />, 'Artifacts', 'Create documents, code, web pages and diagrams in a side panel'],
               ['web', <Globe size={18} key="w" />, 'Web fetch', 'Read web pages (asks for permission each time)'],
               ['memory', <Brain size={18} key="m" />, 'Memory bank', 'Its own long-term memory: recalls what matters and learns from conversations'],
+              ['skills', <WandSparkles size={18} key="s" />, 'Skills', 'Load skills from the Skills page when a task calls for one'],
+              ['connectors', <Plug size={18} key="c" />, 'Connectors', 'Use tools from your connectors (MCP servers)'],
             ] as const
           ).map(([k, icon, t, s]) => (
             <div key={k} className="tool-toggle">

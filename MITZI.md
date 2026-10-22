@@ -21,3 +21,8 @@
   built-in and Hindsight; keep them interchangeable.
 - The default bot (`DEFAULT_BOT_ID = 'mitzi'`, `builtIn: true`) always exists and can't be deleted; chats without a
   bot use it.
+- Extensions: MCP servers live in `store.mcpServers` (files are 0600; they hold tokens). `McpManager` connects lazily
+  and turns MCP tools into agent tools named `mcp__<server>__<tool>`. Plugins follow the Claude Code layout;
+  `syncPlugins` turns their agents into bots and `.mcp.json` entries into servers, so call it after any plugin change.
+- `/api/oauth/callback` is the one route without the app token: the OAuth `state` authenticates it.
+- Command templates run their own !`…` snippets before the user's arguments are substituted; keep it that way.

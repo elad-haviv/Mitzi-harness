@@ -14,6 +14,8 @@ import {
   Loader2,
   Paperclip,
   Pencil,
+  Plug,
+  WandSparkles,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -133,6 +135,7 @@ export function UserTurn({
   const { text, attachments } = useMemo(() => splitUserContent(message.content), [message.content]);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(text);
+  const [showPrompt, setShowPrompt] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
   useAutoResize(ref, draft);
   const images = attachments.filter((a) => a.kind === 'image');
@@ -179,13 +182,20 @@ export function UserTurn({
             </button>
           </div>
         </div>
+      ) : message.command ? (
+        <>
+          <button className="command-chip" onClick={() => setShowPrompt((v) => !v)} title="Show the full prompt">
+            {message.command} {showPrompt ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+          </button>
+          {showPrompt && <div className="bubble small">{text}</div>}
+        </>
       ) : (
         text && <div className="bubble">{text}</div>
       )}
       {!editing && (
         <div className="msg-actions">
           <CopyButton text={() => text} />
-          {onEdit && !disabled && (
+          {onEdit && !disabled && !message.command && (
             <button
               className="icon-btn sm"
               title="Edit message"
@@ -341,9 +351,17 @@ function toolIcon(name: string): ReactNode {
       return <Globe size={13} />;
     case 'Memory':
       return <Brain size={13} />;
+    case 'Skill':
+      return <WandSparkles size={13} />;
     default:
-      return <Wrench size={13} />;
+      return name.startsWith('mcp__') ? <Plug size={13} /> : <Wrench size={13} />;
   }
+}
+
+/** "mcp__notion__search" → "notion · search". */
+function displayName(name: string): string {
+  const m = /^mcp__(.+?)__(.+)$/.exec(name);
+  return m ? `${m[1].replace(/_/g, ' ')} · ${m[2]}` : name;
 }
 
 function toolSummary(name: string, args: any, fallback?: string): string {
@@ -420,6 +438,18 @@ export function ToolBlock({
 
   if (name === 'TodoWrite' && Array.isArray(args.todos)) return <TodoCard todos={args.todos} />;
 
+  if (name === 'Skill' && !result?.isError) {
+    return (
+      <div className="memory-chip" style={{ background: 'var(--accent-soft)' }}>
+        <WandSparkles size={14} color="var(--accent)" />
+        <span>
+          <strong>{args.file ? 'Read skill file' : 'Using skill'}</strong>: {args.name}
+          {args.file ? ` / ${args.file}` : ''}
+        </span>
+      </div>
+    );
+  }
+
   if (name === 'Memory' && (args.action === 'remember' || args.action === 'forget') && !result?.isError) {
     return (
       <div className="memory-chip">
@@ -437,7 +467,7 @@ export function ToolBlock({
     <div className="tool">
       <button className="tool-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <span className="tool-icon">{toolIcon(name)}</span>
-        <span className="tool-name">{name}</span>
+        <span className="tool-name">{displayName(name)}</span>
         <span className="tool-summary">{toolSummary(name, args, summary)}</span>
         <span className={`tool-state ${state}`}>
           {state === 'running' ? <Loader2 size={14} className="spin" /> : state === 'err' ? <AlertTriangle size={14} /> : <Check size={14} />}

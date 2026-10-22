@@ -1,4 +1,4 @@
-import { Bot, Brain, FolderOpen, KeyRound, Layers, PanelLeftClose, Pin, Search, Settings, SquarePen } from 'lucide-react';
+import { Bot, Brain, FolderOpen, KeyRound, Layers, PanelLeftClose, Pin, Plug, Puzzle, Search, Settings, SquarePen, WandSparkles } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { ChatListItem } from '../api';
 import { href, Route } from '../router';
@@ -44,6 +44,11 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
     { route: { page: 'artifacts' } as Route, icon: <Layers size={17} />, label: 'Artifacts', match: ['artifacts', 'artifact'] },
     { route: { page: 'memory' } as Route, icon: <Brain size={17} />, label: 'Memory', match: ['memory'] },
   ];
+  const extend = [
+    { route: { page: 'connectors' } as Route, icon: <Plug size={17} />, label: 'Connectors', match: ['connectors'] },
+    { route: { page: 'skills' } as Route, icon: <WandSparkles size={17} />, label: 'Skills', match: ['skills'] },
+    { route: { page: 'plugins' } as Route, icon: <Puzzle size={17} />, label: 'Plugins', match: ['plugins'] },
+  ];
 
   return (
     <nav className={`sidebar${collapsed ? ' collapsed' : ''}`} aria-label="Main">
@@ -64,6 +69,13 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
             {n.icon}
             {n.label}
             {!!n.count && <span className="count">{n.count}</span>}
+          </a>
+        ))}
+        <div className="nav-label">Extend</div>
+        {extend.map((n) => (
+          <a key={n.label} className={`nav-item${n.match.includes(route.page) ? ' active' : ''}`} href={href(n.route)}>
+            {n.icon}
+            {n.label}
           </a>
         ))}
         <div className="sidebar-search">

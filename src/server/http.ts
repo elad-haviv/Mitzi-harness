@@ -10,27 +10,19 @@ import { Attachment, BankProfile, BankSummary, Bot, BotTools, Chat, DEFAULT_BOT_
 import { toToolSpecs } from '../tools/index.js';
 import { compactChat, contextBreakdown, ModelCatalog } from './context.js';
 import { MemoryService } from './memory/index.js';
+import { listCommands } from './extensions/commands.js';
+import { Plugins, syncPlugins } from './extensions/plugins.js';
+import { Skills, SkillRoot } from './extensions/skills.js';
+import { McpManager } from './mcp/manager.js';
+import { OAuthFlows } from './mcp/oauth.js';
+import { oauthCallback, registerExtensionRoutes } from './routes-ext.js';
 import { ChatRunner, summarizeChat } from './runner.js';
 import { newId, now, Store } from './store.js';
+import { clamp, fail, Handler, HttpError, Req, STREAMED, str } from './util.js';
 
-export class HttpError extends Error {
-  constructor(readonly status: number, message: string) {
-    super(message);
-  }
-}
+export { HttpError } from './util.js';
 
-interface Req {
-  params: Record<string, string>;
-  query: URLSearchParams;
-  body: any;
-  req: IncomingMessage;
-  res: ServerResponse;
-}
 
-type Handler = (r: Req) => unknown | Promise<unknown>;
-
-/** Returned by handlers that write the response themselves (SSE). */
-const STREAMED = Symbol('streamed');
 
 const MAX_BODY = 25 * 1024 * 1024;
 const MAX_FILE = 2 * 1024 * 1024;
@@ -52,6 +44,8 @@ export interface AppOptions {
   token: string;
   /** Host header values allowed (guards against DNS rebinding). */
   allowedHosts: string[];
+  /** The app's own origin, e.g. http://localhost:4545 (for OAuth redirects). */
+  origin: () => string;
 }
 
 export function createApp(opts: AppOptions) {
@@ -72,10 +66,35 @@ export function createApp(opts: AppOptions) {
     () => store.settings,
     () => config().hindsightApiKey,
   );
-  const runner = new ChatRunner({ store, config, client, catalog, memory });
+  const mcp = new McpManager(store);
+  const plugins = new Plugins(store, MITZI_HOME);
+  const claudeHome = process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude');
+  const skills = new Skills(
+    (): SkillRoot[] => [
+      { dir: join(MITZI_HOME, 'skills'), source: 'user' },
+      ...(store.settings.useClaudeSkills ? [{ dir: join(claudeHome, 'skills'), source: 'claude' as const }] : []),
+      ...plugins.skillRoots(),
+    ],
+    () => new Set(store.settings.disabledSkills),
+    join(MITZI_HOME, 'skills'),
+  );
+  const commands = () => listCommands([{ dir: join(MITZI_HOME, 'commands'), source: 'user' }, ...plugins.commandRoots()]);
+  const oauth = new OAuthFlows();
+  const extensions = {
+    store,
+    mcp,
+    oauth,
+    skills,
+    plugins,
+    commands,
+    sync: () => syncPlugins(store, plugins, mcp),
+    redirectUri: () => `${opts.origin()}/api/oauth/callback`,
+  };
+  const runner = new ChatRunner({ store, config, client, catalog, memory, mcp, skills, commands });
   seedBots(store, opts.dataDir);
   ensureDefaultBot(store);
   migrateLegacyMemories(store, memory);
+  void extensions.sync().then(() => mcp.warmup());
 
   const routes: { method: string; re: RegExp; keys: string[]; handler: Handler }[] = [];
   const route = (method: string, path: string, handler: Handler) => {
@@ -113,6 +132,7 @@ export function createApp(opts: AppOptions) {
     if (Object.keys(userConfig).length) writeUserConfig(userConfig);
     const ui: Partial<typeof store.settings> = {};
     if (typeof update.memoryEnabled === 'boolean') ui.memoryEnabled = update.memoryEnabled;
+    if (typeof update.useClaudeSkills === 'boolean') ui.useClaudeSkills = update.useClaudeSkills;
     if (typeof update.autoCompactPercent === 'number') ui.autoCompactPercent = clamp(update.autoCompactPercent, 0, 95);
     if (typeof update.keepRecentTurns === 'number') ui.keepRecentTurns = clamp(Math.round(update.keepRecentTurns), 0, 20);
     if (update.memoryBackend === 'builtin' || update.memoryBackend === 'hindsight') ui.memoryBackend = update.memoryBackend;
@@ -410,6 +430,8 @@ export function createApp(opts: AppOptions) {
     return { ok: true };
   });
 
+  registerExtensionRoutes(route, extensions);
+
   // ---- Helpers ---------------------------------------------------------------
 
   function deleteChat(id: string) {
@@ -425,13 +447,15 @@ export function createApp(opts: AppOptions) {
     return b.length === tokenBuf.length && timingSafeEqual(b, tokenBuf);
   };
 
-  return async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const handle = async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (!opts.allowedHosts.includes((req.headers.host ?? '').toLowerCase())) {
       return sendJson(res, 403, { error: 'Forbidden host' });
     }
 
     if (!url.pathname.startsWith('/api/')) return serveStatic(opts.webDir, url.pathname, res);
+    // OAuth providers redirect the browser here; the one-time state value authenticates it.
+    if (url.pathname === '/api/oauth/callback' && req.method === 'GET') return oauthCallback(extensions, url, res);
 
     // A custom header can't be sent cross-origin without a CORS preflight, which we never grant.
     if (!validToken(req.headers['x-mitzi-token'] as string | undefined)) {
@@ -455,19 +479,11 @@ export function createApp(opts: AppOptions) {
       sendJson(res, status, { error: err?.message ?? 'Internal error' });
     }
   };
+  return Object.assign(handle, { dispose: () => mcp.dispose() });
 }
 
-function fail(status: number, message: string): never {
-  throw new HttpError(status, message);
-}
 
-function str(v: unknown): string {
-  return typeof v === 'string' ? v : '';
-}
 
-function clamp(n: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, n));
-}
 
 function sendJson(res: ServerResponse, status: number, data: unknown): void {
   const body = JSON.stringify(data ?? null);
@@ -554,6 +570,8 @@ function applyBot(bot: Bot, body: any, creating: boolean): Bot {
     artifacts: tools.artifacts ?? bot.tools?.artifacts ?? true,
     web: tools.web ?? bot.tools?.web ?? true,
     memory: tools.memory ?? bot.tools?.memory ?? true,
+    skills: tools.skills ?? bot.tools?.skills ?? true,
+    connectors: tools.connectors ?? bot.tools?.connectors ?? true,
   };
   if (creating || Array.isArray(body?.starters)) {
     bot.starters = (Array.isArray(body?.starters) ? body.starters : []).filter((s: unknown) => typeof s === 'string' && s.trim()).slice(0, 6);
@@ -587,7 +605,11 @@ const DEFAULT_STARTERS = [
 
 /** Makes sure the built-in default bot exists, and that older bots have a memory profile. */
 function ensureDefaultBot(store: Store): void {
-  for (const bot of store.bots.all()) if (!bot.memory) store.bots.put({ ...bot, memory: bankProfile(undefined) });
+  for (const bot of store.bots.all()) {
+    if (!bot.memory || bot.tools.skills === undefined || bot.tools.connectors === undefined) {
+      store.bots.put({ ...bot, memory: bot.memory ?? bankProfile(undefined), tools: { ...bot.tools, skills: bot.tools.skills ?? true, connectors: bot.tools.connectors ?? true } });
+    }
+  }
   if (store.bots.get(DEFAULT_BOT_ID)) return;
   store.bots.put({
     id: DEFAULT_BOT_ID,
@@ -596,7 +618,7 @@ function ensureDefaultBot(store: Store): void {
     emoji: '✻',
     description: 'Your everyday assistant. It remembers what matters across conversations.',
     systemPrompt: 'You are helpful, knowledgeable and candid. Think things through, admit uncertainty, and get to the point.',
-    tools: { artifacts: true, web: true, memory: true },
+    tools: { artifacts: true, web: true, memory: true, skills: true, connectors: true },
     starters: DEFAULT_STARTERS,
     memory: {
       mission: "Get to know the user: who they are, what they're working on, their preferences, goals and the people in their life, so future help is personal and needs less explaining.",
@@ -632,7 +654,7 @@ function seedBots(store: Store, dataDir: string): void {
       systemPrompt:
         'You are a meticulous senior engineer reviewing code. Look first for correctness bugs, security issues and edge cases, then for clarity and maintainability. ' +
         'Be specific: quote the line, explain the problem, and show the fix. Rank findings by severity and skip nitpicks unless asked.',
-      tools: { artifacts: true, web: false, memory: true },
+      tools: { artifacts: true, web: false, memory: true, skills: true, connectors: false },
       memory: { mission: "Remember the user's codebases, languages, conventions and recurring mistakes.", disposition: { skepticism: 4, literalism: 4, empathy: 2 }, autoRetain: true },
       starters: ['Review this function for bugs:', 'Is this SQL query safe from injection?', 'How can I make this code easier to test?'],
     },
@@ -643,7 +665,7 @@ function seedBots(store: Store, dataDir: string): void {
       systemPrompt:
         'You are an experienced editor. Help the user write clearly and concisely. When given a draft, first give two or three high-level observations, ' +
         'then a revised version. Preserve the author\'s voice; cut filler, hedging and jargon. Explain the reasoning behind significant edits.',
-      tools: { artifacts: true, web: false, memory: true },
+      tools: { artifacts: true, web: false, memory: true, skills: true, connectors: false },
       memory: { mission: "Remember the user's writing projects, voice, audience and the feedback they found useful.", disposition: { skepticism: 2, literalism: 2, empathy: 4 }, autoRetain: true },
       starters: ['Tighten this paragraph:', 'Give me feedback on my cover letter', 'Rewrite this email to sound friendlier'],
     },
@@ -654,7 +676,7 @@ function seedBots(store: Store, dataDir: string): void {
       systemPrompt:
         'You are a patient tutor who uses the Socratic method. Never give the final answer outright. Ask one guiding question at a time, ' +
         'check the learner\'s understanding, offer hints when they are stuck, and celebrate progress. Adapt to their level.',
-      tools: { artifacts: true, web: true, memory: true },
+      tools: { artifacts: true, web: true, memory: true, skills: true, connectors: false },
       memory: { mission: 'Track what the learner understands, where they struggle and how they learn best.', disposition: { skepticism: 3, literalism: 2, empathy: 5 }, autoRetain: true },
       starters: ['Help me understand recursion', 'Why does the moon have phases?', 'Teach me how compound interest works'],
     },

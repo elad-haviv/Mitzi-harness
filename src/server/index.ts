@@ -36,11 +36,13 @@ export async function startServer(opts: ServerOptions = {}) {
   const port = opts.port ?? 4545;
   const token = opts.token ?? loadToken();
   const allowedHosts = [`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`];
+  let origin = `http://localhost:${port}`;
   const handle = createApp({
     dataDir: opts.dataDir ?? join(MITZI_HOME, 'data'),
     webDir: opts.webDir ?? fileURLToPath(new URL('../web/', import.meta.url)),
     token,
     allowedHosts,
+    origin: () => origin,
   });
   const server = createServer((req, res) => {
     handle(req, res).catch((err) => {
@@ -54,12 +56,14 @@ export async function startServer(opts: ServerOptions = {}) {
   });
   const actualPort = (server.address() as AddressInfo).port;
   if (actualPort !== port) allowedHosts.push(`127.0.0.1:${actualPort}`, `localhost:${actualPort}`);
+  origin = `http://localhost:${actualPort}`;
   return {
     url: `http://localhost:${actualPort}/?token=${token}`,
     port: actualPort,
     token,
     close: () =>
       new Promise<void>((resolve) => {
+        void handle.dispose();
         server.closeAllConnections();
         server.close(() => resolve());
       }),

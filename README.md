@@ -40,6 +40,24 @@ An open-source, Claude-style AI workspace that runs on **any model available thr
 
 ![Memory bank](docs/screenshots/memory-bank.png)
 
+**Connectors (MCP).** Give any bot tools from your apps through the [Model Context Protocol](https://modelcontextprotocol.io):
+- **Directory:** one-click connectors for Notion, Linear, Atlassian, Sentry, Vercel, Supabase, Stripe, GitHub, Hugging Face, Context7 and DeepWiki, plus local ones (Filesystem, Browser/Playwright, Brave Search, Git, Fetch, Sequential Thinking).
+- **Custom servers:** add any MCP server over stdio (a local command), Streamable HTTP, or the older SSE transport.
+- **Sign-in:** remote servers that use OAuth sign in through the browser, following the MCP authorization spec (discovery, dynamic client registration, PKCE, token refresh).
+- **Permissions:** per connector, choose *ask every time*, *allow read-only tools*, or *always allow*, and turn individual tools on or off.
+
+![Connectors](docs/screenshots/connectors.png)
+
+**Skills.** These are packaged instructions in Claude's `SKILL.md` format. Bots see each skill's name and description, and load the full instructions (and any supporting files) only when a task needs them. You can write skills in the app, import a skill folder, or install them with plugins. Skills in `~/.claude/skills` are picked up too.
+
+**Plugins.** Mitzi installs **Claude Code plugins and marketplaces** as they are:
+- **What a plugin contributes:** a plugin's skills, slash commands (`commands/*.md`, including `$ARGUMENTS` and `` !`shell` `` context in coding projects), agents (which become bots) and MCP servers (`.mcp.json`, which become connectors) all work. Hooks are listed but not run.
+- **Sources:** install from GitHub (`owner/repo`), any git URL, or a local folder.
+- **Marketplaces:** add one, for example `anthropics/claude-plugins-official`, `anthropics/claude-code` or `anthropics/skills`, and browse and install from it.
+- **Slash commands:** type `/` in the chat box to pick one.
+
+![Plugins](docs/screenshots/plugins.png)
+
 **Context management**
 - A meter in the message box shows how full the model's context window is.
 - The context panel breaks the window down: system prompt, project knowledge, memory, tool definitions, summary and conversation.
@@ -150,6 +168,8 @@ npm run dev:web                     # UI on :5173, proxies /api to :4545
 | `src/tools/` | Coding tools (Read, Write, Edit, Bash, Glob, Grep, LS, WebFetch, TodoWrite) |
 | `src/permissions.ts` | Permission modes, allow rules, pluggable approvers |
 | `src/server/` | Local web server: REST + SSE API, storage, prompt and context assembly, artifact tool |
+| `src/server/mcp/` | MCP client (stdio, Streamable HTTP, SSE), OAuth, connection manager |
+| `src/server/extensions/` | Skills, plugins and marketplaces, slash commands, connector directory |
 | `src/server/memory/` | Memory banks: built-in engine (retain, recall, reflect), retrieval strategies, Hindsight adapter |
 | `src/shared/types.ts` | Types shared by the server and the web app |
 | `web/src/` | React app: chat view, artifacts, projects, bots, memory, settings |

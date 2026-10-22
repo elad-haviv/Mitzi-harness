@@ -1,14 +1,17 @@
 import assert from 'node:assert/strict';
 import { createServer, request, Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
-import { tempDir, textChunks, toolCallChunks } from './helpers.js';
+import { tempDir, textChunks, toolCallChunks, writeStdioMcpServer } from './helpers.js';
+import { pathToFileURL } from 'node:url';
 
 // Configure before the server modules read the environment.
 process.env.MITZI_HOME = tempDir();
 process.env.OPENROUTER_API_KEY = 'test-key';
+// Keep the developer's own ~/.claude skills out of the tests.
+process.env.CLAUDE_CONFIG_DIR = tempDir();
 
 const TOKEN = 'a'.repeat(48);
 let base = '';
@@ -378,7 +381,7 @@ test('auto-compaction triggers when the last request was near the limit', async 
 
 test('bots shape new chats and deleting a project removes its chats', async () => {
   const bot = (await call('POST', '/api/bots', { name: 'Pirate', emoji: '🏴‍☠️', systemPrompt: 'Talk like a pirate.', model: 'test/model', tools: { web: false } })).data;
-  assert.deepEqual(bot.tools, { artifacts: true, web: false, memory: true });
+  assert.deepEqual(bot.tools, { artifacts: true, web: false, memory: true, skills: true, connectors: true });
   reply = () => textChunks('Arr');
   const chat = (await call('POST', '/api/chats', { botId: bot.id })).data;
   await stream(`/api/chats/${chat.id}/messages`, { content: 'Ahoy' });
@@ -390,4 +393,231 @@ test('bots shape new chats and deleting a project removes its chats', async () =
   const inProject = (await call('POST', '/api/chats', { projectId: project.id })).data;
   await call('DELETE', `/api/projects/${project.id}`);
   assert.equal((await call('GET', `/api/chats/${inProject.id}`)).status, 404);
+});
+
+/** Polls until a server reaches a status. */
+async function waitFor(id: string, status: string) {
+  for (let i = 0; i < 200; i++) {
+    const server = (await call('GET', '/api/mcp')).data.find((s: any) => s.id === id);
+    if (server?.status === status) return server;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  throw new Error(`Server ${id} never became ${status}`);
+}
+
+test('MCP servers: tools join chats, with trust-based permissions', async () => {
+  const script = writeStdioMcpServer(tempDir());
+  const created = await call('POST', '/api/mcp', {
+    name: 'Test Tools',
+    transport: 'stdio',
+    command: process.execPath,
+    args: [script],
+    env: { API_KEY: 's3cret' },
+    trust: 'readonly',
+  });
+  assert.equal(created.status, 200);
+  assert.equal(created.data.env.API_KEY, '••••••••');
+  const server = await waitFor(created.data.id, 'connected');
+  assert.deepEqual(
+    server.tools.map((t: any) => [t.name, t.readOnly]),
+    [
+      ['echo', true],
+      ['shout', false],
+      ['fail', false],
+    ],
+  );
+  await call('PATCH', `/api/mcp/${server.id}`, { disabledTools: ['fail'] });
+
+  let turn = 0;
+  reply = () =>
+    [
+      () => toolCallChunks('c1', 'mcp__test_tools__echo', { text: 'hi' }),
+      () => toolCallChunks('c2', 'mcp__test_tools__shout', { text: 'hey' }),
+      () => textChunks('Done.'),
+    ][turn++]();
+  const chat = (await call('POST', '/api/chats', {})).data;
+  const permissions: string[] = [];
+  const events = await stream(`/api/chats/${chat.id}/messages`, { content: 'Use the tools' }, (e) => {
+    if (e.type === 'permission') {
+      permissions.push(e.tool);
+      void call('POST', `/api/chats/${chat.id}/permission`, { requestId: e.requestId, answer: 'yes' });
+    }
+  });
+  // The read-only tool ran without asking; the other one asked first.
+  assert.deepEqual(permissions, ['mcp__test_tools__shout']);
+  const results = events.filter((e) => e.type === 'tool_result').map((e) => e.output);
+  assert.deepEqual(results, ['echo: hi', 'HEY']);
+  const offered = lastMain().tools.map((t: any) => t.function.name);
+  assert.ok(offered.includes('mcp__test_tools__echo') && !offered.includes('mcp__test_tools__fail'));
+
+  assert.equal((await call('DELETE', `/api/mcp/${server.id}`)).status, 200);
+});
+
+test('MCP OAuth: needs-auth, sign-in through the callback, then connected', async () => {
+  const libDir = tempDir();
+  writeStdioMcpServer(libDir);
+  const lib = (await import(pathToFileURL(join(libDir, 'mcp-lib.mjs')).href)).handle as (m: any) => any;
+  let base = '';
+  const authServer = createServer((req, res) => {
+    let raw = '';
+    req.on('data', (d) => (raw += d));
+    req.on('end', () => {
+      const url = new URL(req.url!, base);
+      const json = (status: number, data: unknown, headers: Record<string, string> = {}) => {
+        res.writeHead(status, { 'content-type': 'application/json', ...headers });
+        res.end(JSON.stringify(data));
+      };
+      if (url.pathname === '/mcp') {
+        if (req.headers.authorization !== 'Bearer good-token') {
+          return json(401, {}, { 'www-authenticate': `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource"` });
+        }
+        const reply = lib(JSON.parse(raw));
+        if (!reply) return void res.writeHead(202).end();
+        return json(200, reply);
+      }
+      if (url.pathname === '/.well-known/oauth-protected-resource') return json(200, { resource: `${base}/mcp`, authorization_servers: [base] });
+      if (url.pathname === '/.well-known/oauth-authorization-server') {
+        return json(200, { authorization_endpoint: `${base}/authorize`, token_endpoint: `${base}/token`, registration_endpoint: `${base}/register` });
+      }
+      if (url.pathname === '/register') return json(201, { client_id: 'mitzi-client' });
+      if (url.pathname === '/authorize') {
+        // Pretend the user approved: redirect back with a code.
+        const back = new URL(url.searchParams.get('redirect_uri')!);
+        back.searchParams.set('code', 'code-1');
+        back.searchParams.set('state', url.searchParams.get('state')!);
+        res.writeHead(302, { location: back.toString() });
+        return res.end();
+      }
+      if (url.pathname === '/token') return json(200, { access_token: 'good-token', refresh_token: 'r1', expires_in: 3600 });
+      json(404, {});
+    });
+  });
+  await new Promise<void>((r) => authServer.listen(0, '127.0.0.1', r));
+  base = `http://127.0.0.1:${(authServer.address() as AddressInfo).port}`;
+  try {
+    const created = (await call('POST', '/api/mcp', { name: 'Secure', transport: 'http', url: `${base}/mcp` })).data;
+    await waitFor(created.id, 'needs-auth');
+    const { url } = (await call('POST', `/api/mcp/${created.id}/auth`)).data;
+    const approve = await fetch(url, { redirect: 'manual' });
+    const callback = approve.headers.get('location')!;
+    assert.match(callback, /\/api\/oauth\/callback\?code=code-1&state=/);
+    // The browser follows the redirect to Mitzi (no app token: the state authenticates it).
+    const done = await fetch(callback);
+    assert.equal(done.status, 200);
+    assert.match(await done.text(), /Connected to Secure/);
+    const server = await waitFor(created.id, 'connected');
+    assert.equal(server.oauthConnected, true);
+    assert.equal(server.tools.length, 3);
+    // A forged callback is rejected.
+    const forged = await fetch(callback.replace(/state=[^&]+/, 'state=forged'));
+    assert.equal(forged.status, 400);
+    await call('DELETE', `/api/mcp/${created.id}`);
+  } finally {
+    authServer.close();
+  }
+});
+
+function makePlugin(dir: string, name: string) {
+  mkdirSync(join(dir, '.claude-plugin'), { recursive: true });
+  mkdirSync(join(dir, 'skills', 'haiku'), { recursive: true });
+  mkdirSync(join(dir, 'commands'));
+  mkdirSync(join(dir, 'agents'));
+  writeFileSync(join(dir, '.claude-plugin', 'plugin.json'), JSON.stringify({ name, description: 'A demo plugin', version: '1.2.0', author: { name: 'Me' } }));
+  writeFileSync(join(dir, 'skills', 'haiku', 'SKILL.md'), '---\nname: haiku\ndescription: Write haiku in 5-7-5\n---\nCount syllables carefully.');
+  writeFileSync(join(dir, 'commands', 'greet.md'), '---\ndescription: Greet someone\nargument-hint: <name>\n---\nSay hello to $ARGUMENTS warmly.');
+  writeFileSync(join(dir, 'agents', 'poet.md'), '---\nname: Poet\ndescription: Writes poems\nmodel: sonnet\n---\nYou are a poet.');
+  writeStdioMcpServer(dir);
+  writeFileSync(join(dir, '.mcp.json'), JSON.stringify({ mcpServers: { verse: { command: process.execPath, args: ['${CLAUDE_PLUGIN_ROOT}/mcp-server.mjs'] } } }));
+}
+
+test('plugins: install a Claude-format plugin; skills, commands, agents and MCP servers follow', async () => {
+  const src = tempDir();
+  makePlugin(src, 'demo-kit');
+  const installed = (await call('POST', '/api/plugins', { source: src })).data.plugin;
+  assert.equal(installed.id, 'demo-kit');
+  assert.deepEqual(installed.components, { skills: 1, commands: 1, agents: 1, mcpServers: 1, hooks: false });
+
+  const poet = (await call('GET', '/api/bots')).data.find((b: any) => b.name === 'Poet');
+  assert.equal(poet.pluginId, 'demo-kit');
+  assert.equal(poet.systemPrompt, 'You are a poet.');
+  assert.ok((await call('GET', '/api/commands')).data.some((c: any) => c.name === 'greet' && c.source === 'demo-kit'));
+  assert.ok((await call('GET', '/api/skills')).data.some((s: any) => s.id === 'demo-kit:haiku'));
+  const verse = (await call('GET', '/api/mcp')).data.find((s: any) => s.pluginId === 'demo-kit');
+  assert.match(verse.args[0], /plugins\/demo-kit\/mcp-server\.mjs$/);
+  await waitFor(verse.id, 'connected');
+
+  // Slash commands expand; skills are offered in the prompt.
+  reply = () => textChunks('Hello, Dana!');
+  const chat = (await call('POST', '/api/chats', {})).data;
+  await stream(`/api/chats/${chat.id}/messages`, { content: '/greet Dana' });
+  const saved = (await call('GET', `/api/chats/${chat.id}`)).data;
+  assert.equal(saved.messages[0].content, 'Say hello to Dana warmly.');
+  assert.equal(saved.messages[0].command, '/greet Dana');
+  const system = JSON.stringify(lastMain().messages[0]);
+  assert.match(system, /# Skills[\s\S]*haiku: Write haiku in 5-7-5/);
+  assert.ok(lastMain().tools.some((t: any) => t.function.name === 'Skill'));
+
+  // Disabling removes everything it contributed.
+  await call('PATCH', '/api/plugins/demo-kit', { enabled: false });
+  assert.ok(!(await call('GET', '/api/bots')).data.some((b: any) => b.name === 'Poet'));
+  assert.ok(!(await call('GET', '/api/mcp')).data.some((s: any) => s.pluginId === 'demo-kit'));
+  assert.ok(!(await call('GET', '/api/commands')).data.some((c: any) => c.name === 'greet'));
+  assert.equal((await call('DELETE', '/api/plugins/demo-kit')).status, 200);
+});
+
+test('marketplaces: list plugins and install, including skill-only entries', async () => {
+  const mp = tempDir();
+  mkdirSync(join(mp, '.claude-plugin'), { recursive: true });
+  makePlugin(join(mp, 'plugins', 'demo'), 'demo-kit');
+  mkdirSync(join(mp, 'skills', 'one'), { recursive: true });
+  mkdirSync(join(mp, 'skills', 'two'), { recursive: true });
+  writeFileSync(join(mp, 'skills', 'one', 'SKILL.md'), '---\nname: one\ndescription: First\n---\nOne.');
+  writeFileSync(join(mp, 'skills', 'two', 'SKILL.md'), '---\nname: two\ndescription: Second\n---\nTwo.');
+  writeFileSync(
+    join(mp, '.claude-plugin', 'marketplace.json'),
+    JSON.stringify({
+      name: 'local-market',
+      owner: { name: 'Me' },
+      plugins: [
+        { name: 'demo-kit', source: './plugins/demo', description: 'Demo' },
+        { name: 'skill-pack', source: './', strict: false, skills: ['./skills/one'], description: 'Just one skill' },
+      ],
+    }),
+  );
+  // Installing a marketplace repo as a plugin adds the marketplace instead.
+  const viaPlugin = (await call('POST', '/api/plugins', { source: mp })).data;
+  assert.equal(viaPlugin.marketplace.name, 'local-market');
+  assert.deepEqual(
+    viaPlugin.marketplace.plugins.map((p: any) => p.name),
+    ['demo-kit', 'skill-pack'],
+  );
+
+  const plugin = (await call('POST', '/api/marketplaces/local-market/install', { name: 'skill-pack' })).data;
+  assert.equal(plugin.components.skills, 1);
+  const ids = (await call('GET', '/api/skills')).data.map((s: any) => s.id);
+  assert.ok(ids.includes('skill-pack:one') && !ids.includes('skill-pack:two'));
+  const listed = (await call('GET', '/api/marketplaces')).data[0];
+  assert.equal(listed.plugins.find((p: any) => p.name === 'skill-pack').installed, true);
+
+  await call('DELETE', '/api/plugins/skill-pack');
+  await call('DELETE', '/api/marketplaces/local-market');
+  assert.deepEqual((await call('GET', '/api/marketplaces')).data, []);
+});
+
+test('connectors directory creates configured servers', async () => {
+  const presets = (await call('GET', '/api/connectors')).data;
+  assert.ok(presets.some((p: any) => p.id === 'notion' && p.oauth));
+  assert.equal((await call('POST', '/api/connectors/brave-search', { values: {} })).status, 400);
+
+  const gh = (await call('POST', '/api/connectors/github', { values: { token: 'ghp_secret' } })).data;
+  assert.equal(gh.transport, 'http');
+  assert.equal(gh.headers.Authorization, '••••••••');
+  const fsServer = (await call('POST', '/api/connectors/filesystem', { values: { paths: '~/docs\n/tmp/x' } })).data;
+  assert.deepEqual(fsServer.args.slice(0, 2), ['-y', '@modelcontextprotocol/server-filesystem']);
+  assert.ok(fsServer.args[2].endsWith('/docs') && !fsServer.args[2].startsWith('~'));
+  assert.equal(fsServer.args[3], '/tmp/x');
+  const again = (await call('POST', '/api/connectors/github', { values: { token: 'x' } })).data;
+  assert.equal(again.name, 'GitHub 2');
+  for (const s of [gh, fsServer, again]) await call('PATCH', `/api/mcp/${s.id}`, { enabled: false });
+  for (const s of [gh, fsServer, again]) await call('DELETE', `/api/mcp/${s.id}`);
 });

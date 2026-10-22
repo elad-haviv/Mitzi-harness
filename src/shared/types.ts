@@ -16,6 +16,10 @@ export interface UiSettings {
   embeddingModel: string;
   /** Token budget for memories recalled into each message. */
   recallTokens: number;
+  /** Skill ids turned off. */
+  disabledSkills: string[];
+  /** Also load skills from ~/.claude/skills. */
+  useClaudeSkills: boolean;
   /** Compact automatically when a request fills this % of the model's context window. */
   autoCompactPercent: number;
   /** User turns kept verbatim when compacting. */
@@ -65,6 +69,10 @@ export interface BotTools {
   artifacts: boolean;
   web: boolean;
   memory: boolean;
+  /** Load skills on demand. */
+  skills: boolean;
+  /** Use tools from connectors / MCP servers. */
+  connectors: boolean;
 }
 
 /** Hindsight-style traits shaping how a bank forms and interprets memories, each 1–5. */
@@ -98,6 +106,8 @@ export interface Bot {
   tools: BotTools;
   /** The default bot cannot be deleted. */
   builtIn?: boolean;
+  /** Set for bots that come from a plugin's agents; they're managed by the plugin. */
+  pluginId?: string;
   /** Settings for this bot's memory bank (used when tools.memory is on). */
   memory: BankProfile;
   starters: string[];
@@ -118,6 +128,8 @@ export type ChatMessage = Message & {
   model?: string;
   /** Memories recalled for this (user) message. */
   memories?: RecalledMemory[];
+  /** The slash command the user typed, when the content is its expansion. */
+  command?: string;
 };
 
 export type MemoryType = 'world' | 'experience' | 'observation';
@@ -280,4 +292,167 @@ export interface Attachment {
   /** Text content, or a data: URL for images. */
   content: string;
   kind: 'text' | 'image';
+}
+
+// ---------- Extensions: MCP servers, connectors, skills, plugins ----------
+
+export type McpTransport = 'stdio' | 'http' | 'sse';
+/** When MCP tool calls need approval: always, only for tools not marked read-only, or never. */
+export type McpTrust = 'ask' | 'readonly' | 'allow';
+
+export interface McpOAuthState {
+  clientId: string;
+  clientSecret?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  /** Epoch ms. */
+  expiresAt?: number;
+  tokenEndpoint?: string;
+  resource?: string;
+  scope?: string;
+}
+
+export interface McpServerConfig {
+  id: string;
+  name: string;
+  transport: McpTransport;
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  url?: string;
+  headers?: Record<string, string>;
+  enabled: boolean;
+  trust: McpTrust;
+  disabledTools: string[];
+  source: 'user' | 'connector' | 'plugin';
+  connectorId?: string;
+  pluginId?: string;
+  oauth?: McpOAuthState;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface McpToolInfo {
+  name: string;
+  title?: string;
+  description?: string;
+  readOnly?: boolean;
+  enabled: boolean;
+}
+
+export type McpStatus = 'disabled' | 'connecting' | 'connected' | 'error' | 'needs-auth';
+
+/** A server as the browser sees it: secrets masked, plus live status. */
+export interface McpServerView extends Omit<McpServerConfig, 'oauth'> {
+  status: McpStatus;
+  error?: string;
+  tools: McpToolInfo[];
+  serverName?: string;
+  oauthConnected: boolean;
+}
+
+export interface ConnectorField {
+  key: string;
+  label: string;
+  /** env var, HTTP header, extra command arguments, or a bearer token header. */
+  kind: 'env' | 'header' | 'args' | 'bearer';
+  placeholder?: string;
+  help?: string;
+  secret?: boolean;
+  required?: boolean;
+}
+
+export interface ConnectorPreset {
+  id: string;
+  name: string;
+  description: string;
+  emoji: string;
+  category: string;
+  transport: McpTransport;
+  url?: string;
+  command?: string;
+  args?: string[];
+  fields: ConnectorField[];
+  /** Signs in through the service's OAuth page. */
+  oauth?: boolean;
+  /** Runtime the user needs installed (stdio connectors). */
+  requires?: string;
+  docsUrl?: string;
+  /** Default trust for a new connection. */
+  trust?: McpTrust;
+}
+
+export interface SkillInfo {
+  id: string;
+  name: string;
+  description: string;
+  source: 'user' | 'plugin' | 'claude';
+  pluginId?: string;
+  dir: string;
+  enabled: boolean;
+  files: string[];
+}
+
+export interface SkillDetail extends SkillInfo {
+  body: string;
+}
+
+export interface PluginComponents {
+  skills: number;
+  commands: number;
+  agents: number;
+  mcpServers: number;
+  /** Hooks are listed but not run by Mitzi. */
+  hooks: boolean;
+}
+
+export interface PluginSource {
+  kind: 'git' | 'local' | 'marketplace';
+  url?: string;
+  path?: string;
+  ref?: string;
+  marketplace?: string;
+}
+
+export interface PluginInfo {
+  id: string;
+  name: string;
+  description: string;
+  version?: string;
+  author?: string;
+  homepage?: string;
+  source: PluginSource;
+  enabled: boolean;
+  /** Restricts skills to these directories (marketplace entries with an explicit skill list). */
+  skillPaths?: string[];
+  components: PluginComponents;
+  installedAt: string;
+  updatedAt: string;
+}
+
+export interface MarketplacePlugin {
+  name: string;
+  description?: string;
+  category?: string;
+  version?: string;
+  author?: string;
+  homepage?: string;
+  installed: boolean;
+}
+
+export interface MarketplaceInfo {
+  id: string;
+  name: string;
+  description?: string;
+  source: string;
+  plugins: MarketplacePlugin[];
+  updatedAt: string;
+}
+
+export interface SlashCommandInfo {
+  name: string;
+  description?: string;
+  argumentHint?: string;
+  /** Plugin name, or "user". */
+  source: string;
 }

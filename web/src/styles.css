@@ -2525,3 +2525,214 @@ button.memory-chip:hover {
     margin-left: 0;
   }
 }
+
+/* ---------- Extensions ---------- */
+.nav-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 12px 10px 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.section-title {
+  font-size: 16px;
+  font-weight: 640;
+  margin: 28px 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--border-strong);
+}
+.status-dot.connected {
+  background: var(--ok);
+}
+.status-dot.connecting {
+  background: var(--warn);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.status-dot.error {
+  background: var(--danger);
+}
+.status-dot.needs-auth {
+  background: var(--warn);
+}
+.ext-row {
+  border-bottom: 1px solid var(--border);
+}
+.ext-row:last-child {
+  border-bottom: 0;
+}
+.ext-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+}
+.ext-head .grow {
+  flex: 1;
+  min-width: 0;
+}
+.ext-head .t {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ext-head .s {
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ext-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.ext-body {
+  padding: 4px 16px 14px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tool-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+}
+.tool-chip.off {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+.tool-chip:hover {
+  border-color: var(--accent);
+}
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+.preset {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 14px;
+  color: var(--text);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.preset:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow);
+}
+.preset .t {
+  font-weight: 600;
+  font-size: 14.5px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.preset .s {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.kv-row {
+  display: grid;
+  grid-template-columns: 1fr 1.6fr auto;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.warning-note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 13px;
+}
+.slash-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 4px;
+  z-index: 40;
+}
+.slash-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  background: none;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-size: 13.5px;
+}
+.slash-item.focused {
+  background: var(--surface-2);
+}
+.slash-item code {
+  font-family: var(--mono);
+  font-weight: 600;
+  color: var(--accent);
+}
+.slash-item .d {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.command-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  border: 0;
+}

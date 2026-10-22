@@ -11,6 +11,9 @@ import type { UI } from '../ui.js';
 import { ChatSetup, compactChat, contextMessages, generateTitle, ModelCatalog, systemPrompt } from './context.js';
 import { newId, now, Store } from './store.js';
 import { memoryTool, MemoryService } from './memory/index.js';
+import type { McpManager } from './mcp/manager.js';
+import { CommandDef, expandCommand, parseSlash } from './extensions/commands.js';
+import { Skills, skillTool } from './extensions/skills.js';
 import { artifactTool } from './tools.js';
 
 const MAX_EVENT_OUTPUT = 20_000;
@@ -26,6 +29,9 @@ export interface RunnerDeps {
   client: () => OpenRouterClient;
   catalog: ModelCatalog;
   memory: MemoryService;
+  mcp: McpManager;
+  skills: Skills;
+  commands: () => CommandDef[];
 }
 
 export type RunInput =
@@ -131,6 +137,7 @@ export class ChatRunner {
       toolNames: tools,
       // Memories recalled for the latest user message.
       recalled: chat.messages.findLast((m) => m.role === 'user')?.memories ?? [],
+      skills: this.deps.skills.enabled(),
       artifacts: store.artifacts.all().filter((a) => a.chatId === chat.id),
     };
   }
@@ -142,7 +149,16 @@ export class ChatRunner {
     const tools: Tool[] = project?.folder ? [...ALL_TOOLS] : bot.tools.web ? [webFetchTool] : [];
     if (bot.tools.artifacts) tools.push(artifactTool(store, chat.id, chat.projectId, onArtifact));
     if (this.memoryOn(bot)) tools.push(memoryTool(memory, memory.bankFor(bot)));
+    if (bot.tools.skills && this.deps.skills.enabled().length) tools.push(skillTool(this.deps.skills));
     return tools;
+  }
+
+  /** All tools for a turn, including connector (MCP) tools, which may need a moment to start. */
+  async allTools(chat: Chat, onArtifact: (a: Artifact) => void, waitMs = 20_000): Promise<{ tools: Tool[]; warnings: string[] }> {
+    const tools = this.tools(chat, onArtifact);
+    if (!this.botFor(chat).tools.connectors) return { tools, warnings: [] };
+    const mcp = await this.deps.mcp.tools(waitMs);
+    return { tools: [...tools, ...mcp.tools], warnings: mcp.warnings };
   }
 
   /** Recalls memories relevant to a message; failures only cost the memories, never the reply. */
@@ -207,6 +223,7 @@ export class ChatRunner {
 
     // Work out the user message for this turn, trimming history for edits and regenerations.
     let content: string | ContentPart[];
+    let command: string | undefined;
     if (input.kind === 'regenerate') {
       const last = chat.messages.findLastIndex((m) => m.role === 'user');
       if (last < 0) throw new Error('Nothing to regenerate');
@@ -217,7 +234,16 @@ export class ChatRunner {
         if (chat.messages[input.editIndex]?.role !== 'user') throw new Error('Only user messages can be edited');
         chat.messages = chat.messages.slice(0, input.editIndex);
       }
-      content = buildUserContent(input.content, input.attachments);
+      // "/name args" runs a slash command: its template becomes the message.
+      const slash = input.content.startsWith('/') ? parseSlash(input.content) : undefined;
+      const def = slash && this.deps.commands().find((c) => c.name === slash.name);
+      if (def) {
+        command = input.content.trim();
+        emit({ type: 'status', message: `Running /${def.name}…` });
+        content = buildUserContent(await expandCommand(def, slash!.args, project?.folder), input.attachments);
+      } else {
+        content = buildUserContent(input.content, input.attachments);
+      }
     }
     if (chat.contextStart > chat.messages.length) {
       chat.contextStart = chat.messages.length;
@@ -269,7 +295,9 @@ export class ChatRunner {
         });
       });
 
-    const tools = this.tools(chat, (artifact) => emit({ type: 'artifact', artifact }));
+    const toolset = await this.allTools(chat, (artifact) => emit({ type: 'artifact', artifact }));
+    for (const w of toolset.warnings) emit({ type: 'warn', message: w });
+    const tools = toolset.tools;
     const supportsTools = (await catalog.list().catch(() => [])).find((m) => m.id === chat.model)?.tools ?? true;
     const permissions = new Permissions(project?.permissionMode ?? 'default', chat.allowedRules, approver);
     const ui = new WebUI(emit);
@@ -291,7 +319,7 @@ export class ChatRunner {
     });
     const firstText = typeof content === 'string' ? content : content.map((p) => (p.type === 'text' ? p.text : '')).join(' ');
     // Save the user's message right away so a reload mid-turn still shows it.
-    const userMessage: ChatMessage = { role: 'user', content, ts: Date.now() };
+    const userMessage: ChatMessage = { role: 'user', content, ts: Date.now(), ...(command ? { command } : {}) };
     chat.messages.push(userMessage);
     chat.updatedAt = now();
     store.chats.put(chat);

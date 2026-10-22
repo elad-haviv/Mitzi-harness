@@ -1,7 +1,8 @@
 import { COMPACT_PROMPT, renderForTranscript } from '../agent.js';
 import type { Message, OpenRouterClient, ToolSpec } from '../openrouter.js';
 import { buildSystemPrompt } from '../prompt.js';
-import type { Artifact, Bot, Chat, ContextBreakdown, ContextSection, ModelInfo, Project, RecalledMemory, UiSettings } from '../shared/types.js';
+import type { Artifact, Bot, Chat, ContextBreakdown, ContextSection, ModelInfo, Project, RecalledMemory, SkillInfo, UiSettings } from '../shared/types.js';
+import { skillsPrompt } from './extensions/skills.js';
 
 const DEFAULT_CONTEXT_LENGTH = 128_000;
 
@@ -16,6 +17,8 @@ export interface ChatSetup {
   bot: Bot;
   /** Memories recalled for the latest user message. */
   recalled: RecalledMemory[];
+  /** Skills the model can load (when the Skill tool is available). */
+  skills: SkillInfo[];
   artifacts: Artifact[];
   settings: UiSettings;
   toolNames: string[];
@@ -102,6 +105,10 @@ export function promptSections(setup: ChatSetup): PromptSection[] {
         'when it conflicts with them.\n\n' +
         (body || '(Nothing relevant recalled.)'),
     });
+  }
+
+  if (toolNames.includes('Skill') && setup.skills.length) {
+    sections.push({ label: `Skills (${setup.skills.length})`, kind: 'tools', text: skillsPrompt(setup.skills) });
   }
 
   if (toolNames.includes('Artifact')) {

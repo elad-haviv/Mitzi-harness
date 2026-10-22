@@ -9,6 +9,9 @@ export type Route =
   | { page: 'artifacts' }
   | { page: 'artifact'; id: string }
   | { page: 'memory'; botId?: string }
+  | { page: 'connectors' }
+  | { page: 'skills' }
+  | { page: 'plugins' }
   | { page: 'settings' };
 
 export function parseRoute(hash: string): Route {
@@ -29,6 +32,10 @@ export function parseRoute(hash: string): Route {
       return { page: 'memory', botId: parts[1] };
     case 'settings':
       return { page: 'settings' };
+    case 'connectors':
+    case 'skills':
+    case 'plugins':
+      return { page: parts[0] };
   }
   return { page: 'new', projectId: params.get('project') ?? undefined, botId: params.get('bot') ?? undefined };
 }

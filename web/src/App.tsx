@@ -6,6 +6,9 @@ import { BotsPage } from './pages/Bots';
 import { ChatView } from './pages/ChatView';
 import { ArtifactPage, ArtifactsPage, SettingsPage } from './pages/Library';
 import { MemoryPage } from './pages/Memory';
+import { ConnectorsPage } from './pages/Connectors';
+import { PluginsPage } from './pages/Plugins';
+import { SkillsPage } from './pages/Skills';
 import { ProjectPage, ProjectsPage } from './pages/Projects';
 import { useRoute } from './router';
 import { useApp } from './state';
@@ -85,6 +88,15 @@ export function App() {
       break;
     case 'settings':
       page = <SettingsPage />;
+      break;
+    case 'connectors':
+      page = <ConnectorsPage />;
+      break;
+    case 'skills':
+      page = <SkillsPage />;
+      break;
+    case 'plugins':
+      page = <PluginsPage />;
       break;
   }
 

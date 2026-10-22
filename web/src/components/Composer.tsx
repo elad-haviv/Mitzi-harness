@@ -1,6 +1,6 @@
 import { ArrowUp, Globe, Paperclip, Square, X } from 'lucide-react';
-import { forwardRef, ReactNode, useImperativeHandle, useRef, useState } from 'react';
-import type { Attachment } from '../api';
+import { forwardRef, ReactNode, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { api, Attachment, SlashCommandInfo } from '../api';
 import { formatTokens, useApp } from '../state';
 import { AttachmentChips } from './Messages';
 import { ModelPicker } from './ModelPicker';
@@ -35,6 +35,20 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   useAutoResize(ref, text);
+  const [commands, setCommands] = useState<SlashCommandInfo[]>([]);
+  const [menuIndex, setMenuIndex] = useState(0);
+  useEffect(() => {
+    api.commands().then(setCommands, () => {});
+  }, []);
+  // Typing "/" at the start opens the command menu until a space is typed.
+  const slash = /^\/([\w:-]*)$/.exec(text)?.[1]?.toLowerCase();
+  const matches = slash === undefined ? [] : commands.filter((c) => c.name.includes(slash)).slice(0, 12);
+  const menuOpen = matches.length > 0;
+  const pick = (c: SlashCommandInfo) => {
+    setText(`/${c.name} `);
+    setMenuIndex(0);
+    ref.current?.focus();
+  };
 
   useImperativeHandle(handle, () => ({
     setText: (t: string) => {
@@ -78,6 +92,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
   return (
     <div className="composer-wrap">
       <div
+        style={{ position: 'relative' }}
         className={`composer${dragging ? ' dragging' : ''}`}
         onDragOver={(e) => {
           if (e.dataTransfer.types.includes('Files')) {
@@ -92,6 +107,28 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
           void addFiles(e.dataTransfer.files);
         }}
       >
+        {menuOpen && (
+          <div className="slash-menu" role="listbox" aria-label="Commands">
+            {matches.map((c, i) => (
+              <button
+                key={c.name}
+                role="option"
+                aria-selected={i === menuIndex}
+                className={`slash-item${i === menuIndex ? ' focused' : ''}`}
+                onMouseEnter={() => setMenuIndex(i)}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  pick(c);
+                }}
+              >
+                <code>/{c.name}</code>
+                {c.argumentHint && <span className="muted small">{c.argumentHint}</span>}
+                <span className="d">{c.description}</span>
+                <span className="muted small">{c.source}</span>
+              </button>
+            ))}
+          </div>
+        )}
         {attachments.length > 0 && (
           <div className="composer-attachments">
             {images.map(({ a, i }) => (
@@ -121,6 +158,22 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
             }
           }}
           onKeyDown={(e) => {
+            if (menuOpen) {
+              if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                setMenuIndex((i) => (i + (e.key === 'ArrowDown' ? 1 : matches.length - 1)) % matches.length);
+                return;
+              }
+              if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+                e.preventDefault();
+                pick(matches[Math.min(menuIndex, matches.length - 1)]);
+                return;
+              }
+              if (e.key === 'Escape') {
+                setText('');
+                return;
+              }
+            }
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               send();
