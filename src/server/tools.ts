@@ -1,4 +1,4 @@
-import type { Artifact, ArtifactType, Memory } from '../shared/types.js';
+import type { Artifact, ArtifactType } from '../shared/types.js';
 import { Tool, ToolError } from '../tools/types.js';
 import { newId, now, Store } from './store.js';
 
@@ -81,62 +81,6 @@ export function artifactTool(store: Store, chatId: string, projectId: string | u
       store.artifacts.put(artifact);
       onChange(artifact);
       return `Updated artifact ${artifact.id} (now version ${artifact.versions.length}).`;
-    },
-  };
-}
-
-interface MemoryArgs {
-  action: 'add' | 'update' | 'delete';
-  content?: string;
-  id?: string;
-  scope?: 'global' | 'project';
-}
-
-export function memoryTool(store: Store, projectId: string | undefined): Tool<MemoryArgs> {
-  return {
-    name: 'Memory',
-    kind: 'read',
-    description:
-      'Manage long-term memories about the user that carry across conversations. Add a memory when the user asks you to ' +
-      'remember something, or shares a durable preference or fact that will clearly matter later. Never store secrets. ' +
-      'Update or delete memories that are wrong or outdated (ids are listed in the system prompt).' +
-      (projectId ? ' Use scope "project" for memories that only matter within the current project.' : ''),
-    parameters: {
-      type: 'object',
-      properties: {
-        action: { type: 'string', enum: ['add', 'update', 'delete'] },
-        content: { type: 'string', description: 'The memory, as a short standalone sentence' },
-        id: { type: 'string', description: 'Memory id (update/delete)' },
-        ...(projectId ? { scope: { type: 'string', enum: ['global', 'project'] } } : {}),
-      },
-      required: ['action'],
-    },
-    summarize: (a) => `${a.action}${a.content ? `: ${a.content}` : ''}`,
-    async run(args) {
-      if (args.action === 'add') {
-        if (!args.content?.trim()) throw new ToolError('content is required');
-        const memory: Memory = {
-          id: newId(),
-          content: args.content.trim(),
-          projectId: args.scope === 'project' ? projectId : undefined,
-          source: 'assistant',
-          createdAt: now(),
-        };
-        store.memories.put(memory);
-        return `Saved memory ${memory.id}.`;
-      }
-      const memory = args.id ? store.memories.get(args.id) : undefined;
-      if (!memory) throw new ToolError(`No memory with id "${args.id}"`);
-      if (args.action === 'delete') {
-        store.memories.delete(memory.id);
-        return `Deleted memory ${memory.id}.`;
-      }
-      if (args.action === 'update') {
-        if (!args.content?.trim()) throw new ToolError('content is required');
-        store.memories.put({ ...memory, content: args.content.trim() });
-        return `Updated memory ${memory.id}.`;
-      }
-      throw new ToolError('action must be add, update or delete');
     },
   };
 }

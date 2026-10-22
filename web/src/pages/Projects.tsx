@@ -210,7 +210,7 @@ export function ProjectPage({ id }: { id: string }) {
                   className="danger"
                   onClick={async () => {
                     close();
-                    if (!(await confirm(`This deletes “${project.name}”, its ${project.chatCount} chats, their artifacts and project memories.`, { title: 'Delete project?' }))) return;
+                    if (!(await confirm(`This deletes “${project.name}”, its ${project.chatCount} chats and their artifacts.`, { title: 'Delete project?' }))) return;
                     await api.deleteProject(project.id).catch((err) => toast(err.message));
                     void refreshProjects();
                     void refreshChats();

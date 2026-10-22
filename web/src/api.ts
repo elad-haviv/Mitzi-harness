@@ -1,12 +1,16 @@
 import type {
   Artifact,
   Attachment,
+  BankSummary,
   Bot,
   Chat,
   ChatSummary,
   ContextBreakdown,
-  Memory,
+  MemoryType,
+  MemoryUnit,
   ModelInfo,
+  RecalledMemory,
+  ReflectResult,
   Project,
   PublicSettings,
   SettingsUpdate,
@@ -14,6 +18,7 @@ import type {
 } from '../../src/shared/types';
 
 export type * from '../../src/shared/types';
+export { DEFAULT_BOT_ID } from '../../src/shared/types';
 
 export type ProjectView = Project & { chatCount: number };
 export type ChatListItem = ChatSummary & { running?: boolean };
@@ -140,8 +145,16 @@ export const api = {
   artifact: (id: string) => request<Artifact>('GET', `/api/artifacts/${id}`),
   deleteArtifact: (id: string) => request('DELETE', `/api/artifacts/${id}`),
 
-  memories: () => request<Memory[]>('GET', '/api/memories'),
-  addMemory: (content: string, projectId?: string) => request<Memory>('POST', '/api/memories', { content, projectId }),
-  updateMemory: (id: string, content: string) => request<Memory>('PATCH', `/api/memories/${id}`, { content }),
-  deleteMemory: (id: string) => request('DELETE', `/api/memories/${id}`),
+  banks: () => request<BankSummary[]>('GET', '/api/banks'),
+  bankMemories: (botId: string, filter: { type?: MemoryType; q?: string; limit?: number; offset?: number } = {}) => {
+    const q = new URLSearchParams(Object.entries(filter).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => [k, String(v)])).toString();
+    return request<{ items: MemoryUnit[]; total: number }>('GET', `/api/banks/${botId}/memories${q ? `?${q}` : ''}`);
+  },
+  remember: (botId: string, content: string) => request('POST', `/api/banks/${botId}/memories`, { content }),
+  updateMemory: (botId: string, id: string, text: string) => request('PATCH', `/api/banks/${botId}/memories/${id}`, { text }),
+  forget: (botId: string, id: string) => request('DELETE', `/api/banks/${botId}/memories/${id}`),
+  recall: (botId: string, query: string) => request<RecalledMemory[]>('POST', `/api/banks/${botId}/recall`, { query }),
+  reflect: (botId: string, query: string) => request<ReflectResult>('POST', `/api/banks/${botId}/reflect`, { query }),
+  clearBank: (botId: string) => request('DELETE', `/api/banks/${botId}`),
+  testHindsight: (url: string, apiKey?: string) => request('POST', '/api/memory/test', { url, apiKey }),
 };

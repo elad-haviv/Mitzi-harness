@@ -1226,6 +1226,61 @@ a:hover {
 .memory-chip svg {
   color: var(--c-memory);
 }
+button.memory-chip {
+  border: 0;
+  cursor: pointer;
+}
+button.memory-chip:hover {
+  background: color-mix(in srgb, var(--c-memory) 20%, transparent);
+}
+.recall {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+.recall-list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13.5px;
+  width: 100%;
+}
+.recall-item {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+.recall-item .grow {
+  flex: 1;
+  min-width: 0;
+}
+.mem-type {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.mem-type.world {
+  background: color-mix(in srgb, var(--c-history) 14%, transparent);
+  color: var(--c-history);
+}
+.mem-type.experience {
+  background: color-mix(in srgb, var(--c-project) 16%, transparent);
+  color: var(--c-project);
+}
+.mem-type.observation {
+  background: color-mix(in srgb, var(--c-memory) 16%, transparent);
+  color: var(--c-memory);
+}
 
 /* Diffs */
 .diff {
@@ -2067,6 +2122,11 @@ a:hover {
   place-items: center;
   font-size: 24px;
 }
+.bot-emoji.builtin {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
 .emoji-grid {
   display: flex;
   flex-wrap: wrap;
@@ -2291,5 +2351,177 @@ a:hover {
   }
   .composer-bar .pill-btn {
     max-width: 170px;
+  }
+}
+
+/* ---------- Memory banks ---------- */
+.memory-layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.bank-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: sticky;
+  top: 0;
+}
+.bank-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  text-align: left;
+  color: var(--text-2);
+}
+.bank-item:hover {
+  background: var(--surface-2);
+}
+.bank-item.active {
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
+}
+.bank-item .grow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.bank-item .t {
+  font-weight: 560;
+  font-size: 14px;
+}
+.bank-item .s {
+  font-size: 12px;
+  color: var(--muted);
+}
+.bank-emoji {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.bank-emoji.builtin {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-size: 16px;
+}
+.bank-emoji.lg {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  font-size: 22px;
+}
+.bank-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 640;
+}
+.bank-stats {
+  display: flex;
+  gap: 22px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+.stat strong {
+  font-size: 24px;
+  font-weight: 650;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.traits {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.trait {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+}
+.pips {
+  display: inline-flex;
+  gap: 3px;
+}
+.pips i {
+  width: 14px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-3);
+}
+.pips i.on {
+  background: var(--accent);
+}
+.memory-row .entity {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 0 8px;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.memory-row .entity:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.memory-row .meta {
+  flex-wrap: wrap;
+}
+.memory-row > .mem-type {
+  margin-top: 3px;
+}
+.rank {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  font-size: 12.5px;
+  width: 16px;
+  margin-top: 2px;
+}
+.strategy {
+  font-size: 11px;
+  border-radius: 4px;
+  padding: 0 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+@media (max-width: 860px) {
+  .memory-layout {
+    grid-template-columns: 1fr;
+  }
+  .bank-list {
+    position: static;
+    flex-direction: row;
+    overflow-x: auto;
+  }
+  .bank-item .s {
+    display: none;
+  }
+  .traits {
+    margin-left: 0;
   }
 }

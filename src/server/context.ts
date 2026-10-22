@@ -1,7 +1,7 @@
 import { COMPACT_PROMPT, renderForTranscript } from '../agent.js';
 import type { Message, OpenRouterClient, ToolSpec } from '../openrouter.js';
 import { buildSystemPrompt } from '../prompt.js';
-import type { Artifact, Bot, Chat, ContextBreakdown, ContextSection, Memory, ModelInfo, Project, UiSettings } from '../shared/types.js';
+import type { Artifact, Bot, Chat, ContextBreakdown, ContextSection, ModelInfo, Project, RecalledMemory, UiSettings } from '../shared/types.js';
 
 const DEFAULT_CONTEXT_LENGTH = 128_000;
 
@@ -13,8 +13,9 @@ export function estimateTokens(text: string): number {
 export interface ChatSetup {
   chat: Chat;
   project?: Project;
-  bot?: Bot;
-  memories: Memory[];
+  bot: Bot;
+  /** Memories recalled for the latest user message. */
+  recalled: RecalledMemory[];
   artifacts: Artifact[];
   settings: UiSettings;
   toolNames: string[];
@@ -41,19 +42,18 @@ and Tailwind CSS classes work. No other packages can be imported.
 function basePrompt(setup: ChatSetup): string {
   const date = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const lines = [
-    setup.bot
-      ? `You are ${setup.bot.name}, an AI assistant.`
-      : 'You are Mitzi, a helpful, knowledgeable and candid AI assistant.',
+    `You are ${setup.bot.name}, an AI assistant.`,
+    setup.bot.systemPrompt.trim(),
     'Format responses with GitHub-flavored Markdown: headings for long answers, lists and tables where they help, and fenced code blocks with a language tag. ' +
       'Match length to the question: brief for simple questions, thorough for complex ones. If something is ambiguous, ask.',
     `Today is ${date}. You are running as ${setup.chat.model} via OpenRouter.`,
   ];
   if (setup.chat.webSearch) lines.push('Web search results may be provided; cite sources with markdown links.');
-  return lines.join('\n\n');
+  return lines.filter(Boolean).join('\n\n');
 }
 
 export function promptSections(setup: ChatSetup): PromptSection[] {
-  const { chat, project, bot, memories, artifacts, toolNames } = setup;
+  const { chat, project, bot, recalled, artifacts, toolNames } = setup;
   const sections: PromptSection[] = [];
 
   if (project?.folder) {
@@ -62,10 +62,9 @@ export function promptSections(setup: ChatSetup): PromptSection[] {
       kind: 'system',
       text: buildSystemPrompt({ cwd: project.folder, model: chat.model, mode: project.permissionMode, surface: 'web' }),
     });
-    if (bot) sections.push({ label: `${bot.name} instructions`, kind: 'system', text: `# Role\nYou are ${bot.name}.\n${bot.systemPrompt}` });
+    if (!bot.builtIn) sections.push({ label: `${bot.name} instructions`, kind: 'system', text: `# Role\nYou are ${bot.name}.\n${bot.systemPrompt}` });
   } else {
     sections.push({ label: 'System prompt', kind: 'system', text: basePrompt(setup) });
-    if (bot?.systemPrompt) sections.push({ label: `${bot.name} instructions`, kind: 'system', text: bot.systemPrompt });
   }
 
   if (project?.instructions.trim()) {
@@ -86,13 +85,22 @@ export function promptSections(setup: ChatSetup): PromptSection[] {
   }
 
   if (toolNames.includes('Memory')) {
-    const list = memories.length
-      ? memories.map((m) => `- [${m.id}]${m.projectId ? ' (project)' : ''} ${m.content}`).join('\n')
-      : '(no memories yet)';
+    const date = (m: RecalledMemory) => (m.occurredAt ? ` (${m.occurredAt.slice(0, 10)})` : '');
+    const group = (type: RecalledMemory['type'], title: string) => {
+      const items = recalled.filter((m) => m.type === type);
+      return items.length ? `${title}:\n${items.map((m) => `- [${m.id}] ${m.text}${date(m)}`).join('\n')}` : '';
+    };
+    const body = [group('observation', 'What you have come to believe'), group('world', 'Facts'), group('experience', 'Your past experiences with the user')]
+      .filter(Boolean)
+      .join('\n\n');
     sections.push({
-      label: `Memory (${memories.length})`,
+      label: `Recalled memories (${recalled.length})`,
       kind: 'memory',
-      text: `# Memory\nWhat you remember about the user from earlier conversations. Use it naturally; don't recite it.\n${list}`,
+      text:
+        '# Memory\nYou have a long-term memory bank that persists across conversations. These memories were recalled as relevant ' +
+        "to the user's latest message. Use them naturally, without announcing that you remember, and trust newer information " +
+        'when it conflicts with them.\n\n' +
+        (body || '(Nothing relevant recalled.)'),
     });
   }
 
@@ -113,7 +121,7 @@ export function systemPrompt(setup: ChatSetup): string {
 
 /** The messages actually sent to the model: the summary (if any) plus the uncompacted tail. */
 export function contextMessages(chat: Chat): Message[] {
-  const tail = chat.messages.slice(chat.contextStart).map(({ ts: _ts, model: _model, ...m }) => m as Message);
+  const tail = chat.messages.slice(chat.contextStart).map(({ ts: _ts, model: _model, memories: _memories, ...m }) => m as Message);
   if (!chat.summary) return tail;
   return [
     { role: 'user', content: `Earlier parts of this conversation were summarized to save context:\n\n${chat.summary}` },

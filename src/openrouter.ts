@@ -140,6 +140,14 @@ export class OpenRouterClient {
     return { content, toolCalls, usage, finishReason };
   }
 
+  /** OpenAI-compatible embeddings, one vector per input. */
+  async embed(model: string, input: string[]): Promise<number[][]> {
+    const res = await this.post('/embeddings', { model, input });
+    const json = (await res.json()) as { data?: { index?: number; embedding: number[] }[] };
+    if (!Array.isArray(json.data) || json.data.length !== input.length) throw new OpenRouterError('Unexpected embeddings response');
+    return [...json.data].sort((a, b) => (a.index ?? 0) - (b.index ?? 0)).map((d) => d.embedding);
+  }
+
   async listModels(): Promise<ModelInfo[]> {
     const res = await fetch(`${this.opts.baseUrl}/models`, { headers: this.headers() });
     if (!res.ok) throw new OpenRouterError(`Failed to list models: HTTP ${res.status}`, res.status);

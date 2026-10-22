@@ -6,9 +6,10 @@ import { extname, join, normalize, resolve, sep } from 'node:path';
 import { Config, loadConfig, MITZI_HOME, PERMISSION_MODES, PermissionMode } from '../config.js';
 import { OpenRouterClient } from '../openrouter.js';
 import type { ApprovalAnswer } from '../permissions.js';
-import type { Attachment, Bot, BotTools, Chat, Memory, Project, PublicSettings, SettingsUpdate, StreamEvent } from '../shared/types.js';
+import { Attachment, BankProfile, BankSummary, Bot, BotTools, Chat, DEFAULT_BOT_ID, MemoryType, Project, PublicSettings, SettingsUpdate, StreamEvent } from '../shared/types.js';
 import { toToolSpecs } from '../tools/index.js';
 import { compactChat, contextBreakdown, ModelCatalog } from './context.js';
+import { MemoryService } from './memory/index.js';
 import { ChatRunner, summarizeChat } from './runner.js';
 import { newId, now, Store } from './store.js';
 
@@ -62,8 +63,19 @@ export function createApp(opts: AppOptions) {
     return new OpenRouterClient({ apiKey: c.apiKey, baseUrl: c.baseUrl });
   };
   const catalog = new ModelCatalog(client);
-  const runner = new ChatRunner({ store, config, client, catalog });
+  const memory = new MemoryService(
+    join(opts.dataDir, 'banks'),
+    () => {
+      const c = config();
+      return { client: client(), model: c.model, fastModel: c.smallModel ?? c.model, embeddingModel: store.settings.embeddingModel || undefined };
+    },
+    () => store.settings,
+    () => config().hindsightApiKey,
+  );
+  const runner = new ChatRunner({ store, config, client, catalog, memory });
   seedBots(store, opts.dataDir);
+  ensureDefaultBot(store);
+  migrateLegacyMemories(store, memory);
 
   const routes: { method: string; re: RegExp; keys: string[]; handler: Handler }[] = [];
   const route = (method: string, path: string, handler: Handler) => {
@@ -83,6 +95,7 @@ export function createApp(opts: AppOptions) {
     return {
       ...store.settings,
       hasApiKey: !!c.apiKey,
+      hasHindsightKey: !!c.hindsightApiKey,
       apiKeySource: process.env.OPENROUTER_API_KEY ? 'env' : c.apiKey ? 'config' : null,
       defaultModel: c.model,
       smallModel: c.smallModel,
@@ -96,11 +109,20 @@ export function createApp(opts: AppOptions) {
     if (typeof update.apiKey === 'string') userConfig.apiKey = update.apiKey.trim() || undefined;
     if (typeof update.defaultModel === 'string' && update.defaultModel.trim()) userConfig.model = update.defaultModel.trim();
     if (typeof update.smallModel === 'string') userConfig.smallModel = update.smallModel.trim() || undefined;
+    if (typeof update.hindsightApiKey === 'string') userConfig.hindsightApiKey = update.hindsightApiKey.trim() || undefined;
     if (Object.keys(userConfig).length) writeUserConfig(userConfig);
     const ui: Partial<typeof store.settings> = {};
     if (typeof update.memoryEnabled === 'boolean') ui.memoryEnabled = update.memoryEnabled;
     if (typeof update.autoCompactPercent === 'number') ui.autoCompactPercent = clamp(update.autoCompactPercent, 0, 95);
     if (typeof update.keepRecentTurns === 'number') ui.keepRecentTurns = clamp(Math.round(update.keepRecentTurns), 0, 20);
+    if (update.memoryBackend === 'builtin' || update.memoryBackend === 'hindsight') ui.memoryBackend = update.memoryBackend;
+    if (typeof update.hindsightUrl === 'string') {
+      const url = update.hindsightUrl.trim();
+      if (url && !/^https?:\/\/[^\s]+$/.test(url)) throw new HttpError(400, 'The Hindsight URL must start with http:// or https://');
+      ui.hindsightUrl = url;
+    }
+    if (typeof update.embeddingModel === 'string') ui.embeddingModel = update.embeddingModel.trim();
+    if (typeof update.recallTokens === 'number') ui.recallTokens = clamp(Math.round(update.recallTokens), 200, 8000);
     store.updateSettings(ui);
     return publicSettings();
   });
@@ -124,13 +146,13 @@ export function createApp(opts: AppOptions) {
   });
   route('POST', '/api/chats', ({ body }) => {
     const project = body?.projectId ? getProject(body.projectId) : undefined;
-    const bot = body?.botId ? getBot(body.botId) : undefined;
+    const bot = getBot(str(body?.botId) || DEFAULT_BOT_ID);
     const chat: Chat = {
       id: newId(),
       title: 'New chat',
       projectId: project?.id,
-      botId: bot?.id,
-      model: str(body?.model) || bot?.model || config().model,
+      botId: bot.id,
+      model: str(body?.model) || bot.model || config().model,
       webSearch: false,
       pinned: false,
       messages: [],
@@ -269,7 +291,6 @@ export function createApp(opts: AppOptions) {
   route('DELETE', '/api/projects/:id', ({ params }) => {
     getProject(params.id);
     for (const c of store.chats.all()) if (c.projectId === params.id) deleteChat(c.id);
-    for (const m of store.memories.all()) if (m.projectId === params.id) store.memories.delete(m.id);
     store.projects.delete(params.id);
     return { ok: true };
   });
@@ -292,12 +313,15 @@ export function createApp(opts: AppOptions) {
 
   // ---- Bots ------------------------------------------------------------------
 
-  route('GET', '/api/bots', () => store.bots.all().sort((a, b) => a.name.localeCompare(b.name)));
+  route('GET', '/api/bots', () => store.bots.all().sort((a, b) => Number(!!b.builtIn) - Number(!!a.builtIn) || a.name.localeCompare(b.name)));
   route('POST', '/api/bots', ({ body }) => store.bots.put(applyBot({ id: newId(), createdAt: now() } as Bot, body, true)));
   route('GET', '/api/bots/:id', ({ params }) => getBot(params.id));
   route('PATCH', '/api/bots/:id', ({ params, body }) => store.bots.put(applyBot(getBot(params.id), body, false)));
-  route('DELETE', '/api/bots/:id', ({ params }) => {
-    getBot(params.id);
+  route('DELETE', '/api/bots/:id', async ({ params }) => {
+    const bot = getBot(params.id);
+    if (bot.builtIn) throw new HttpError(400, 'The default bot can’t be deleted.');
+    // Its memory bank goes with it (an external Hindsight server keeps its copy).
+    await memory.builtin.clear(memory.bankFor(bot)).catch(() => {});
     store.bots.delete(params.id);
     return { ok: true };
   });
@@ -316,27 +340,75 @@ export function createApp(opts: AppOptions) {
   route('GET', '/api/artifacts/:id', ({ params }) => store.artifacts.get(params.id) ?? fail(404, 'Artifact not found'));
   route('DELETE', '/api/artifacts/:id', ({ params }) => ({ ok: store.artifacts.delete(params.id) }));
 
-  // ---- Memory ----------------------------------------------------------------
+  // ---- Memory banks ----------------------------------------------------------
 
-  route('GET', '/api/memories', () => store.memories.all().sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
-  route('POST', '/api/memories', ({ body }) => {
+  const bankOf = (botId: string) => memory.bankFor(getBot(botId));
+  const MEMORY_TYPES: MemoryType[] = ['world', 'experience', 'observation'];
+
+  route('GET', '/api/banks', async () => {
+    const bots = store.bots.all().sort((a, b) => Number(!!b.builtIn) - Number(!!a.builtIn) || a.name.localeCompare(b.name));
+    const backend = memory.backend();
+    return Promise.all(
+      bots.map(async (bot): Promise<BankSummary> => {
+        const summary: BankSummary = { bot: { id: bot.id, name: bot.name, emoji: bot.emoji, builtIn: bot.builtIn }, enabled: bot.tools.memory };
+        try {
+          summary.stats = await backend.stats(memory.bankFor(bot));
+        } catch (err: any) {
+          summary.error = err.message;
+        }
+        return summary;
+      }),
+    );
+  });
+  route('GET', '/api/banks/:botId/memories', async ({ params, query }) => {
+    const type = query.get('type') as MemoryType | null;
+    return memory.backend().list(bankOf(params.botId), {
+      type: type && MEMORY_TYPES.includes(type) ? type : undefined,
+      q: query.get('q') ?? undefined,
+      limit: clamp(Number(query.get('limit')) || 50, 1, 200),
+      offset: Math.max(0, Number(query.get('offset')) || 0),
+    });
+  });
+  route('POST', '/api/banks/:botId/memories', async ({ params, body }) => {
     const content = str(body?.content).trim();
     if (!content) throw new HttpError(400, 'Memory is empty');
-    const memory: Memory = {
-      id: newId(),
-      content,
-      projectId: body?.projectId ? getProject(body.projectId).id : undefined,
-      source: 'user',
-      createdAt: now(),
-    };
-    return store.memories.put(memory);
+    await memory.backend().remember(bankOf(params.botId), content, 'user');
+    return { ok: true };
   });
-  route('PATCH', '/api/memories/:id', ({ params, body }) => {
-    const m = store.memories.get(params.id) ?? fail(404, 'Memory not found');
-    if (typeof body?.content === 'string' && body.content.trim()) m.content = body.content.trim();
-    return store.memories.put(m);
+  route('PATCH', '/api/banks/:botId/memories/:id', async ({ params, body }) => {
+    const text = str(body?.text).trim();
+    if (!text) throw new HttpError(400, 'Memory is empty');
+    await memory.backend().update(bankOf(params.botId), params.id, text);
+    return { ok: true };
   });
-  route('DELETE', '/api/memories/:id', ({ params }) => ({ ok: store.memories.delete(params.id) }));
+  route('DELETE', '/api/banks/:botId/memories/:id', async ({ params }) => {
+    await memory.backend().forget(bankOf(params.botId), params.id);
+    return { ok: true };
+  });
+  route('POST', '/api/banks/:botId/recall', async ({ params, body }) => {
+    const q = str(body?.query).trim();
+    if (!q) throw new HttpError(400, 'Query is empty');
+    return memory.backend().recall(bankOf(params.botId), q, { maxTokens: 4000, limit: 25, includeCore: false });
+  });
+  route('POST', '/api/banks/:botId/reflect', async ({ params, body }) => {
+    const q = str(body?.query).trim();
+    if (!q) throw new HttpError(400, 'Question is empty');
+    return memory.backend().reflect(bankOf(params.botId), q);
+  });
+  route('DELETE', '/api/banks/:botId', async ({ params }) => {
+    await memory.backend().clear(bankOf(params.botId));
+    return { ok: true };
+  });
+  route('POST', '/api/memory/test', async ({ body }) => {
+    const url = str(body?.url).trim() || store.settings.hindsightUrl;
+    if (!url) throw new HttpError(400, 'Enter the Hindsight server URL first');
+    try {
+      await memory.hindsight(url, str(body?.apiKey).trim() || config().hindsightApiKey).check();
+    } catch (err: any) {
+      throw new HttpError(502, err.cause?.code === 'ECONNREFUSED' ? `Nothing is listening at ${url}` : err.message);
+    }
+    return { ok: true };
+  });
 
   // ---- Helpers ---------------------------------------------------------------
 
@@ -486,15 +558,72 @@ function applyBot(bot: Bot, body: any, creating: boolean): Bot {
   if (creating || Array.isArray(body?.starters)) {
     bot.starters = (Array.isArray(body?.starters) ? body.starters : []).filter((s: unknown) => typeof s === 'string' && s.trim()).slice(0, 6);
   }
+  bot.memory = bankProfile(body?.memory, bot.memory);
   bot.updatedAt = now();
   return bot;
+}
+
+const trait = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? clamp(Math.round(v), 1, 5) : fallback);
+
+function bankProfile(input: any, current?: BankProfile): BankProfile {
+  const base: BankProfile = current ?? { mission: '', disposition: { skepticism: 3, literalism: 3, empathy: 3 }, autoRetain: true };
+  return {
+    mission: typeof input?.mission === 'string' ? input.mission.slice(0, 2000) : base.mission,
+    disposition: {
+      skepticism: trait(input?.disposition?.skepticism, base.disposition.skepticism),
+      literalism: trait(input?.disposition?.literalism, base.disposition.literalism),
+      empathy: trait(input?.disposition?.empathy, base.disposition.empathy),
+    },
+    autoRetain: typeof input?.autoRetain === 'boolean' ? input.autoRetain : base.autoRetain,
+  };
+}
+
+const DEFAULT_STARTERS = [
+  'Explain how transformers work, with a diagram',
+  'Build an interactive pomodoro timer as a React component',
+  'Help me write a polite follow-up email',
+  'Brainstorm names for a coffee shop with a cat theme',
+];
+
+/** Makes sure the built-in default bot exists, and that older bots have a memory profile. */
+function ensureDefaultBot(store: Store): void {
+  for (const bot of store.bots.all()) if (!bot.memory) store.bots.put({ ...bot, memory: bankProfile(undefined) });
+  if (store.bots.get(DEFAULT_BOT_ID)) return;
+  store.bots.put({
+    id: DEFAULT_BOT_ID,
+    builtIn: true,
+    name: 'Mitzi',
+    emoji: '✻',
+    description: 'Your everyday assistant. It remembers what matters across conversations.',
+    systemPrompt: 'You are helpful, knowledgeable and candid. Think things through, admit uncertainty, and get to the point.',
+    tools: { artifacts: true, web: true, memory: true },
+    starters: DEFAULT_STARTERS,
+    memory: {
+      mission: "Get to know the user: who they are, what they're working on, their preferences, goals and the people in their life, so future help is personal and needs less explaining.",
+      disposition: { skepticism: 3, literalism: 3, empathy: 4 },
+      autoRetain: true,
+    },
+    createdAt: now(),
+    updatedAt: now(),
+  });
+}
+
+/** Moves memories from the old global list into the default bot's bank. */
+function migrateLegacyMemories(store: Store, memory: MemoryService): void {
+  const legacy = store.legacyMemories.all();
+  if (!legacy.length) return;
+  const bank = memory.bankFor(store.bots.get(DEFAULT_BOT_ID)!);
+  for (const m of legacy) {
+    void memory.builtin.remember(bank, m.content, m.source);
+    store.legacyMemories.delete(m.id);
+  }
 }
 
 function seedBots(store: Store, dataDir: string): void {
   const marker = join(dataDir, '.seeded');
   if (existsSync(marker)) return;
   writeFileSync(marker, now());
-  if (store.bots.all().length) return;
+  if (store.bots.all().some((b) => !b.builtIn)) return;
   const seeds: Omit<Bot, 'id' | 'createdAt' | 'updatedAt'>[] = [
     {
       name: 'Code Reviewer',
@@ -503,7 +632,8 @@ function seedBots(store: Store, dataDir: string): void {
       systemPrompt:
         'You are a meticulous senior engineer reviewing code. Look first for correctness bugs, security issues and edge cases, then for clarity and maintainability. ' +
         'Be specific: quote the line, explain the problem, and show the fix. Rank findings by severity and skip nitpicks unless asked.',
-      tools: { artifacts: true, web: false, memory: false },
+      tools: { artifacts: true, web: false, memory: true },
+      memory: { mission: "Remember the user's codebases, languages, conventions and recurring mistakes.", disposition: { skepticism: 4, literalism: 4, empathy: 2 }, autoRetain: true },
       starters: ['Review this function for bugs:', 'Is this SQL query safe from injection?', 'How can I make this code easier to test?'],
     },
     {
@@ -514,6 +644,7 @@ function seedBots(store: Store, dataDir: string): void {
         'You are an experienced editor. Help the user write clearly and concisely. When given a draft, first give two or three high-level observations, ' +
         'then a revised version. Preserve the author\'s voice; cut filler, hedging and jargon. Explain the reasoning behind significant edits.',
       tools: { artifacts: true, web: false, memory: true },
+      memory: { mission: "Remember the user's writing projects, voice, audience and the feedback they found useful.", disposition: { skepticism: 2, literalism: 2, empathy: 4 }, autoRetain: true },
       starters: ['Tighten this paragraph:', 'Give me feedback on my cover letter', 'Rewrite this email to sound friendlier'],
     },
     {
@@ -524,6 +655,7 @@ function seedBots(store: Store, dataDir: string): void {
         'You are a patient tutor who uses the Socratic method. Never give the final answer outright. Ask one guiding question at a time, ' +
         'check the learner\'s understanding, offer hints when they are stuck, and celebrate progress. Adapt to their level.',
       tools: { artifacts: true, web: true, memory: true },
+      memory: { mission: 'Track what the learner understands, where they struggle and how they learn best.', disposition: { skepticism: 3, literalism: 2, empathy: 5 }, autoRetain: true },
       starters: ['Help me understand recursion', 'Why does the moon have phases?', 'Teach me how compound interest works'],
     },
   ];

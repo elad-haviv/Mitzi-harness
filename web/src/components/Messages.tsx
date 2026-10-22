@@ -22,7 +22,8 @@ import {
   X,
 } from 'lucide-react';
 import { ReactNode, useMemo, useRef, useState } from 'react';
-import type { Artifact, Attachment, Bot, ChatMessage, ContentPart, Todo } from '../api';
+import type { Artifact, Attachment, Bot, ChatMessage, ContentPart, RecalledMemory, Todo } from '../api';
+import { href } from '../router';
 import { modelLabel, useApp } from '../state';
 import { ArtifactIcon, TYPE_LABEL } from './Artifacts';
 import { CopyButton, Markdown } from './Markdown';
@@ -73,7 +74,7 @@ export interface ToolResult {
 
 export type Turn =
   | { kind: 'user'; index: number; message: ChatMessage }
-  | { kind: 'assistant'; index: number; messages: ChatMessage[] }
+  | { kind: 'assistant'; index: number; messages: ChatMessage[]; memories?: RecalledMemory[] }
   | { kind: 'divider'; count: number };
 
 export function buildTurns(messages: ChatMessage[], contextStart: number): { turns: Turn[]; results: Map<string, ToolResult> } {
@@ -90,7 +91,8 @@ export function buildTurns(messages: ChatMessage[], contextStart: number): { tur
     if (m.role === 'assistant') {
       const last = turns.at(-1);
       if (last?.kind === 'assistant') last.messages.push(m);
-      else turns.push({ kind: 'assistant', index: i, messages: [m] });
+      // An answer shows the memories recalled for the message it answers.
+      else turns.push({ kind: 'assistant', index: i, messages: [m], memories: last?.kind === 'user' ? last.message.memories : undefined });
     }
   });
   if (contextStart > 0 && contextStart >= messages.length) turns.push({ kind: 'divider', count: contextStart });
@@ -205,11 +207,46 @@ export function UserTurn({
 // ---------- Assistant turn ----------
 
 export function Avatar({ bot }: { bot?: Bot }) {
-  return bot ? <div className="avatar emoji">{bot.emoji}</div> : <div className="avatar">✻</div>;
+  return bot && !bot.builtIn ? <div className="avatar emoji">{bot.emoji}</div> : <div className="avatar">✻</div>;
+}
+
+const MEMORY_TYPE_LABEL: Record<RecalledMemory['type'], string> = { world: 'Fact', experience: 'Experience', observation: 'Belief' };
+
+/** Shows which memories were recalled for a message, and why. */
+export function MemoryRecall({ memories, botId }: { memories: RecalledMemory[]; botId?: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="recall">
+      <button className="memory-chip" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <Brain size={14} />
+        <span>
+          Recalled {memories.length} {memories.length === 1 ? 'memory' : 'memories'}
+        </span>
+        {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+      </button>
+      {open && (
+        <div className="recall-list">
+          {memories.map((m) => (
+            <div key={m.id} className="recall-item">
+              <span className={`mem-type ${m.type}`}>{MEMORY_TYPE_LABEL[m.type]}</span>
+              <span className="grow">{m.text}</span>
+              {m.strategies && <span className="muted small">{m.strategies.join(' · ')}</span>}
+            </div>
+          ))}
+          {botId && (
+            <a className="small" href={href({ page: 'memory', botId })}>
+              Open memory bank →
+            </a>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function AssistantTurn({
   messages,
+  memories,
   results,
   artifacts,
   bot,
@@ -218,6 +255,7 @@ export function AssistantTurn({
   onRegenerate,
 }: {
   messages: ChatMessage[];
+  memories?: RecalledMemory[];
   results: Map<string, ToolResult>;
   artifacts: Artifact[];
   bot?: Bot;
@@ -232,6 +270,7 @@ export function AssistantTurn({
     <div className="turn turn-assistant">
       <Avatar bot={bot} />
       <div className="assistant-body">
+        {memories && memories.length > 0 && <MemoryRecall memories={memories} botId={bot?.id} />}
         {messages.map((m, i) => (
           <AssistantMessageBody key={i} message={m} results={results} artifacts={artifacts} activeArtifact={activeArtifact} onOpenArtifact={onOpenArtifact} />
         ))}
@@ -300,6 +339,8 @@ function toolIcon(name: string): ReactNode {
       return <FolderOpen size={13} />;
     case 'WebFetch':
       return <Globe size={13} />;
+    case 'Memory':
+      return <Brain size={13} />;
     default:
       return <Wrench size={13} />;
   }
@@ -379,13 +420,12 @@ export function ToolBlock({
 
   if (name === 'TodoWrite' && Array.isArray(args.todos)) return <TodoCard todos={args.todos} />;
 
-  if (name === 'Memory' && !result?.isError) {
-    const verb = args.action === 'delete' ? 'Forgot a memory' : args.action === 'update' ? 'Updated memory' : 'Saved to memory';
+  if (name === 'Memory' && (args.action === 'remember' || args.action === 'forget') && !result?.isError) {
     return (
       <div className="memory-chip">
         <Brain size={14} />
         <span>
-          <strong>{verb}</strong>
+          <strong>{args.action === 'forget' ? 'Forgot a memory' : 'Saved to memory'}</strong>
           {args.content ? `: ${args.content}` : ''}
         </span>
       </div>

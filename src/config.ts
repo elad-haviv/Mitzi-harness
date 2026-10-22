@@ -7,6 +7,8 @@ export const PERMISSION_MODES: PermissionMode[] = ['default', 'acceptEdits', 'pl
 
 export interface Config {
   apiKey: string;
+  /** API key for an external Hindsight memory server, if it needs one. */
+  hindsightApiKey?: string;
   baseUrl: string;
   model: string;
   /** Cheaper model used for summarising history on /compact. Defaults to `model`. */

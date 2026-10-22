@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Artifact, Bot, Chat, Memory, Project, UiSettings } from '../shared/types.js';
+import type { Artifact, Bot, Chat, LegacyMemory, Project, UiSettings } from '../shared/types.js';
 
 export function newId(): string {
   return `${Date.now().toString(36)}${randomBytes(4).toString('hex')}`;
@@ -58,6 +58,10 @@ export class Collection<T extends { id: string }> {
 
 const DEFAULT_UI_SETTINGS: UiSettings = {
   memoryEnabled: true,
+  memoryBackend: 'builtin',
+  hindsightUrl: '',
+  embeddingModel: '',
+  recallTokens: 1200,
   autoCompactPercent: 80,
   keepRecentTurns: 2,
 };
@@ -67,7 +71,8 @@ export class Store {
   readonly projects: Collection<Project>;
   readonly bots: Collection<Bot>;
   readonly artifacts: Collection<Artifact>;
-  readonly memories: Collection<Memory>;
+  /** Pre-memory-bank memories, kept only until they're migrated. */
+  readonly legacyMemories: Collection<LegacyMemory>;
   private settingsPath: string;
   private uiSettings: UiSettings;
 
@@ -76,7 +81,7 @@ export class Store {
     this.projects = new Collection(join(root, 'projects'));
     this.bots = new Collection(join(root, 'bots'));
     this.artifacts = new Collection(join(root, 'artifacts'));
-    this.memories = new Collection(join(root, 'memories'));
+    this.legacyMemories = new Collection(join(root, 'memories'));
     this.settingsPath = join(root, 'settings.json');
     try {
       this.uiSettings = { ...DEFAULT_UI_SETTINGS, ...JSON.parse(readFileSync(this.settingsPath, 'utf8')) };

@@ -18,12 +18,12 @@ import {
   X,
 } from 'lucide-react';
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, Artifact, Attachment, Chat, ChatMessage, StreamEvent } from '../api';
+import { api, Artifact, Attachment, Chat, ChatMessage, DEFAULT_BOT_ID, RecalledMemory, StreamEvent } from '../api';
 import { ArtifactIcon, ArtifactView, TYPE_LABEL } from '../components/Artifacts';
 import { Composer, ComposerHandle, ContextRing } from '../components/Composer';
 import { ContextPanel } from '../components/ContextPanel';
 import { Markdown } from '../components/Markdown';
-import { AssistantTurn, Avatar, buildTurns, CompactDivider, PermissionCard, PermissionRequest, ToolBlock, UserTurn } from '../components/Messages';
+import { AssistantTurn, Avatar, buildTurns, CompactDivider, MemoryRecall, PermissionCard, PermissionRequest, ToolBlock, UserTurn } from '../components/Messages';
 import { Menu, useConfirm } from '../components/ui';
 import { href, navigate } from '../router';
 import { relativeTime, useApp } from '../state';
@@ -36,18 +36,12 @@ type LiveBlock =
 
 interface Live {
   user?: ChatMessage;
+  memories?: RecalledMemory[];
   blocks: LiveBlock[];
   status?: string;
 }
 
 type Panel = { kind: 'artifact'; id: string; version?: number } | { kind: 'context' } | { kind: 'artifacts' } | null;
-
-const DEFAULT_STARTERS = [
-  'Explain how transformers work, with a diagram',
-  'Build an interactive pomodoro timer as a React component',
-  'Help me write a polite follow-up email',
-  'Brainstorm names for a coffee shop with a cat theme',
-];
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -80,7 +74,7 @@ export function ChatView({ routeId, projectId, botId }: { routeId?: string; proj
   const [confirmNode, confirm] = useConfirm();
 
   // Settings for a chat that doesn't exist yet.
-  const draftBot = bots.find((b) => b.id === botId);
+  const draftBot = bots.find((b) => b.id === (botId ?? DEFAULT_BOT_ID));
   const [draftModel, setDraftModel] = useState('');
   const [draftWeb, setDraftWeb] = useState(false);
 
@@ -156,7 +150,9 @@ export function ChatView({ routeId, projectId, botId }: { routeId?: string; proj
   }, [chatId]);
 
   const project = projects.find((p) => p.id === (chat?.projectId ?? projectId));
-  const bot = bots.find((b) => b.id === (chat?.botId ?? botId));
+  const bot = bots.find((b) => b.id === (chat?.botId ?? botId ?? DEFAULT_BOT_ID));
+  // The default bot is just "Mitzi"; custom bots get their own name and badge.
+  const customBot = bot && !bot.builtIn ? bot : undefined;
   const model = chat?.model ?? draftModel;
   const webSearch = chat?.webSearch ?? draftWeb;
   const contextLength = models.find((m) => m.id === model)?.contextLength;
@@ -198,6 +194,9 @@ export function ChatView({ routeId, projectId, botId }: { routeId?: string; proj
         break;
       case 'status':
         setLive((l) => l && { ...l, status: e.message });
+        break;
+      case 'recall':
+        setLive((l) => l && { ...l, memories: e.memories });
         break;
       case 'warn':
         toast(e.message, 'info');
@@ -310,7 +309,7 @@ export function ChatView({ routeId, projectId, botId }: { routeId?: string; proj
       onModelChange={(m) => (chat ? void updateChat({ model: m }) : setDraftModel(m))}
       webSearch={webSearch}
       onWebSearchChange={(on) => (chat ? void updateChat({ webSearch: on }) : setDraftWeb(on))}
-      placeholder={bot ? `Message ${bot.name}…` : project ? `Message Mitzi in ${project.name}…` : undefined}
+      placeholder={customBot ? `Message ${customBot.name}…` : project ? `Message Mitzi in ${project.name}…` : undefined}
       autoFocus
       extra={chat && chat.messages.length > 0 && (
         <ContextRing used={chat.lastPromptTokens} total={contextLength} active={panel?.kind === 'context'} onClick={() => setPanel(panel?.kind === 'context' ? null : { kind: 'context' })} />
@@ -349,9 +348,9 @@ export function ChatView({ routeId, projectId, botId }: { routeId?: string; proj
           <FolderOpen size={12} /> {project.name}
         </a>
       )}
-      {bot && !isEmpty && (
+      {customBot && !isEmpty && (
         <span className="badge">
-          {bot.emoji} {bot.name}
+          {customBot.emoji} {customBot.name}
         </span>
       )}
       <div className="header-spacer" />
@@ -405,13 +404,15 @@ export function ChatView({ routeId, projectId, botId }: { routeId?: string; proj
   );
 
   // ---------- Welcome ----------
-  const starters = bot?.starters.length ? bot.starters : project ? [] : DEFAULT_STARTERS;
+  const starters = project && !customBot ? [] : bot?.starters ?? [];
   const welcome = (
     <div className="welcome">
       <div className="welcome-inner">
-        {bot ? <div className="welcome-mark emoji">{bot.emoji}</div> : <div className="welcome-mark">✻</div>}
-        <h1 className="welcome-title">{bot ? bot.name : project ? project.name : `${greeting()}`}</h1>
-        <p className="welcome-sub">{bot ? bot.description || 'How can I help?' : project ? project.description || 'Start a new chat in this project.' : 'How can I help you today?'}</p>
+        {customBot ? <div className="welcome-mark emoji">{customBot.emoji}</div> : <div className="welcome-mark">✻</div>}
+        <h1 className="welcome-title">{customBot ? customBot.name : project ? project.name : `${greeting()}`}</h1>
+        <p className="welcome-sub">
+          {customBot ? customBot.description || 'How can I help?' : project ? project.description || 'Start a new chat in this project.' : 'How can I help you today?'}
+        </p>
         <div className="context-chips">
           {project && (
             <a className="badge accent" href={href({ page: 'project', id: project.id })}>
@@ -424,8 +425,8 @@ export function ChatView({ routeId, projectId, botId }: { routeId?: string; proj
               <Terminal size={12} /> Coding agent in {project.folder.split('/').slice(-2).join('/')}
             </span>
           )}
-          {settings?.memoryEnabled && bot?.tools.memory !== false && (
-            <a className="badge" href={href({ page: 'memory' })}>
+          {settings?.memoryEnabled && bot?.tools.memory && (
+            <a className="badge" href={href({ page: 'memory', botId: bot.id })} title={`${bot.name}'s memory bank`}>
               <Brain size={12} /> Memory on
             </a>
           )}
@@ -460,6 +461,7 @@ export function ChatView({ routeId, projectId, botId }: { routeId?: string; proj
       <div className="turn turn-assistant">
         <Avatar bot={bot} />
         <div className="assistant-body">
+          {live.memories && live.memories.length > 0 && <MemoryRecall memories={live.memories} botId={bot?.id} />}
           {live.blocks.map((b, i) => {
             if (b.kind === 'text') return <Markdown key={i} text={b.text} streaming={i === live.blocks.length - 1} />;
             if (b.kind === 'reasoning') return <Reasoning key={i} text={b.text} active={i === live.blocks.length - 1} />;
@@ -519,6 +521,7 @@ export function ChatView({ routeId, projectId, botId }: { routeId?: string; proj
               <AssistantTurn
                 key={`a${t.index}`}
                 messages={t.messages}
+                memories={t.memories}
                 results={results}
                 artifacts={artifacts}
                 bot={bot}

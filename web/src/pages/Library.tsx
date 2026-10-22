@@ -1,6 +1,6 @@
 import { Brain, Check, Eye, EyeOff, FolderOpen, KeyRound, Layers, Monitor, Moon, Pencil, Plus, Sun, Trash2, X } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useState } from 'react';
-import { api, Artifact, ArtifactListItem, ArtifactType, Memory } from '../api';
+import { api, Artifact, ArtifactListItem, ArtifactType } from '../api';
 import { ArtifactIcon, ArtifactView, TYPE_LABEL } from '../components/Artifacts';
 import { ModelPicker } from '../components/ModelPicker';
 import { Empty, Toggle, useConfirm } from '../components/ui';
@@ -99,152 +99,6 @@ export function ArtifactPage({ id }: { id: string }) {
       <aside className="side-panel full">
         <ArtifactView artifact={artifact} onClose={() => history.back()} showChatLink />
       </aside>
-    </div>
-  );
-}
-
-// ---------- Memory ----------
-
-export function MemoryPage() {
-  const { settings, refreshSettings, projects, toast } = useApp();
-  const [memories, setMemories] = useState<Memory[]>();
-  const [draft, setDraft] = useState('');
-  const [editing, setEditing] = useState<{ id: string; text: string }>();
-  const [confirmNode, confirm] = useConfirm();
-  const load = () => api.memories().then(setMemories, (err) => toast(err.message));
-  useEffect(() => {
-    void load();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const groups = useMemo(() => {
-    const list = memories ?? [];
-    const out: { label: string; projectId?: string; items: Memory[] }[] = [{ label: 'Everywhere', items: list.filter((m) => !m.projectId) }];
-    for (const p of projects) {
-      const items = list.filter((m) => m.projectId === p.id);
-      if (items.length) out.push({ label: p.name, projectId: p.id, items });
-    }
-    return out;
-  }, [memories, projects]);
-
-  const add = async () => {
-    if (!draft.trim()) return;
-    try {
-      await api.addMemory(draft.trim());
-      setDraft('');
-      void load();
-    } catch (err) {
-      toast((err as Error).message);
-    }
-  };
-
-  return (
-    <div className="page">
-      <div className="page-narrow">
-        <div className="page-header">
-          <div>
-            <h1 className="page-title">Memory</h1>
-            <p className="page-subtitle">Things Mitzi remembers about you across conversations. They're added to each chat's context.</p>
-          </div>
-          {settings && (
-            <label className="row small">
-              {settings.memoryEnabled ? 'On' : 'Off'}
-              <Toggle
-                label="Memory enabled"
-                on={settings.memoryEnabled}
-                onChange={(v) =>
-                  api
-                    .updateSettings({ memoryEnabled: v })
-                    .then(refreshSettings)
-                    .catch((err) => toast(err.message))
-                }
-              />
-            </label>
-          )}
-        </div>
-
-        <form
-          className="row"
-          style={{ marginBottom: 24 }}
-          onSubmit={(e) => {
-            e.preventDefault();
-            void add();
-          }}
-        >
-          <input className="input" placeholder="Add a memory, e.g. “I prefer TypeScript and concise answers”" value={draft} onChange={(e) => setDraft(e.target.value)} />
-          <button className="btn btn-primary" disabled={!draft.trim()}>
-            <Plus size={16} /> Add
-          </button>
-        </form>
-
-        {memories && memories.length === 0 ? (
-          <Empty icon={<Brain size={22} />} title="Nothing remembered yet">
-            Tell Mitzi “remember that…” in any chat, or add memories here. Mitzi also saves things that clearly matter later, like your preferences.
-          </Empty>
-        ) : (
-          groups
-            .filter((g) => g.items.length)
-            .map((g) => (
-              <div key={g.label} style={{ marginBottom: 24 }}>
-                <h2 className="card-title" style={{ marginBottom: 10 }}>
-                  {g.projectId ? <FolderOpen size={15} /> : <Brain size={15} />} {g.label}
-                </h2>
-                <div className="list">
-                  {g.items.map((m) => (
-                    <div key={m.id} className="memory-row">
-                      <div className="content">
-                        {editing?.id === m.id ? (
-                          <form
-                            className="row"
-                            onSubmit={async (e) => {
-                              e.preventDefault();
-                              await api.updateMemory(m.id, editing.text).catch((err) => toast(err.message));
-                              setEditing(undefined);
-                              void load();
-                            }}
-                          >
-                            <input className="input" autoFocus value={editing.text} onChange={(e) => setEditing({ id: m.id, text: e.target.value })} />
-                            <button className="icon-btn" aria-label="Save">
-                              <Check size={16} />
-                            </button>
-                            <button type="button" className="icon-btn" aria-label="Cancel" onClick={() => setEditing(undefined)}>
-                              <X size={16} />
-                            </button>
-                          </form>
-                        ) : (
-                          <>
-                            {m.content}
-                            <div className="meta">
-                              {m.source === 'assistant' ? 'Saved by Mitzi' : 'Added by you'} · {relativeTime(m.createdAt)}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                      {editing?.id !== m.id && (
-                        <div className="actions">
-                          <button className="icon-btn sm" aria-label="Edit memory" onClick={() => setEditing({ id: m.id, text: m.content })}>
-                            <Pencil size={14} />
-                          </button>
-                          <button
-                            className="icon-btn sm"
-                            aria-label="Delete memory"
-                            onClick={async () => {
-                              if (!(await confirm(`Forget “${m.content}”?`, { title: 'Delete memory?', action: 'Forget' }))) return;
-                              await api.deleteMemory(m.id).catch((err) => toast(err.message));
-                              void load();
-                            }}
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))
-        )}
-      </div>
-      {confirmNode}
     </div>
   );
 }
@@ -357,6 +211,8 @@ export function SettingsPage() {
           </div>
         </section>
 
+        <MemorySettings />
+
         <section className="settings-section card">
           <h2>Context management</h2>
           <div className="field">
@@ -406,5 +262,141 @@ export function SettingsPage() {
         </section>
       </div>
     </div>
+  );
+}
+
+function MemorySettings() {
+  const { settings, refreshSettings, toast } = useApp();
+  const [url, setUrl] = useState(settings?.hindsightUrl ?? '');
+  const [key, setKey] = useState('');
+  const [embedding, setEmbedding] = useState(settings?.embeddingModel ?? '');
+  const [testing, setTesting] = useState<'idle' | 'busy' | 'ok'>('idle');
+  if (!settings) return null;
+
+  const save = async (patch: Parameters<typeof api.updateSettings>[0], message?: string) => {
+    try {
+      await api.updateSettings(patch);
+      await refreshSettings();
+      if (message) toast(message, 'info');
+    } catch (err) {
+      toast((err as Error).message);
+    }
+  };
+
+  return (
+    <section className="settings-section card">
+      <h2 className="row" style={{ gap: 8 }}>
+        <Brain size={17} /> Memory
+      </h2>
+      <div className="field">
+        <span className="field-label">Memory engine</span>
+        <div className="segmented" style={{ alignSelf: 'flex-start' }}>
+          <button className={settings.memoryBackend === 'builtin' ? 'active' : ''} onClick={() => save({ memoryBackend: 'builtin' })}>
+            Built-in
+          </button>
+          <button className={settings.memoryBackend === 'hindsight' ? 'active' : ''} onClick={() => save({ memoryBackend: 'hindsight' })}>
+            Hindsight server
+          </button>
+        </div>
+        <span className="field-hint">
+          {settings.memoryBackend === 'builtin'
+            ? 'Banks are stored in ~/.mitzi/data/banks and use your fast model to extract and consolidate memories.'
+            : 'Banks live on a Hindsight server, which runs its own extraction, embeddings and reranking.'}
+        </span>
+      </div>
+
+      {settings.memoryBackend === 'builtin' ? (
+        <form
+          className="field"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save({ embeddingModel: embedding.trim() }, embedding.trim() ? 'Semantic recall enabled' : 'Semantic recall disabled');
+          }}
+        >
+          <span className="field-label">Embedding model (optional)</span>
+          <div className="row">
+            <input className="input mono" placeholder="e.g. openai/text-embedding-3-small" value={embedding} onChange={(e) => setEmbedding(e.target.value)} />
+            <button className="btn" disabled={embedding.trim() === settings.embeddingModel}>
+              Save
+            </button>
+          </div>
+          <span className="field-hint">
+            Adds semantic search to recall, using an OpenAI-compatible embeddings endpoint on your API provider. Leave empty to recall with keywords,
+            entities and time only.
+          </span>
+        </form>
+      ) : (
+        <>
+          <div className="field">
+            <span className="field-label">Server URL</span>
+            <div className="row">
+              <input className="input mono" placeholder="http://localhost:8888" value={url} onChange={(e) => setUrl(e.target.value)} />
+              <button className="btn" disabled={url.trim() === settings.hindsightUrl} onClick={() => save({ hindsightUrl: url.trim() }, 'Hindsight server saved')}>
+                Save
+              </button>
+            </div>
+            <span className="field-hint">
+              Run one with <code>docker run -p 8888:8888 -p 9999:9999 -e HINDSIGHT_API_LLM_API_KEY=… ghcr.io/vectorize-io/hindsight:latest</code>. See{' '}
+              <a href="https://github.com/vectorize-io/hindsight" target="_blank" rel="noreferrer">
+                github.com/vectorize-io/hindsight
+              </a>
+              .
+            </span>
+          </div>
+          <div className="field">
+            <span className="field-label">API key (if your server needs one)</span>
+            <div className="row">
+              <input
+                className="input mono"
+                type="password"
+                autoComplete="off"
+                placeholder={settings.hasHindsightKey ? 'Saved; enter a new key to replace it' : 'Optional'}
+                value={key}
+                onChange={(e) => setKey(e.target.value)}
+              />
+              <button
+                className="btn"
+                disabled={!key.trim()}
+                onClick={async () => {
+                  await save({ hindsightApiKey: key.trim() }, 'Hindsight key saved');
+                  setKey('');
+                }}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+          <div className="row">
+            <button
+              className="btn btn-sm"
+              disabled={testing === 'busy' || !(url.trim() || settings.hindsightUrl)}
+              onClick={async () => {
+                setTesting('busy');
+                try {
+                  await api.testHindsight(url.trim() || settings.hindsightUrl, key.trim() || undefined);
+                  setTesting('ok');
+                } catch (err) {
+                  setTesting('idle');
+                  toast((err as Error).message);
+                }
+              }}
+            >
+              {testing === 'ok' ? <Check size={14} /> : null} {testing === 'busy' ? 'Testing…' : testing === 'ok' ? 'Connected' : 'Test connection'}
+            </button>
+          </div>
+        </>
+      )}
+
+      <div className="field" style={{ marginTop: 18, marginBottom: 0 }}>
+        <span className="field-label">Memories recalled per message</span>
+        <select className="select" style={{ maxWidth: 260 }} value={settings.recallTokens} onChange={(e) => void save({ recallTokens: Number(e.target.value) })}>
+          {[600, 1200, 2000, 4000].map((n) => (
+            <option key={n} value={n}>
+              Up to ~{n.toLocaleString()} tokens{n === 1200 ? ' (default)' : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+    </section>
   );
 }

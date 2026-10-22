@@ -1,6 +1,6 @@
 import { Brain, Globe, Layers, MessageSquare, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
-import { api, Bot, BotTools } from '../api';
+import { api, BankProfile, Bot, BotTools } from '../api';
 import { ModelPicker } from '../components/ModelPicker';
 import { Empty, Modal, Toggle, useConfirm } from '../components/ui';
 import { href, navigate } from '../router';
@@ -45,26 +45,34 @@ export function BotsPage() {
                   <button className="icon-btn sm" aria-label={`Edit ${b.name}`} onClick={() => setEditing(b)}>
                     <Pencil size={14} />
                   </button>
+                  {!b.builtIn && (
                   <button
                     className="icon-btn sm"
                     aria-label={`Delete ${b.name}`}
                     onClick={async () => {
-                      if (!(await confirm(`Delete the bot “${b.name}”? Existing chats with it are kept.`, { title: 'Delete bot?' }))) return;
+                      if (!(await confirm(`Delete “${b.name}” and its memory bank? Existing chats are kept and continue with Mitzi.`, { title: 'Delete bot?' }))) return;
                       await api.deleteBot(b.id).catch((err) => toast(err.message));
                       void refreshBots();
                     }}
                   >
                     <Trash2 size={14} />
                   </button>
+                  )}
                 </div>
-                <div className="bot-emoji">{b.emoji}</div>
-                <div className="tile-title">{b.name}</div>
+                <div className={`bot-emoji${b.builtIn ? ' builtin' : ''}`}>{b.emoji}</div>
+                <div className="tile-title row" style={{ gap: 8 }}>
+                  {b.name} {b.builtIn && <span className="badge accent">Default</span>}
+                </div>
                 <div className="tile-desc">{b.description || <span className="muted">No description</span>}</div>
                 <div className="tile-foot">
                   <span className="badge">{b.model ? modelLabel(b.model, models) : 'Default model'}</span>
                   {b.tools.web && <Globe size={13} aria-label="Web" />}
                   {b.tools.artifacts && <Layers size={13} aria-label="Artifacts" />}
-                  {b.tools.memory && <Brain size={13} aria-label="Memory" />}
+                  {b.tools.memory && (
+                    <a href={href({ page: 'memory', botId: b.id })} title="Memory bank" className="muted" style={{ display: 'inline-flex' }}>
+                      <Brain size={13} aria-label="Memory bank" />
+                    </a>
+                  )}
                   <a className="btn btn-sm" style={{ marginLeft: 'auto' }} href={href({ page: 'new', botId: b.id })}>
                     <MessageSquare size={14} /> Chat
                   </a>
@@ -100,6 +108,7 @@ function BotEditor({ bot, onClose, onSaved }: { bot?: Bot; onClose(): void; onSa
     temperature: bot?.temperature,
     tools: bot?.tools ?? { artifacts: true, web: true, memory: true },
     starters: bot?.starters.length ? bot.starters : [''],
+    memory: bot?.memory ?? ({ mission: '', disposition: { skepticism: 3, literalism: 3, empathy: 3 }, autoRetain: true } as BankProfile),
   });
   const [busy, setBusy] = useState(false);
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
@@ -192,7 +201,7 @@ function BotEditor({ bot, onClose, onSaved }: { bot?: Bot; onClose(): void; onSa
             [
               ['artifacts', <Layers size={18} key="a" />, 'Artifacts', 'Create documents, code, web pages and diagrams in a side panel'],
               ['web', <Globe size={18} key="w" />, 'Web fetch', 'Read web pages (asks for permission each time)'],
-              ['memory', <Brain size={18} key="m" />, 'Memory', 'Remember facts about you across conversations'],
+              ['memory', <Brain size={18} key="m" />, 'Memory bank', 'Its own long-term memory: recalls what matters and learns from conversations'],
             ] as const
           ).map(([k, icon, t, s]) => (
             <div key={k} className="tool-toggle">
@@ -206,6 +215,64 @@ function BotEditor({ bot, onClose, onSaved }: { bot?: Bot; onClose(): void; onSa
           ))}
         </div>
       </div>
+      {form.tools.memory && (
+        <div className="field">
+          <span className="field-label row" style={{ gap: 6 }}>
+            <Brain size={15} /> Memory bank
+          </span>
+          <div className="card" style={{ padding: 14, boxShadow: 'none' }}>
+            <label className="field" style={{ marginBottom: 12 }}>
+              <span className="small" style={{ fontWeight: 560 }}>Mission</span>
+              <textarea
+                className="textarea"
+                rows={2}
+                style={{ minHeight: 0 }}
+                value={form.memory.mission}
+                onChange={(e) => set('memory', { ...form.memory, mission: e.target.value })}
+                placeholder="What should this bot focus on remembering? e.g. “The user's codebases, conventions and recurring bugs.”"
+              />
+            </label>
+            {(
+              [
+                ['skepticism', 'Skepticism', 'Trusting', 'Skeptical', 'How much evidence it needs before forming a belief'],
+                ['literalism', 'Literalism', 'Flexible', 'Literal', 'Whether it infers beyond what you said'],
+                ['empathy', 'Empathy', 'Detached', 'Empathetic', 'How much it notices feelings and wellbeing'],
+              ] as const
+            ).map(([k, label, low, high, hint]) => (
+              <div key={k} style={{ marginBottom: 10 }} title={hint}>
+                <div className="row small" style={{ justifyContent: 'space-between' }}>
+                  <span style={{ fontWeight: 560 }}>{label}</span>
+                  <span className="muted">{hint}</span>
+                </div>
+                <div className="range-row">
+                  <span className="muted small" style={{ width: 70 }}>
+                    {low}
+                  </span>
+                  <input
+                    type="range"
+                    min={1}
+                    max={5}
+                    step={1}
+                    value={form.memory.disposition[k]}
+                    aria-label={label}
+                    onChange={(e) => set('memory', { ...form.memory, disposition: { ...form.memory.disposition, [k]: Number(e.target.value) } })}
+                  />
+                  <span className="muted small" style={{ width: 80 }}>
+                    {high}
+                  </span>
+                </div>
+              </div>
+            ))}
+            <div className="row" style={{ justifyContent: 'space-between', marginTop: 6 }}>
+              <span className="small">
+                <span style={{ fontWeight: 560 }}>Learn from every conversation</span>
+                <span className="muted"> · otherwise it only remembers what you or it explicitly save</span>
+              </span>
+              <Toggle label="Learn automatically" on={form.memory.autoRetain} onChange={(v) => set('memory', { ...form.memory, autoRetain: v })} />
+            </div>
+          </div>
+        </div>
+      )}
       <div className="field">
         <span className="field-label">Conversation starters</span>
         {form.starters.map((s, i) => (

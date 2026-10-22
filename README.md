@@ -28,9 +28,17 @@ An open-source, Claude-style AI workspace that runs on **any model available thr
 
 ![Coding agent asking for permission](docs/screenshots/coding-permission.png)
 
-**Bots** are reusable assistants with their own icon, instructions, model, temperature, capabilities (artifacts, web, memory) and conversation starters. Three examples are included.
+**Bots** are reusable assistants with their own icon, instructions, model, temperature, capabilities and conversation starters. **Mitzi**, the default bot, is always there and handles every chat that doesn't pick another bot. You can customize it but not delete it. Three example bots are included.
 
-**Memory.** Mitzi remembers durable facts about you across chats. It saves them when you ask ("remember that…") or when something clearly matters later. You can view, edit and delete memories, keep separate memories for a project, or turn memory off.
+**Memory banks.** Every bot has its own long-term memory, modeled on [Hindsight](https://github.com/vectorize-io/hindsight)'s retain → recall → reflect design:
+- **Retain:** after each exchange, the bot extracts durable *facts* (about you and your world) and *experiences* (what it did for you). It then consolidates them into *beliefs* (observations) that cite their supporting facts and grow more confident as evidence accumulates. Contradicting facts revise beliefs rather than piling up.
+- **Recall:** before every message, relevant memories are retrieved by several strategies at once: keyword (BM25), an entity graph, time expressions ("last week", "in March") and, optionally, semantic embeddings. Reciprocal rank fusion merges the results within a token budget. Each answer shows which memories it used.
+- **Reflect:** ask a bank a broad question and it reasons over everything it remembers.
+- **Per-bank settings:** each bank has a *mission* (what to focus on) and a *disposition* (skepticism, literalism and empathy, 1–5) that shapes how memories are formed and interpreted.
+- **Memory page:** browse, search, edit, forget or teach each bank, test recall, or ask it to reflect. The model can also save, search and forget memories itself.
+- **Hindsight server (optional):** you can point Mitzi at a real Hindsight server instead of the built-in engine (Settings → Memory).
+
+![Memory bank](docs/screenshots/memory-bank.png)
 
 **Context management**
 - A meter in the message box shows how full the model's context window is.
@@ -117,7 +125,9 @@ Settings live in `~/.mitzi/config.json`, and the app and the CLI share it. The a
 | `OPENROUTER_BASE_URL` | Alternative API base URL |
 | `MITZI_HOME` | Data directory (default `~/.mitzi`) |
 
-App data (chats, projects, bots, artifacts and memories) is stored as JSON files in `~/.mitzi/data`.
+Memory settings live in the app (Settings → Memory): the engine (built-in or a Hindsight server URL and key), an optional embedding model for semantic recall, and how many tokens of memories each message gets. The built-in engine uses your *fast model* for extraction and consolidation, so each exchange costs one or two small extra requests.
+
+App data (chats, projects, bots, artifacts and memory banks) is stored as JSON files in `~/.mitzi/data`.
 
 > React and Mermaid artifacts load their runtime from public CDNs (unpkg, jsdelivr and the Tailwind CDN), so they need an internet connection. Web page, SVG, document and code artifacts work offline.
 
@@ -139,7 +149,8 @@ npm run dev:web                     # UI on :5173, proxies /api to :4545
 | `src/openrouter.ts` | Streaming OpenRouter client (SSE, tool calls, retries) |
 | `src/tools/` | Coding tools (Read, Write, Edit, Bash, Glob, Grep, LS, WebFetch, TodoWrite) |
 | `src/permissions.ts` | Permission modes, allow rules, pluggable approvers |
-| `src/server/` | Local web server: REST + SSE API, storage, prompt and context assembly, artifact and memory tools |
+| `src/server/` | Local web server: REST + SSE API, storage, prompt and context assembly, artifact tool |
+| `src/server/memory/` | Memory banks: built-in engine (retain, recall, reflect), retrieval strategies, Hindsight adapter |
 | `src/shared/types.ts` | Types shared by the server and the web app |
 | `web/src/` | React app: chat view, artifacts, projects, bots, memory, settings |
 | `src/index.ts`, `src/repl.ts` | CLI entry point and terminal REPL |

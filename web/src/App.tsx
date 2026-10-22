@@ -4,7 +4,8 @@ import { Sidebar } from './components/Sidebar';
 import { Toasts } from './components/ui';
 import { BotsPage } from './pages/Bots';
 import { ChatView } from './pages/ChatView';
-import { ArtifactPage, ArtifactsPage, MemoryPage, SettingsPage } from './pages/Library';
+import { ArtifactPage, ArtifactsPage, SettingsPage } from './pages/Library';
+import { MemoryPage } from './pages/Memory';
 import { ProjectPage, ProjectsPage } from './pages/Projects';
 import { useRoute } from './router';
 import { useApp } from './state';
@@ -80,7 +81,7 @@ export function App() {
       page = <ArtifactPage id={route.id} />;
       break;
     case 'memory':
-      page = <MemoryPage />;
+      page = <MemoryPage botId={route.botId} />;
       break;
     case 'settings':
       page = <SettingsPage />;

@@ -8,7 +8,7 @@ export type Route =
   | { page: 'bots' }
   | { page: 'artifacts' }
   | { page: 'artifact'; id: string }
-  | { page: 'memory' }
+  | { page: 'memory'; botId?: string }
   | { page: 'settings' };
 
 export function parseRoute(hash: string): Route {
@@ -26,7 +26,7 @@ export function parseRoute(hash: string): Route {
     case 'artifacts':
       return parts[1] ? { page: 'artifact', id: parts[1] } : { page: 'artifacts' };
     case 'memory':
-      return { page: 'memory' };
+      return { page: 'memory', botId: parts[1] };
     case 'settings':
       return { page: 'settings' };
   }
@@ -48,6 +48,8 @@ export function href(route: Route): string {
       return `#/projects/${route.id}`;
     case 'artifact':
       return `#/artifacts/${route.id}`;
+    case 'memory':
+      return `#/memory${route.botId ? `/${route.botId}` : ''}`;
     default:
       return `#/${route.page}`;
   }

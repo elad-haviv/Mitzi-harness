@@ -15,3 +15,9 @@
 - The browser talks to `/api/*` with an `x-mitzi-token` header, and the server checks the Host header. Keep
   both checks: they stop other websites from driving the local agent.
 - Tests use mock OpenRouter servers (`src/tests/helpers.ts`, `src/tests/server.test.ts`) and never the network.
+- Memory: every bot owns a bank (`src/server/memory/`). The runner recalls before each turn (stored on the user
+  message as `memories`, stripped before API calls) and retains the finished exchange in the background. Retrieval
+  strategies in `search.ts` are pure functions; keep them testable. `MemoryBackend` has two implementations,
+  built-in and Hindsight; keep them interchangeable.
+- The default bot (`DEFAULT_BOT_ID = 'mitzi'`, `builtIn: true`) always exists and can't be deleted; chats without a
+  bot use it.

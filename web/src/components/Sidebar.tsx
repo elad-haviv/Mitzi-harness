@@ -80,7 +80,7 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
               const active = route.page === 'chat' && route.id === c.id;
               return (
                 <a key={c.id} className={`chat-link${active ? ' active' : ''}`} href={href({ page: 'chat', id: c.id })} title={c.title}>
-                  {bot && <span className="emoji">{bot.emoji}</span>}
+                  {bot && !bot.builtIn && <span className="emoji">{bot.emoji}</span>}
                   {c.pinned && g.label !== 'Pinned' && <Pin size={12} />}
                   <span className="title">{c.title}</span>
                   {c.running && <span className="live-dot" aria-label="Responding" />}

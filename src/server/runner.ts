@@ -1,16 +1,17 @@
 import { homedir } from 'node:os';
 import { Agent } from '../agent.js';
 import type { Config } from '../config.js';
-import type { ContentPart, OpenRouterClient } from '../openrouter.js';
+import type { ContentPart, Message, OpenRouterClient } from '../openrouter.js';
 import { ApprovalAnswer, Approver, Permissions } from '../permissions.js';
-import type { Artifact, Attachment, Chat, ChatSummary, StreamEvent } from '../shared/types.js';
+import { Artifact, Attachment, Bot, Chat, ChatMessage, ChatSummary, DEFAULT_BOT_ID, RecalledMemory, StreamEvent } from '../shared/types.js';
 import { ALL_TOOLS, Tool, toToolSpecs } from '../tools/index.js';
 import { webFetchTool } from '../tools/web.js';
 import type { Todo } from '../tools/types.js';
 import type { UI } from '../ui.js';
 import { ChatSetup, compactChat, contextMessages, generateTitle, ModelCatalog, systemPrompt } from './context.js';
 import { newId, now, Store } from './store.js';
-import { artifactTool, memoryTool } from './tools.js';
+import { memoryTool, MemoryService } from './memory/index.js';
+import { artifactTool } from './tools.js';
 
 const MAX_EVENT_OUTPUT = 20_000;
 
@@ -24,6 +25,7 @@ export interface RunnerDeps {
   config: () => Config;
   client: () => OpenRouterClient;
   catalog: ModelCatalog;
+  memory: MemoryService;
 }
 
 export type RunInput =
@@ -106,31 +108,77 @@ export class ChatRunner {
     return !!resolve;
   }
 
-  /** The chat's project, bot, memories and artifacts, as used to build its prompt. */
+  /** The chat's bot; chats without one (or whose bot was deleted) use the default bot. */
+  botFor(chat: Chat): Bot {
+    const { store } = this.deps;
+    return store.bots.get(chat.botId ?? DEFAULT_BOT_ID) ?? store.bots.get(DEFAULT_BOT_ID)!;
+  }
+
+  memoryOn(bot: Bot): boolean {
+    return this.deps.store.settings.memoryEnabled && bot.tools.memory;
+  }
+
+  /** The chat's project, bot, recalled memories and artifacts, as used to build its prompt. */
   setup(chat: Chat): ChatSetup {
     const { store } = this.deps;
     const project = chat.projectId ? store.projects.get(chat.projectId) : undefined;
-    const bot = chat.botId ? store.bots.get(chat.botId) : undefined;
     const tools = this.tools(chat, () => {}).map((t) => t.name);
     return {
       chat,
       project,
-      bot,
+      bot: this.botFor(chat),
       settings: store.settings,
       toolNames: tools,
-      memories: store.memories.all().filter((m) => !m.projectId || m.projectId === chat.projectId),
+      // Memories recalled for the latest user message.
+      recalled: chat.messages.findLast((m) => m.role === 'user')?.memories ?? [],
       artifacts: store.artifacts.all().filter((a) => a.chatId === chat.id),
     };
   }
 
   tools(chat: Chat, onArtifact: (a: Artifact) => void): Tool[] {
-    const { store } = this.deps;
+    const { store, memory } = this.deps;
     const project = chat.projectId ? store.projects.get(chat.projectId) : undefined;
-    const bot = chat.botId ? store.bots.get(chat.botId) : undefined;
-    const tools: Tool[] = project?.folder ? [...ALL_TOOLS] : bot?.tools.web === false ? [] : [webFetchTool];
-    if (bot?.tools.artifacts !== false) tools.push(artifactTool(store, chat.id, chat.projectId, onArtifact));
-    if (store.settings.memoryEnabled && bot?.tools.memory !== false) tools.push(memoryTool(store, chat.projectId));
+    const bot = this.botFor(chat);
+    const tools: Tool[] = project?.folder ? [...ALL_TOOLS] : bot.tools.web ? [webFetchTool] : [];
+    if (bot.tools.artifacts) tools.push(artifactTool(store, chat.id, chat.projectId, onArtifact));
+    if (this.memoryOn(bot)) tools.push(memoryTool(memory, memory.bankFor(bot)));
     return tools;
+  }
+
+  /** Recalls memories relevant to a message; failures only cost the memories, never the reply. */
+  private async recall(bot: Bot, query: string, emit: (e: StreamEvent) => void): Promise<RecalledMemory[]> {
+    const { memory, store } = this.deps;
+    try {
+      return await memory.backend().recall(memory.bankFor(bot), query, { maxTokens: store.settings.recallTokens });
+    } catch (err: any) {
+      emit({ type: 'warn', message: `Couldn't recall memories: ${err.message}` });
+      return [];
+    }
+  }
+
+  /** Learns from a finished exchange in the background. */
+  private retain(bot: Bot, chat: Chat, userText: string, added: Message[]): void {
+    const { memory } = this.deps;
+    const assistant = added
+      .filter((m) => m.role === 'assistant')
+      .map((m) => {
+        const text = typeof m.content === 'string' ? m.content : '';
+        const tools = (m.tool_calls ?? []).map((c) => `[used ${c.function.name}: ${c.function.arguments.slice(0, 200)}]`).join('\n');
+        return [text, tools].filter(Boolean).join('\n');
+      })
+      .filter(Boolean)
+      .join('\n\n');
+    if (!userText.trim() || !assistant.trim()) return;
+    const project = chat.projectId ? this.deps.store.projects.get(chat.projectId) : undefined;
+    memory
+      .backend()
+      .retain(memory.bankFor(bot), {
+        content: `User: ${userText.slice(0, 8000)}\n\nAssistant: ${assistant.slice(0, 8000)}`,
+        context: `Conversation "${chat.title}"${project ? ` in project "${project.name}"` : ''}`,
+        timestamp: new Date().toISOString(),
+        chatId: chat.id,
+      })
+      .catch((err) => console.warn(`Memory: retain failed for bank ${bot.id}: ${err.message}`));
   }
 
   async run(chatId: string, input: RunInput, emit: (e: StreamEvent) => void, disconnect: AbortSignal): Promise<void> {
@@ -155,7 +203,7 @@ export class ChatRunner {
     const { store, catalog } = this.deps;
     const client = this.deps.client();
     const project = chat.projectId ? store.projects.get(chat.projectId) : undefined;
-    const bot = chat.botId ? store.bots.get(chat.botId) : undefined;
+    const bot = this.botFor(chat);
 
     // Work out the user message for this turn, trimming history for edits and regenerations.
     let content: string | ContentPart[];
@@ -228,7 +276,7 @@ export class ChatRunner {
     const config: Config = {
       ...this.deps.config(),
       model: chat.webSearch ? `${chat.model}:online` : chat.model,
-      temperature: bot?.temperature,
+      temperature: bot.temperature,
       autoCompactTokens: 0, // the runner compacts per chat instead
       maxTurns: 50,
     };
@@ -241,14 +289,25 @@ export class ChatRunner {
       cwd: project?.folder ?? homedir(),
       systemPrompt: () => systemPrompt(this.setup(chat)),
     });
+    const firstText = typeof content === 'string' ? content : content.map((p) => (p.type === 'text' ? p.text : '')).join(' ');
     // Save the user's message right away so a reload mid-turn still shows it.
-    chat.messages.push({ role: 'user', content, ts: Date.now() });
+    const userMessage: ChatMessage = { role: 'user', content, ts: Date.now() };
+    chat.messages.push(userMessage);
     chat.updatedAt = now();
     store.chats.put(chat);
+
+    if (this.memoryOn(bot)) {
+      const recalled = await this.recall(bot, firstText.replace(/<attachment[\s\S]*?<\/attachment>/g, ' '), emit);
+      if (recalled.length) {
+        userMessage.memories = recalled;
+        store.chats.put(chat);
+      }
+      emit({ type: 'recall', memories: recalled });
+    }
+
     agent.messages = contextMessages(chat);
     const before = agent.messages.length;
 
-    const firstText = typeof content === 'string' ? content : content.map((p) => (p.type === 'text' ? p.text : '')).join(' ');
     const titleModel = this.deps.config().smallModel ?? chat.model;
     // Name the chat in parallel with the answer, and show the title as soon as it's ready.
     const title =
@@ -279,6 +338,7 @@ export class ChatRunner {
       chat.allowedRules = [...new Set([...chat.allowedRules, ...permissions.sessionRules])];
       chat.updatedAt = now();
       store.chats.put(chat);
+      if (!signal.aborted && this.memoryOn(bot) && bot.memory.autoRetain) this.retain(bot, chat, firstText, added);
     }
 
     if (title) {
