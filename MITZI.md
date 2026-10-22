@@ -1,11 +1,17 @@
 # Mitzi development notes
 
-- Build: `npm run build` (tsc → `dist/`). Tests: `npm test` (builds, then `node --test "dist/tests/*.test.js"`).
-- Run a single test file: `npx tsc -p . && node --test dist/tests/tools.test.js`; filter by name with `--test-name-pattern`.
-- No runtime dependencies: use Node built-ins only (fetch, readline, child_process, node:test).
-- ESM with NodeNext resolution: relative imports must end in `.js`.
-- Tools implement `Tool` in `src/tools/types.ts` and are registered in `src/tools/index.ts`. Throw `ToolError` for
-  errors the model should see; `kind` decides whether the permission layer prompts.
+- Build everything: `npm run build` (tsc → `dist/`, then Vite → `dist/web`). Tests: `npm test`.
+- Run one test file: `npx tsc -p . && node --test dist/tests/server.test.js`; filter with `--test-name-pattern`.
+- Type-check the web app: `npx tsc -p web`. Run the app: `node dist/index.js ui`.
+- The server and CLI have no runtime dependencies: Node built-ins only. The React app's packages are
+  devDependencies because Vite bundles them.
+- ESM with NodeNext resolution: relative imports in `src/` must end in `.js`.
+- Tools implement `Tool` in `src/tools/types.ts`. Throw `ToolError` for errors the model should see. A tool's
+  `kind` decides whether the permission layer asks first. Web-only tools (Artifact, Memory) live in `src/server/tools.ts`.
 - Every assistant `tool_calls` entry must be followed by a `tool` message with the same id. `Agent.run` fills in
-  "Skipped" results when a turn is stopped early; keep that invariant when changing the loop.
-- Tests talk to a mock OpenRouter server (`src/tests/helpers.ts`), never the network.
+  "Skipped" results when a turn stops early; keep that invariant.
+- Chats keep their full history in `messages`. `contextStart` and `summary` decide what the model actually sees
+  (`contextMessages` in `src/server/context.ts`). Never drop messages to save context; compact instead.
+- The browser talks to `/api/*` with an `x-mitzi-token` header, and the server checks the Host header. Keep
+  both checks: they stop other websites from driving the local agent.
+- Tests use mock OpenRouter servers (`src/tests/helpers.ts`, `src/tests/server.test.ts`) and never the network.

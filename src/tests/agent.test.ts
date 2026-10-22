@@ -16,7 +16,7 @@ after(() => servers.forEach((s) => s.close()));
 function makeAgent(url: string, cwd: string, mode: 'yolo' | 'default' = 'yolo') {
   const config = loadConfig(cwd, { apiKey: 'test-key', baseUrl: url, model: 'anthropic/test-model' });
   const client = new OpenRouterClient({ apiKey: config.apiKey, baseUrl: config.baseUrl, maxRetries: 0 });
-  const permissions = new Permissions(mode, [], undefined, () => {});
+  const permissions = new Permissions(mode, []);
   return new Agent({ client, config, tools: ALL_TOOLS, permissions, ui: silentUI, cwd });
 }
 

@@ -1,7 +1,7 @@
 {
   "name": "mitzi-harness",
   "version": "0.1.0",
-  "description": "A Claude Code–style agentic coding CLI that runs on any model via OpenRouter",
+  "description": "An open-source Claude-style AI workspace (chats, projects, artifacts, bots, memory) and coding agent, powered by any model on OpenRouter",
   "type": "module",
   "bin": {
     "mitzi": "dist/index.js"
@@ -11,11 +11,14 @@
     "!dist/tests"
   ],
   "scripts": {
-    "build": "tsc -p .",
+    "build": "tsc -p . && npm run build:web",
+    "build:web": "tsc -p web && vite build --config web/vite.config.ts",
     "dev": "tsc -p . --watch",
+    "dev:web": "vite --config web/vite.config.ts",
     "start": "node dist/index.js",
+    "ui": "node dist/index.js ui",
     "test": "tsc -p . && node --test \"dist/tests/*.test.js\"",
-    "typecheck": "tsc -p . --noEmit"
+    "typecheck": "tsc -p . --noEmit && tsc -p web"
   },
   "engines": {
     "node": ">=20"
@@ -23,6 +26,17 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "typescript": "^5.9.3"
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "highlight.js": "^11.12.0",
+    "lucide-react": "^1.61.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-markdown": "^10.1.0",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.5"
   }
 }

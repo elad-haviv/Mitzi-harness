@@ -14,6 +14,8 @@ export interface ToolContext {
   readFiles: Map<string, number>;
   todos: Todo[];
   signal?: AbortSignal;
+  /** Id of the tool call currently running. */
+  callId?: string;
   onTodos?(todos: Todo[]): void;
 }
 

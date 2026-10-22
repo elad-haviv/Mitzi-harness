@@ -1,6 +1,6 @@
 import type { Config } from './config.js';
-import type { Message, OpenRouterClient, TextPart, Usage } from './openrouter.js';
-import type { Permissions } from './permissions.js';
+import type { ContentPart, Message, OpenRouterClient, TextPart, Usage } from './openrouter.js';
+import type { PermissionChecker } from './permissions.js';
 import { buildSystemPrompt } from './prompt.js';
 import { toToolSpecs, Tool, ToolContext, ToolError } from './tools/index.js';
 import type { UI } from './ui.js';
@@ -9,9 +9,11 @@ export interface AgentDeps {
   client: OpenRouterClient;
   config: Config;
   tools: Tool[];
-  permissions: Permissions;
+  permissions: PermissionChecker;
   ui: UI;
   cwd: string;
+  /** Overrides the default coding-agent system prompt. */
+  systemPrompt?: () => string;
 }
 
 export interface UsageTotals {
@@ -21,7 +23,7 @@ export interface UsageTotals {
   requests: number;
 }
 
-const COMPACT_PROMPT = `Summarize the conversation below so that work can continue seamlessly in a fresh context. Include:
+export const COMPACT_PROMPT = `Summarize the conversation below so that work can continue seamlessly in a fresh context. Include:
 1. The user's requests and intent, in order.
 2. Key technical decisions, constraints and conventions discovered.
 3. Files read, created or modified, with the important details of each change.
@@ -33,7 +35,7 @@ export class Agent {
   messages: Message[] = [];
   readonly usage: UsageTotals = { promptTokens: 0, completionTokens: 0, cost: 0, requests: 0 };
   readonly ctx: ToolContext;
-  private lastPromptTokens = 0;
+  private _lastPromptTokens = 0;
 
   constructor(private readonly deps: AgentDeps) {
     this.ctx = {
@@ -48,7 +50,12 @@ export class Agent {
     return this.deps.config;
   }
 
-  get permissions(): Permissions {
+  /** Prompt size of the most recent request: how full the context window is. */
+  get lastPromptTokens(): number {
+    return this._lastPromptTokens;
+  }
+
+  get permissions(): PermissionChecker {
     return this.deps.permissions;
   }
 
@@ -64,11 +71,11 @@ export class Agent {
     this.messages = [];
     this.ctx.todos = [];
     this.ctx.readFiles.clear();
-    this.lastPromptTokens = 0;
+    this._lastPromptTokens = 0;
   }
 
   private systemMessage(): Message {
-    const text = buildSystemPrompt({ cwd: this.ctx.cwd, model: this.model, mode: this.deps.permissions.mode });
+    const text = this.deps.systemPrompt?.() ?? buildSystemPrompt({ cwd: this.ctx.cwd, model: this.model, mode: this.deps.permissions.mode });
     // Anthropic models only cache prompts with explicit breakpoints.
     return this.isAnthropic()
       ? { role: 'system', content: [{ type: 'text', text, cache_control: { type: 'ephemeral' } }] }
@@ -96,20 +103,23 @@ export class Agent {
     this.usage.promptTokens += usage.prompt_tokens ?? 0;
     this.usage.completionTokens += usage.completion_tokens ?? 0;
     this.usage.cost += usage.cost ?? 0;
-    this.lastPromptTokens = usage.prompt_tokens ?? 0;
+    this._lastPromptTokens = usage.prompt_tokens ?? 0;
   }
 
-  /** Runs one user turn: calls the model and executes tools until it stops asking for them. */
-  async run(input: string, signal?: AbortSignal): Promise<void> {
+  /**
+   * Runs one user turn: calls the model and executes tools until it stops asking for them.
+   * Pass `null` when the user message is already the last entry in `messages`.
+   */
+  async run(input: string | ContentPart[] | null, signal?: AbortSignal): Promise<void> {
     const { client, config, tools, ui } = this.deps;
     this.ctx.signal = signal;
 
-    if (config.autoCompactTokens > 0 && this.lastPromptTokens > config.autoCompactTokens) {
-      ui.info(`Context is ${this.lastPromptTokens.toLocaleString()} tokens; compacting conversation…`);
+    if (config.autoCompactTokens > 0 && this._lastPromptTokens > config.autoCompactTokens) {
+      ui.info(`Context is ${this._lastPromptTokens.toLocaleString()} tokens; compacting conversation…`);
       await this.compact(undefined, signal);
     }
 
-    this.messages.push({ role: 'user', content: input });
+    if (input !== null) this.messages.push({ role: 'user', content: input });
     const specs = toToolSpecs(tools);
 
     for (let turn = 0; turn < config.maxTurns; turn++) {
@@ -150,7 +160,7 @@ export class Agent {
           this.messages.push({ role: 'tool', tool_call_id: call.id, content: 'Skipped: the turn was stopped before this ran.' });
           continue;
         }
-        const outcome = await this.executeTool(call.function.name, call.function.arguments, signal);
+        const outcome = await this.executeTool(call.id, call.function.name, call.function.arguments, signal);
         this.messages.push({ role: 'tool', tool_call_id: call.id, content: outcome.content });
         stop = outcome.stop;
       }
@@ -162,12 +172,12 @@ export class Agent {
     ui.warn(`Stopped after ${config.maxTurns} turns. Send a message to continue.`);
   }
 
-  private async executeTool(name: string, rawArgs: string, signal?: AbortSignal): Promise<{ content: string; stop: boolean }> {
+  private async executeTool(id: string, name: string, rawArgs: string, signal?: AbortSignal): Promise<{ content: string; stop: boolean }> {
     const { tools, permissions, ui } = this.deps;
     const tool = tools.find((t) => t.name === name);
     if (!tool) {
-      ui.toolCall(name, '');
-      ui.toolResult(`Unknown tool`, true);
+      ui.toolCall(name, '', id);
+      ui.toolResult(`Unknown tool`, true, id);
       return { content: `Error: unknown tool "${name}". Available: ${tools.map((t) => t.name).join(', ')}`, stop: false };
     }
 
@@ -175,8 +185,8 @@ export class Agent {
     try {
       args = rawArgs.trim() ? JSON.parse(rawArgs) : {};
     } catch {
-      ui.toolCall(name, '');
-      ui.toolResult('Invalid JSON arguments', true);
+      ui.toolCall(name, '', id);
+      ui.toolResult('Invalid JSON arguments', true, id);
       return { content: `Error: arguments were not valid JSON: ${rawArgs.slice(0, 500)}`, stop: false };
     }
 
@@ -187,21 +197,22 @@ export class Agent {
       // Malformed args; run() will report the problem.
     }
 
-    const decision = await permissions.check(tool, args, this.ctx, signal);
+    const decision = await permissions.check(tool, args, this.ctx, signal, id);
     if (!decision.allow) {
-      ui.toolCall(name, summary);
-      ui.toolResult(decision.reason, true);
+      ui.toolCall(name, summary, id, args);
+      ui.toolResult(decision.reason, true, id);
       return { content: decision.reason, stop: decision.stop };
     }
 
-    ui.toolCall(name, summary);
+    ui.toolCall(name, summary, id, args);
+    this.ctx.callId = id;
     try {
       const output = await tool.run(args, this.ctx);
-      if (tool.name !== 'TodoWrite') ui.toolResult(output, false);
+      ui.toolResult(output, false, id);
       return { content: output, stop: false };
     } catch (err: any) {
       const message = err instanceof ToolError ? err.message : `${err?.name ?? 'Error'}: ${err?.message ?? String(err)}`;
-      ui.toolResult(message, true);
+      ui.toolResult(message, true, id);
       return { content: `Error: ${message}`, stop: false };
     }
   }
@@ -223,7 +234,7 @@ export class Agent {
       this.deps.ui.stopThinking();
     }
     this.recordUsage(result.usage);
-    this.lastPromptTokens = 0;
+    this._lastPromptTokens = 0;
     this.messages = [
       { role: 'user', content: `This conversation was compacted to save context. Summary of everything so far:\n\n${result.content}` },
       { role: 'assistant', content: 'Understood. I have the context from the summary and will continue from there.' },
@@ -231,8 +242,8 @@ export class Agent {
   }
 }
 
-function renderForTranscript(m: Message): string {
-  const text = typeof m.content === 'string' ? m.content : (m.content ?? []).map((p) => p.text).join('');
+export function renderForTranscript(m: Message): string {
+  const text = messageText(m);
   const clip = (s: string) => (s.length > 4000 ? `${s.slice(0, 4000)}… [truncated]` : s);
   if (m.role === 'tool') return `[tool result]\n${clip(text)}`;
   if (m.role === 'assistant') {
@@ -240,4 +251,10 @@ function renderForTranscript(m: Message): string {
     return `[assistant]\n${text}${calls ? `\n${calls}` : ''}`;
   }
   return `[${m.role}]\n${clip(text)}`;
+}
+
+/** The text of a message, with images shown as a placeholder. */
+export function messageText(m: Message): string {
+  if (typeof m.content === 'string') return m.content;
+  return (m.content ?? []).map((p) => (p.type === 'text' ? p.text : '[image]')).join('\n');
 }

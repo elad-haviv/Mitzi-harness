@@ -9,6 +9,13 @@ export interface TextPart {
   cache_control?: { type: 'ephemeral' };
 }
 
+export interface ImagePart {
+  type: 'image_url';
+  image_url: { url: string };
+}
+
+export type ContentPart = TextPart | ImagePart;
+
 export interface ToolCall {
   id: string;
   type: 'function';
@@ -17,7 +24,7 @@ export interface ToolCall {
 
 export interface Message {
   role: Role;
-  content: string | TextPart[] | null;
+  content: string | ContentPart[] | null;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
 }

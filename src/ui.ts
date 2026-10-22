@@ -22,8 +22,8 @@ export interface UI {
   stopThinking(): void;
   text(chunk: string): void;
   reasoning(chunk: string): void;
-  toolCall(name: string, summary: string): void;
-  toolResult(output: string, isError: boolean): void;
+  toolCall(name: string, summary: string, id?: string, args?: unknown): void;
+  toolResult(output: string, isError: boolean, id?: string): void;
   todos(todos: Todo[]): void;
   info(msg: string): void;
   warn(msg: string): void;

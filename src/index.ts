@@ -5,7 +5,7 @@ import { parseArgs } from 'node:util';
 import { Agent } from './agent.js';
 import { Config, DEFAULT_MODEL, loadConfig, PermissionMode, PERMISSION_MODES } from './config.js';
 import { OpenRouterClient } from './openrouter.js';
-import { Asker, Permissions } from './permissions.js';
+import { Asker, Permissions, terminalApprover } from './permissions.js';
 import { runRepl } from './repl.js';
 import { listSessions, loadSession, newSessionId, saveSession, SessionData } from './session.js';
 import { ALL_TOOLS } from './tools/index.js';
@@ -16,6 +16,7 @@ const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.u
 const USAGE = `${color.bold('mitzi')} — an agentic coding CLI powered by OpenRouter
 
 ${color.bold('Usage')}
+  mitzi ui                    Open the Mitzi desktop web app (chats, projects, artifacts, bots)
   mitzi [prompt]              Start an interactive session (optionally with a first message)
   mitzi -p "prompt"           Print mode: run once, print the answer, exit
   cat file | mitzi -p "..."   Piped stdin is appended to the prompt
@@ -30,6 +31,8 @@ ${color.bold('Options')}
   -r, --resume <id>           Resume a specific session
       --max-turns <n>         Maximum model calls per message (default: 100)
       --reasoning             Show model reasoning tokens when available
+      --port <n>              Port for \`mitzi ui\` (default: 4545)
+      --no-open               Don't open a browser for \`mitzi ui\`
   -v, --version               Print version
   -h, --help                  Show this help
 
@@ -78,6 +81,8 @@ async function main(): Promise<number> {
       resume: { type: 'string', short: 'r' },
       'max-turns': { type: 'string' },
       reasoning: { type: 'boolean' },
+      port: { type: 'string' },
+      'no-open': { type: 'boolean' },
       version: { type: 'boolean', short: 'v' },
       help: { type: 'boolean', short: 'h' },
     },
@@ -89,6 +94,19 @@ async function main(): Promise<number> {
   }
   if (values.version) {
     process.stdout.write(`${VERSION}\n`);
+    return 0;
+  }
+
+  if (positionals[0] === 'ui') {
+    const { startServer, openBrowser } = await import('./server/index.js');
+    const server = await startServer({ port: values.port ? Number(values.port) : undefined });
+    process.stdout.write(
+      `${color.bold(color.magenta('✻ Mitzi'))} ${color.dim(`v${VERSION}`)} is running at\n\n  ${color.cyan(server.url)}\n\n` +
+        `${color.dim('The link includes your private access token. Press Ctrl+C to stop.')}\n`,
+    );
+    if (!values['no-open']) openBrowser(server.url);
+    await new Promise<void>((resolve) => process.once('SIGINT', resolve));
+    await server.close();
     return 0;
   }
 
@@ -135,7 +153,7 @@ async function main(): Promise<number> {
       return 1;
     }
     const ui = new TerminalUI(process.stdout, process.stderr, config.showReasoning);
-    const permissions = new Permissions(config.permissionMode, config.allowedTools, undefined, (s) => process.stderr.write(s));
+    const permissions = new Permissions(config.permissionMode, config.allowedTools);
     const agent = new Agent({ client, config, tools: ALL_TOOLS, permissions, ui, cwd });
     agent.messages = session.messages;
     const controller = new AbortController();
@@ -162,7 +180,7 @@ async function main(): Promise<number> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
   const ask: Asker = (question, signal) => rl.question(question, { signal });
   const ui = new TerminalUI(process.stdout, process.stdout, config.showReasoning);
-  const permissions = new Permissions(config.permissionMode, config.allowedTools, ask);
+  const permissions = new Permissions(config.permissionMode, config.allowedTools, terminalApprover(ask));
   const agent = new Agent({ client, config, tools: ALL_TOOLS, permissions, ui, cwd });
   agent.messages = session.messages;
 

@@ -1,134 +1,132 @@
 # Mitzi
 
-An agentic coding assistant for your terminal, in the spirit of Claude Code, that can run on **any model available through [OpenRouter](https://openrouter.ai)**: Claude, GPT, Gemini, DeepSeek, Qwen, Llama and the rest.
+An open-source, Claude-style AI workspace that runs on **any model available through [OpenRouter](https://openrouter.ai)**, including Claude, GPT, Gemini, DeepSeek, Qwen and Llama. It runs locally in your browser and offers chats, projects, artifacts, custom bots, long-term memory, and context management. When a project points at a folder, Mitzi also works as a coding agent that edits files and runs commands there. A terminal version is included.
 
-Mitzi reads your codebase, edits files, runs commands and iterates until the task is done. It asks before it changes anything.
-
-```
-✻ Mitzi v0.1.0
-model: anthropic/claude-sonnet-4.5  ·  mode: default  ·  cwd: ~/code/my-app
-
-> the date parser in utils breaks on ISO week dates, fix it and add a test
-
-⏺ Grep("parseDate")
-  ⎿  src/utils/date.ts
-     src/utils/date.test.ts
-⏺ Read(src/utils/date.ts)
-  ⎿  1  import { … }
-     …
-? Edit(src/utils/date.ts)
-    @@ line 41 @@
-    - const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-    + const m = /^(\d{4})-(?:W(\d{2})-(\d)|(\d{2})-(\d{2}))$/.exec(s);
-  Allow? yes / always allow Edit / no, or type feedback:
-```
+![Chat with an artifact](docs/screenshots/chat-artifact.png)
 
 ## Features
 
-- **Agent loop with tool calling**: streams responses and runs tools until the model is done.
-- **Claude Code–style tools**: `Read`, `Write`, `Edit` (exact string replacement), `Bash` (the working directory persists between calls), `Glob`, `Grep` (uses ripgrep when it's installed), `LS`, `WebFetch` and `TodoWrite`.
-- **Safety rails**: a file must be `Read` before it can be edited or overwritten. Edits are refused when the file changed on disk since it was read. You approve each change in a diff preview.
-- **Permission modes**: `default` (asks before edits, commands and network calls), `acceptEdits`, `plan` (read-only, so the model researches and proposes a plan), and `yolo`.
-- **Any OpenRouter model**: switch mid-session with `/model`, or browse with `/models`.
-- **Cost tracking** from OpenRouter's usage accounting (`/cost`).
-- **Prompt caching** for Anthropic models, applied automatically.
-- **Project memory**: reads `MITZI.md`, `AGENTS.md` or `CLAUDE.md` from your repo and `~/.mitzi/MITZI.md`. `/init` writes one for you.
-- **Sessions** are saved automatically. Resume one with `--continue` or `--resume <id>`.
-- **Context compaction**: `/compact` runs manually, and compaction also runs automatically when the context gets large.
-- **Print mode** for scripts and CI: `mitzi -p "…"`, with piped stdin supported.
-- **No runtime dependencies.** Mitzi needs only Node.js 20+.
+**Chats**
+- Responses stream in with Markdown, tables and syntax-highlighted code.
+- Attach text files or images. You can paste or drag and drop them into the message box.
+- Edit any earlier message, regenerate the last answer, stop a response mid-stream, and copy replies.
+- Switch models per chat. The model picker is searchable and shows each model's price, context size, and vision and tool support.
+- One-click web search uses OpenRouter's `:online` option.
+- Chats get titles automatically. You can pin, rename, search, and move chats between projects.
 
-## Install
+**Artifacts.** Substantial output opens in a side panel instead of cluttering the chat:
+- Supported types: documents, code files, web pages, React components, SVG graphics and Mermaid diagrams.
+- Web pages, components, SVG and diagrams render live in a sandboxed frame.
+- Each change is kept as a version you can step through. You can also copy, download or expand any artifact.
+- The model edits artifacts in place with small targeted updates instead of rewriting them each time.
+- All artifacts are collected in a gallery.
+
+**Projects** group chats around shared context:
+- *Instructions* are added to every chat in the project.
+- *Knowledge files* are reference documents included in every chat's context.
+- A *coding workspace* links a local folder. Chats in the project then get Read, Write, Edit, Bash, Glob, Grep and the other coding tools, with a permission prompt (showing a diff) before anything changes.
+
+![Coding agent asking for permission](docs/screenshots/coding-permission.png)
+
+**Bots** are reusable assistants with their own icon, instructions, model, temperature, capabilities (artifacts, web, memory) and conversation starters. Three examples are included.
+
+**Memory.** Mitzi remembers durable facts about you across chats. It saves them when you ask ("remember that…") or when something clearly matters later. You can view, edit and delete memories, keep separate memories for a project, or turn memory off.
+
+**Context management**
+- A meter in the message box shows how full the model's context window is.
+- The context panel breaks the window down: system prompt, project knowledge, memory, tool definitions, summary and conversation.
+- When a chat nears the model's limit, older messages are summarized automatically, keeping the most recent turns word for word. You can also compact manually or restore the full history.
+- You always see the complete conversation. Only the model receives the summary.
+
+![Context window panel](docs/screenshots/context-window.png)
+
+**Also included:** light and dark themes, a layout that works on phones, and a cheaper "fast model" setting for titles and summaries.
+
+## Quick start
+
+Requires Node.js 20 or newer.
 
 ```bash
 git clone https://github.com/elad-haviv/Mitzi-harness.git
 cd Mitzi-harness
 npm install
 npm run build
-npm link        # puts `mitzi` on your PATH
+npm link          # puts `mitzi` on your PATH
+
+mitzi ui          # opens the app in your browser
 ```
 
-Get an API key at <https://openrouter.ai/keys>:
+Add your OpenRouter key in **Settings**. You can get one at <https://openrouter.ai/keys>. Alternatively, set `OPENROUTER_API_KEY` before starting.
 
-```bash
-export OPENROUTER_API_KEY=sk-or-...
-```
+`mitzi ui` serves the app at `http://localhost:4545`. It only accepts connections from your own machine and requires a private access token, which is included in the link it prints. Use `--port` to change the port and `--no-open` to skip opening a browser.
 
-## Usage
+<p>
+  <img src="docs/screenshots/project.png" width="49%" alt="A project with instructions and knowledge files">
+  <img src="docs/screenshots/bots.png" width="49%" alt="Custom bots">
+</p>
+
+## Terminal mode
+
+The same agent also runs in your terminal, in the style of Claude Code:
 
 ```bash
 mitzi                                   # interactive session in the current directory
-mitzi "explain how auth works here"     # interactive, starting with a message
-mitzi -m openai/gpt-5 "…"               # pick a model
+mitzi "explain how auth works here"     # start with a message
 mitzi -p "summarize the last commit"    # print mode: answer to stdout, then exit
 git diff | mitzi -p "review this diff"  # piped input
-mitzi -c                                # continue the last session in this directory
+mitzi -c                                # continue the last session here
 mitzi --mode plan                       # read-only planning
-mitzi --allow Edit --allow "Bash(npm test)"   # pre-approve specific tools
+mitzi --allow Edit --allow "Bash(npm test)"
 ```
 
-### Slash commands
-
-| Command | |
-|---|---|
-| `/help` | List commands |
-| `/model [id]` | Show or switch the model |
-| `/models [filter]` | List OpenRouter models with context size and price |
-| `/mode [mode]` | Show or set the permission mode |
-| `/compact [focus]` | Summarize the conversation to free context |
-| `/cost` | Show tokens and dollars spent this session |
-| `/todos` | Show the agent's current task list |
-| `/clear` | Start a fresh conversation |
-| `/sessions` | List saved sessions for this directory |
-| `/init` | Generate a `MITZI.md` for the repo |
-| `/exit` | Quit |
-
-Prefix a line with `!` to run a shell command yourself. Its output is attached to your next message. End a line with `\` to keep typing on the next line. Press **Ctrl+C** to interrupt the agent, and press it twice at the prompt to quit.
+Slash commands are `/model`, `/models`, `/mode`, `/compact`, `/cost`, `/todos`, `/clear`, `/sessions`, `/init` and `/exit`. Start a line with `!` to run a shell command yourself. Permission modes: `default` asks before edits and commands, `acceptEdits` allows edits without asking, `plan` is read-only, and `yolo` never asks.
 
 ## Configuration
 
-Settings are merged from lowest to highest priority: built-in defaults, `~/.mitzi/config.json`, `./.mitzi/config.json`, environment variables, then CLI flags.
+Settings live in `~/.mitzi/config.json`, and the app and the CLI share it. The app's Settings page edits the most common options. Project-level overrides go in `./.mitzi/config.json`.
 
 ```json
 {
+  "apiKey": "sk-or-…",
   "model": "anthropic/claude-sonnet-4.5",
   "smallModel": "google/gemini-2.5-flash",
-  "permissionMode": "default",
-  "allowedTools": ["WebFetch", "Bash(npm test)", "Bash(git status)"],
-  "maxTurns": 100,
-  "autoCompactTokens": 150000,
-  "maxTokens": 16000,
-  "showReasoning": false
+  "allowedTools": ["WebFetch", "Bash(npm test)"]
 }
 ```
 
-- `smallModel` is used for summarizing during compaction.
-- `allowedTools` rules are a tool name (`"Edit"`) or a Bash command prefix (`"Bash(npm test)"`). A prefix rule never matches a command that chains other commands with `;`, `&&`, `|`, `$(…)` or redirects.
-- Environment variables: `OPENROUTER_API_KEY`, `MITZI_MODEL`, `OPENROUTER_BASE_URL`, and `MITZI_HOME` (default `~/.mitzi`).
+| Environment variable | Purpose |
+|---|---|
+| `OPENROUTER_API_KEY` | API key (overrides the config file) |
+| `MITZI_MODEL` | Default model |
+| `OPENROUTER_BASE_URL` | Alternative API base URL |
+| `MITZI_HOME` | Data directory (default `~/.mitzi`) |
 
-Tool calling works best with models that support it well. Claude, GPT and Gemini models, and recent DeepSeek and Qwen models, all work well with Mitzi.
+App data (chats, projects, bots, artifacts and memories) is stored as JSON files in `~/.mitzi/data`.
+
+> React and Mermaid artifacts load their runtime from public CDNs (unpkg, jsdelivr and the Tailwind CDN), so they need an internet connection. Web page, SVG, document and code artifacts work offline.
 
 ## Development
 
 ```bash
-npm run build      # compile TypeScript to dist/
-npm run dev        # recompile on change
-npm test           # build, then run the test suite (mock OpenRouter server, no network)
+npm run build      # compile the server and CLI, then build the web app into dist/web
+npm test           # server, agent and tool tests against a mock OpenRouter (no network)
+npm run typecheck
+
+# Live-reloading UI: run the API and the Vite dev server side by side
+node dist/index.js ui --no-open     # API on :4545
+npm run dev:web                     # UI on :5173, proxies /api to :4545
 ```
 
-The source lives in `src/`:
-
-| File | Purpose |
+| Path | Purpose |
 |---|---|
-| `index.ts` | CLI entry: argument parsing, print mode, startup |
-| `repl.ts` | Interactive loop and slash commands |
-| `agent.ts` | Agent loop: model ↔ tools, compaction, usage |
-| `openrouter.ts` | Streaming OpenRouter client (SSE, tool-call deltas, retries) |
-| `permissions.ts` | Permission modes, allow rules, approval prompts |
-| `prompt.ts` | System prompt and project-instruction discovery |
-| `session.ts` | Session persistence |
-| `ui.ts` | Terminal rendering |
-| `tools/` | One module per group of tools |
+| `src/agent.ts` | Agent loop: model ↔ tools, usage, compaction |
+| `src/openrouter.ts` | Streaming OpenRouter client (SSE, tool calls, retries) |
+| `src/tools/` | Coding tools (Read, Write, Edit, Bash, Glob, Grep, LS, WebFetch, TodoWrite) |
+| `src/permissions.ts` | Permission modes, allow rules, pluggable approvers |
+| `src/server/` | Local web server: REST + SSE API, storage, prompt and context assembly, artifact and memory tools |
+| `src/shared/types.ts` | Types shared by the server and the web app |
+| `web/src/` | React app: chat view, artifacts, projects, bots, memory, settings |
+| `src/index.ts`, `src/repl.ts` | CLI entry point and terminal REPL |
 
 ## License
 

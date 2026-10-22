@@ -42,13 +42,13 @@ function git(cwd: string, args: string[]): string | undefined {
   }
 }
 
-export function buildSystemPrompt(opts: { cwd: string; model: string; mode: PermissionMode }): string {
+export function buildSystemPrompt(opts: { cwd: string; model: string; mode: PermissionMode; surface?: 'terminal' | 'web' }): string {
   const branch = git(opts.cwd, ['rev-parse', '--abbrev-ref', 'HEAD']);
   const status = branch !== undefined ? git(opts.cwd, ['status', '--short']) : undefined;
   const instructions = findInstructionFiles(opts.cwd);
 
   const sections = [
-    `You are Mitzi, an interactive command-line coding agent. You help the user with software engineering tasks: \
+    `You are Mitzi, an interactive coding agent. You help the user with software engineering tasks: \
 fixing bugs, adding features, refactoring, explaining code, running commands and more. You work directly in the \
 user's repository using the tools available to you.`,
 
@@ -65,7 +65,7 @@ libraries and style. Never assume a library is available; check the project's ma
 - If a tool call is denied, don't retry it verbatim; adjust or ask the user.`,
 
     `# Communication
-- Your output is shown in a terminal; be concise and direct. Use GitHub-flavored markdown sparingly.
+${opts.surface === 'web' ? '- Your output is rendered as GitHub-flavored markdown in a chat window; be concise and direct.' : '- Your output is shown in a terminal; be concise and direct. Use GitHub-flavored markdown sparingly.'}
 - Don't narrate every tool call. Briefly say what you're about to do when it isn't obvious, and summarize results at the end.
 - Reference code as \`path/to/file.ts:42\` so the user can jump to it.
 - If the request is ambiguous in a way that matters, ask a short clarifying question instead of guessing.`,
