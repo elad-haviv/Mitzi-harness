@@ -41,6 +41,7 @@ import { LOGO, modelLabel, useApp } from '../state';
 import { ArtifactIcon, TYPE_LABEL } from './Artifacts';
 import { CopyButton, Markdown } from './Markdown';
 import { Diff, useAutoResize } from './ui';
+import { TeamCard, TeamProgress } from './Team';
 
 // ---------- Content helpers ----------
 
@@ -571,6 +572,7 @@ export function ToolBlock({
   artifacts,
   activeArtifact,
   onOpenArtifact,
+  team,
 }: {
   id: string;
   name: string;
@@ -581,8 +583,12 @@ export function ToolBlock({
   artifacts: Artifact[];
   activeArtifact?: string;
   onOpenArtifact(a: Artifact, version: number): void;
+  /** Live progress of the bots a Delegate call handed work to. */
+  team?: TeamProgress;
 }) {
   const [open, setOpen] = useState(false);
+
+  if (name === 'Delegate' && Array.isArray(args?.assignments)) return <TeamCard args={args} result={result} running={running} progress={team} />;
 
   if (name === 'Artifact') {
     const artifact = artifacts.find((a) => a.versions.some((v) => v.callId === id));

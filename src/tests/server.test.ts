@@ -32,9 +32,9 @@ before(async () => {
     let raw = '';
     req.on('data', (d) => (raw += d));
     req.on('end', () => {
-      if (req.url?.endsWith('/models')) {
+      if (req.url?.split('?')[0].endsWith('/models')) {
         res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ data: [{ id: 'test/model', name: 'Test: Model', context_length: 1000, supported_parameters: ['tools'] }] }));
+        res.end(JSON.stringify({ data: req.url.includes('output_modalities') ? [] : [{ id: 'test/model', name: 'Test: Model', context_length: 1000, supported_parameters: ['tools'] }] }));
         return;
       }
       const body = JSON.parse(raw);
@@ -381,7 +381,7 @@ test('auto-compaction triggers when the last request was near the limit', async 
 
 test('bots shape new chats; deleting a project keeps or deletes its chats', async () => {
   const bot = (await call('POST', '/api/bots', { name: 'Pirate', emoji: '🏴‍☠️', systemPrompt: 'Talk like a pirate.', model: 'test/model', tools: { web: false } })).data;
-  assert.deepEqual(bot.tools, { artifacts: true, web: false, memory: true, skills: true, connectors: true, media: true });
+  assert.deepEqual(bot.tools, { artifacts: true, web: false, memory: true, skills: true, connectors: true, media: true, team: true });
   reply = () => textChunks('Arr');
   const chat = (await call('POST', '/api/chats', { botId: bot.id })).data;
   await stream(`/api/chats/${chat.id}/messages`, { content: 'Ahoy' });
@@ -402,6 +402,46 @@ test('bots shape new chats; deleting a project keeps or deletes its chats', asyn
   const inProject = (await call('POST', '/api/chats', { projectId: project.id })).data;
   await call('DELETE', `/api/projects/${project.id}?chats=delete`);
   assert.equal((await call('GET', `/api/chats/${inProject.id}`)).status, 404);
+});
+
+test('a bot hands tasks to teammates and uses their answers', async () => {
+  const mate = (await call('POST', '/api/bots', { name: 'Researcher', emoji: '🔬', description: 'Finds facts', systemPrompt: 'You research carefully.', tools: { web: false } })).data;
+  let lead = 0;
+  reply = (body) => {
+    const system = JSON.stringify(body.messages[0]);
+    // The teammate: its own instructions, plus the note about who it works for.
+    if (/You research carefully/.test(system)) {
+      assert.match(system, /Working with Mitzi/);
+      assert.ok(!body.tools?.some((t: any) => t.function.name === 'Delegate'), 'teammates can’t delegate further');
+      assert.equal(body.messages.at(-1).content, 'Find three facts about cats');
+      return textChunks('Cats sleep 13 hours a day.');
+    }
+    assert.match(system, /# Your team[\s\S]*Researcher: Finds facts/);
+    return lead++ === 0
+      ? toolCallChunks('call_team', 'Delegate', { assignments: [{ bot: 'researcher', task: 'Find three facts about cats' }] })
+      : textChunks('Here is what my researcher found: cats sleep a lot.');
+  };
+  const chat = (await call('POST', '/api/chats', {})).data;
+  const events = await stream(`/api/chats/${chat.id}/messages`, { content: 'Tell me about cats' });
+  const progress = events.filter((e) => e.type === 'delegate');
+  assert.ok(progress.every((e) => e.callId === 'call_team' && e.botId === mate.id));
+  assert.deepEqual([...new Set(progress.map((e) => e.event))], ['start', 'text', 'done']);
+  assert.equal(progress.filter((e) => e.event === 'text').map((e) => e.text).join(''), 'Cats sleep 13 hours a day.');
+  const result = events.find((e) => e.type === 'tool_result' && e.id === 'call_team');
+  assert.equal(result.output, '## 🔬 Researcher\nCats sleep 13 hours a day.');
+  const saved = (await call('GET', `/api/chats/${chat.id}`)).data;
+  assert.equal(saved.messages.at(-1).content, 'Here is what my researcher found: cats sleep a lot.');
+  // The teammate's requests count toward the chat's usage.
+  assert.equal(saved.usage.requests, 3);
+
+  // Without the Team capability, there's no Delegate tool.
+  await call('PATCH', '/api/bots/mitzi', { tools: { team: false } });
+  reply = () => textChunks('Solo.');
+  await stream(`/api/chats/${chat.id}/messages`, { content: 'Again' });
+  assert.ok(!lastMain().tools?.some((t: any) => t.function.name === 'Delegate'));
+  assert.doesNotMatch(JSON.stringify(lastMain().messages[0]), /# Your team/);
+  await call('PATCH', '/api/bots/mitzi', { tools: { team: true } });
+  await call('DELETE', `/api/bots/${mate.id}`);
 });
 
 /** Polls until a server reaches a status. */

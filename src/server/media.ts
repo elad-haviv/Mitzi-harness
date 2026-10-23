@@ -44,6 +44,8 @@ export const MEDIA_OPTIONS: Record<keyof Omit<MediaSettings, 'voice'>, { id: str
     { id: 'openai:tts-1', label: 'OpenAI TTS 1' },
     { id: 'elevenlabs:eleven_multilingual_v2', label: 'ElevenLabs Multilingual v2' },
     { id: 'elevenlabs:eleven_flash_v2_5', label: 'ElevenLabs Flash v2.5' },
+    { id: 'google:gemini-2.5-flash-preview-tts', label: 'Google Gemini 2.5 Flash TTS' },
+    { id: 'google:gemini-2.5-pro-preview-tts', label: 'Google Gemini 2.5 Pro TTS' },
   ],
   soundModel: [{ id: 'elevenlabs:eleven_text_to_sound_v2', label: 'ElevenLabs Sound Effects v2' }],
   musicModel: [{ id: 'elevenlabs:music_v1', label: 'ElevenLabs Music' }],
@@ -51,6 +53,7 @@ export const MEDIA_OPTIONS: Record<keyof Omit<MediaSettings, 'voice'>, { id: str
     { id: 'openai:gpt-4o-mini-transcribe', label: 'OpenAI GPT-4o mini Transcribe' },
     { id: 'openai:whisper-1', label: 'OpenAI Whisper' },
     { id: 'groq:whisper-large-v3-turbo', label: 'Groq Whisper large v3 turbo' },
+    { id: 'google:gemini-2.5-flash', label: 'Google Gemini 2.5 Flash' },
   ],
 };
 
@@ -84,9 +87,9 @@ function supports(kind: ProviderKind, field: MediaField): boolean {
     case 'videoModel':
       return kind === 'openai' || kind === 'google';
     case 'speechModel':
-      return openAiCompatible(kind) || kind === 'elevenlabs';
+      return openAiCompatible(kind) || kind === 'elevenlabs' || kind === 'openrouter' || kind === 'google';
     case 'transcribeModel':
-      return openAiCompatible(kind);
+      return openAiCompatible(kind) || kind === 'openrouter' || kind === 'google';
     case 'soundModel':
     case 'musicModel':
       return kind === 'elevenlabs';
@@ -99,6 +102,33 @@ const sleep = (ms: number, signal?: AbortSignal) =>
     const t = setTimeout(resolve, ms);
     signal?.addEventListener('abort', () => (clearTimeout(t), reject(new Error('Cancelled'))), { once: true });
   });
+
+/** Wraps raw 16-bit little-endian PCM (what Gemini and OpenRouter return by default) in a WAV header. */
+export function pcmToWav(pcm: Buffer, sampleRate = 24_000, channels = 1): Buffer {
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + pcm.length, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(sampleRate * channels * 2, 28);
+  header.writeUInt16LE(channels * 2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([header, pcm]);
+}
+
+/** Audio as something a browser can play: PCM gets a WAV header. */
+function playable(bytes: Buffer, mimeType: string): { bytes: Buffer; mimeType: string } {
+  const type = mimeType.toLowerCase();
+  if (!/pcm|l16/.test(type)) return { bytes, mimeType: type.split(';')[0] || 'audio/mpeg' };
+  const rate = Number(/rate=(\d+)/.exec(type)?.[1]) || 24_000;
+  return { bytes: pcmToWav(bytes, rate), mimeType: 'audio/wav' };
+}
 
 async function check(res: Response, what: string): Promise<Response> {
   if (res.ok) return res;
@@ -303,7 +333,38 @@ export class MediaService {
       );
       return { bytes: Buffer.from(await res.arrayBuffer()), mimeType: 'audio/mpeg' };
     }
-    throw new ToolError(`${provider.name} speech isn't supported.`);
+    if (provider.kind === 'openrouter') {
+      // OpenAI's request shape, but voices depend on the model, so the model picks one unless a voice is set.
+      const res = await check(
+        await fetch(`${base}/audio/speech`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ model, input: text.slice(0, 4096), ...(v ? { voice: v } : {}), response_format: 'mp3' }),
+          signal,
+        }),
+        'Speech',
+      );
+      return playable(Buffer.from(await res.arrayBuffer()), res.headers.get('content-type') ?? 'audio/mpeg');
+    }
+    if (provider.kind === 'google') {
+      const res = await check(
+        await fetch(`${GEMINI}/models/${model}:generateContent`, {
+          method: 'POST',
+          headers: { 'x-goog-api-key': key, 'content-type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: text.slice(0, 4000) }] }],
+            generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: v || 'Kore' } } } },
+          }),
+          signal,
+        }),
+        'Speech',
+      );
+      const parts: any[] = ((await res.json()) as any).candidates?.[0]?.content?.parts ?? [];
+      const data = parts.map((p) => p.inlineData ?? p.inline_data).find(Boolean);
+      if (!data?.data) throw new ToolError('Gemini returned no audio. Make sure the speech model is a TTS model (its name ends in "-tts").');
+      return playable(Buffer.from(data.data, 'base64'), data.mimeType ?? data.mime_type ?? 'audio/L16;rate=24000');
+    }
+    throw new ToolError(`${provider.name} can't do text to speech in Mitzi yet. Pick a speech model from OpenAI, ElevenLabs, Google, OpenRouter or another OpenAI-compatible provider.`);
   }
 
   async sound(prompt: string, seconds?: number, signal?: AbortSignal): Promise<MediaFile> {
@@ -343,10 +404,36 @@ export class MediaService {
   async transcribe(audio: Buffer, mimeType: string): Promise<string> {
     const id = this.settings().transcribeModel;
     if (!id) throw new ToolError('No transcription model is set up (Settings → Media & voice).');
-    const { model, base, key } = this.resolve(id);
+    const { provider, model, base, key } = this.resolve(id);
+    const format = EXT[mimeType.split(';')[0]] ?? 'webm';
+    if (provider.kind === 'openrouter') {
+      const res = await check(
+        await fetch(`${base}/audio/transcriptions`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ model, input_audio: { data: audio.toString('base64'), format } }),
+        }),
+        'Transcription',
+      );
+      return String(((await res.json()) as { text?: string }).text ?? '').trim();
+    }
+    if (provider.kind === 'google') {
+      const res = await check(
+        await fetch(`${GEMINI}/models/${model}:generateContent`, {
+          method: 'POST',
+          headers: { 'x-goog-api-key': key, 'content-type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ inline_data: { mime_type: mimeType.split(';')[0], data: audio.toString('base64') } }, { text: 'Transcribe this recording word for word. Reply with only the transcript, or nothing if no one speaks.' }] }],
+          }),
+        }),
+        'Transcription',
+      );
+      const parts: any[] = ((await res.json()) as any).candidates?.[0]?.content?.parts ?? [];
+      return parts.map((p) => p.text ?? '').join('').trim();
+    }
     const form = new FormData();
     form.set('model', model);
-    form.set('file', new Blob([new Uint8Array(audio)], { type: mimeType }), `speech.${EXT[mimeType.split(';')[0]] ?? 'webm'}`);
+    form.set('file', new Blob([new Uint8Array(audio)], { type: mimeType }), `speech.${format}`);
     const res = await check(await fetch(`${base}/audio/transcriptions`, { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: form }), 'Transcription');
     return String(((await res.json()) as { text?: string }).text ?? '').trim();
   }
@@ -365,7 +452,7 @@ export class MediaService {
       providers.map(async (p) => {
         const base = (p.baseUrl || PROVIDER_PRESETS[p.kind].baseUrl).replace(/\/+$/, '');
         const prefix = p.kind === 'openrouter' ? '' : `${p.id}:`;
-        const listed: { id: string; name?: string; image?: boolean }[] = [];
+        const listed: { id: string; name?: string; image?: boolean; speech?: boolean }[] = [];
         try {
           const signal = AbortSignal.timeout(15_000);
           if (p.kind === 'google') {
@@ -377,6 +464,11 @@ export class MediaService {
           } else if (p.kind !== 'anthropic') {
             const json = (await (await check(await fetch(`${base}/models`, { headers: p.apiKey ? { authorization: `Bearer ${p.apiKey}` } : {}, signal }), 'Models')).json()) as any;
             for (const m of json.data ?? []) listed.push({ id: String(m.id), name: m.name, image: m.architecture?.output_modalities?.includes('image') });
+            if (p.kind === 'openrouter') {
+              // Speech models aren't in the default (text) list.
+              const speech = (await (await check(await fetch(`${base}/models?output_modalities=speech`, { headers: p.apiKey ? { authorization: `Bearer ${p.apiKey}` } : {}, signal }), 'Models')).json()) as any;
+              for (const m of speech.data ?? []) if (!listed.some((x) => x.id === m.id)) listed.push({ id: String(m.id), name: m.name, speech: true });
+            }
           }
         } catch {
           // Fall back to the known models below.
@@ -385,6 +477,7 @@ export class MediaService {
           const name = (m.name ?? label(m.id)).replace(/^[^:]+:\s*/, '');
           if (p.kind === 'openrouter') {
             if (m.image) add('imageModel', { id: m.id, name, provider: p.name });
+            if (m.speech) add('speechModel', { id: m.id, name, provider: p.name });
             continue;
           }
           for (const field of Object.keys(KIND_PATTERNS) as MediaField[]) {
@@ -402,7 +495,8 @@ export class MediaService {
             const ownPrefix = p.kind === 'openrouter' ? !/^[a-z0-9-]+:/.test(o.id) : o.id.startsWith(`${p.kind}:`);
             if (!ownPrefix) continue;
             const id = p.kind === 'openrouter' ? o.id : `${prefix}${o.id.slice(p.kind.length + 1)}`;
-            if (!listed.length || field === 'soundModel' || field === 'musicModel') add(field, { id, name: o.label.replace(/ via OpenRouter$/, ''), provider: p.name });
+            // Gemini models transcribe through generateContent, so they don't look like transcription models in the list.
+            if (!listed.length || field === 'soundModel' || field === 'musicModel' || (p.kind === 'google' && field === 'transcribeModel')) add(field, { id, name: o.label.replace(/ via OpenRouter$/, ''), provider: p.name });
           }
         }
       }),

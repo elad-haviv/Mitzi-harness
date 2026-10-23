@@ -1,4 +1,5 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { speaker } from './speech';
 import { api, ApiError, Bot, ChatListItem, ModelInfo, ProjectView, PublicSettings, TaskView, UpdateStatus } from './api';
 
 export type Theme = 'system' | 'light' | 'dark';
@@ -76,6 +77,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 6000);
   }, []);
   const dismissToast = useCallback((id: number) => setToasts((t) => t.filter((x) => x.id !== id)), []);
+
+  // Say once (per error) why read-aloud fell back to the browser's voice.
+  useEffect(() => {
+    let last = '';
+    speaker.onServerError = (message) => {
+      if (message === last) return;
+      last = message;
+      toast(`The speech model failed, so your browser’s voice was used. ${message}`);
+    };
+    return () => void (speaker.onServerError = undefined);
+  }, [toast]);
 
   const guard = useCallback(
     async <T,>(p: Promise<T>, set: (v: T) => void) => {

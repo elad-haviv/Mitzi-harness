@@ -23,6 +23,7 @@ let mock: Server;
 let close: () => Promise<void>;
 let reply: (body: any) => object[] = () => textChunks('Hello!');
 const requests: any[] = [];
+const speechRequests: any[] = [];
 const isBackground = (body: any) =>
   body.max_tokens === 60 || /Extract memories worth keeping|You maintain \\?"observations|reflective memory of|rated an AI assistant|conversation starters|another AI assistant wrote/.test(JSON.stringify(body.messages?.[0] ?? ''));
 const lastMain = (): any => requests.filter((r) => !isBackground(r)).at(-1);
@@ -32,6 +33,11 @@ before(async () => {
     let raw = '';
     req.on('data', (d) => (raw += d));
     req.on('end', () => {
+      if (req.url?.includes('/models?output_modalities=speech')) {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ data: [{ id: 'fish-audio/drama-3', name: 'Fish Audio: Drama 3' }] }));
+        return;
+      }
       if (req.url?.endsWith('/models')) {
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ data: [{ id: 'test/model', name: 'Test: Model', context_length: 100000, supported_parameters: ['tools'] }, { id: 'gpt-test' }, { id: 'gpt-image-1' }, { id: 'tts-1' }, { id: 'whisper-1' }, { id: 'vendor/painter', name: 'Vendor: Painter', architecture: { output_modalities: ['image', 'text'] } }] }));
@@ -40,6 +46,19 @@ before(async () => {
       if (req.url?.endsWith('/images/generations')) {
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ data: [{ b64_json: PNG.toString('base64') }] }));
+        return;
+      }
+      if (req.url?.endsWith('/audio/speech') && JSON.parse(raw).model === 'fish-audio/drama-3') {
+        speechRequests.push(JSON.parse(raw));
+        // OpenRouter answers with raw PCM unless the model supports the format asked for.
+        res.writeHead(200, { 'content-type': 'audio/pcm' });
+        res.end(Buffer.alloc(480));
+        return;
+      }
+      if (req.url?.endsWith('/audio/transcriptions') && req.headers['content-type']?.includes('json')) {
+        speechRequests.push(JSON.parse(raw));
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ text: ' hello there ' }));
         return;
       }
       if (req.url?.endsWith('/audio/speech')) {
@@ -557,4 +576,19 @@ test('media: image generation tool, read-aloud and media files', async () => {
   const tts = await fetch(`${base}/api/tts`, { method: 'POST', headers: { 'x-mitzi-token': TOKEN, 'content-type': 'application/json' }, body: JSON.stringify({ text: 'Hello' }) });
   assert.equal(tts.headers.get('content-type'), 'audio/mpeg');
   assert.equal(Buffer.from(await tts.arrayBuffer()).toString(), 'ID3fakeaudio');
+
+  // OpenRouter speech models are listed and work; their PCM is wrapped so browsers can play it.
+  assert.ok(opts.models.speechModel.some((m: any) => m.id === 'fish-audio/drama-3' && m.provider === 'OpenRouter'));
+  await call('PUT', '/api/settings', { media: { speechModel: 'fish-audio/drama-3', transcribeModel: 'openai/whisper-1' } });
+  const pcm = await fetch(`${base}/api/tts`, { method: 'POST', headers: { 'x-mitzi-token': TOKEN, 'content-type': 'application/json' }, body: JSON.stringify({ text: 'Hello' }) });
+  assert.equal(pcm.status, 200);
+  assert.equal(pcm.headers.get('content-type'), 'audio/wav');
+  const wav = Buffer.from(await pcm.arrayBuffer());
+  assert.equal(wav.subarray(0, 4).toString(), 'RIFF');
+  assert.equal(wav.length, 44 + 480);
+  assert.deepEqual(speechRequests[0], { model: 'fish-audio/drama-3', input: 'Hello', response_format: 'mp3' });
+  const heard = await call('POST', '/api/transcribe', { audio: `data:audio/webm;base64,${Buffer.from('voice').toString('base64')}` });
+  assert.equal(heard.data.text, 'hello there');
+  assert.deepEqual(speechRequests[1], { model: 'openai/whisper-1', input_audio: { data: Buffer.from('voice').toString('base64'), format: 'webm' } });
+  await call('PUT', '/api/settings', { media: { speechModel: '', transcribeModel: '' } });
 });

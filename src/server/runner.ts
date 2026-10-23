@@ -18,6 +18,7 @@ import { Skills, skillTool } from './extensions/skills.js';
 import { artifactTool } from './tools.js';
 import { commentTool } from './workspace.js';
 import { MediaService, mediaTools } from './media.js';
+import { delegateTool } from './team.js';
 
 const MAX_EVENT_OUTPUT = 20_000;
 
@@ -97,6 +98,36 @@ class WebUI implements UI {
   }
 }
 
+/** Reports a teammate's progress inside the Delegate call that started it. */
+class TeammateUI implements UI {
+  constructor(private readonly send: (event: 'text' | 'tool' | 'error', text: string) => void) {}
+
+  startThinking(): void {}
+  stopThinking(): void {}
+  text(chunk: string): void {
+    this.send('text', chunk);
+  }
+  reasoning(): void {}
+  toolCall(name: string, summary: string): void {
+    this.send('tool', summary ? `${name}: ${summary}` : name);
+  }
+  toolResult(): void {}
+  todos(): void {}
+  info(): void {}
+  warn(): void {}
+  error(msg: string): void {
+    this.send('error', msg);
+  }
+  endTurn(): void {}
+}
+
+interface UsageTotalsLike {
+  promptTokens: number;
+  completionTokens: number;
+  cost: number;
+  requests: number;
+}
+
 export function buildUserContent(text: string, attachments: Attachment[]): string | ContentPart[] {
   const files = attachments
     .filter((a) => a.kind === 'text')
@@ -138,15 +169,22 @@ export class ChatRunner {
     return this.deps.store.settings.memoryEnabled && bot.tools.memory;
   }
 
+  /** The bots this bot can hand tasks to. */
+  teamFor(bot: Bot): Bot[] {
+    return bot.tools.team === false ? [] : this.deps.store.bots.all().filter((b) => b.id !== bot.id);
+  }
+
   /** The chat's project, bot, recalled memories and artifacts, as used to build its prompt. */
   setup(chat: Chat): ChatSetup {
     const { store } = this.deps;
     const project = chat.projectId ? store.projects.get(chat.projectId) : undefined;
     const tools = this.tools(chat, () => {}).map((t) => t.name);
+    const bot = this.botFor(chat);
     return {
       chat,
       project,
-      bot: this.botFor(chat),
+      bot,
+      team: this.teamFor(bot),
       settings: store.settings,
       toolNames: tools,
       // Memories recalled for the latest user message.
@@ -213,6 +251,55 @@ export class ChatRunner {
       emit({ type: 'warn', message: `Couldn't recall memories: ${err.message}` });
       return [];
     }
+  }
+
+  /**
+   * Runs a teammate on a task another bot handed it: a fresh conversation in the same chat and project, with
+   * the teammate's own instructions, model, tools and memory. Resolves to its final answer.
+   */
+  private async runTeammate(
+    chat: Chat,
+    lead: Bot,
+    mate: Bot,
+    task: string,
+    run: { callId: string; permissions: Permissions; emit: (e: StreamEvent) => void; usage: UsageTotalsLike; signal?: AbortSignal },
+  ): Promise<string> {
+    const { store, catalog } = this.deps;
+    const project = chat.projectId ? store.projects.get(chat.projectId) : undefined;
+    const model = mate.model ?? chat.model;
+    const virtual: Chat = { ...chat, botId: mate.id, model, webSearch: false, messages: [], contextStart: 0, summary: undefined, focusArtifactId: undefined };
+    const send = (event: 'start' | 'text' | 'tool' | 'done' | 'error', text: string) => run.emit({ type: 'delegate', callId: run.callId, botId: mate.id, event, text });
+    send('start', task);
+    const recalled = this.memoryOn(mate) ? await this.recall(mate, task, () => {}) : [];
+    const { tools } = await this.allTools(virtual, (artifact) => run.emit({ type: 'artifact', artifact }));
+    const supportsTools = (await catalog.list().catch(() => [])).find((m) => m.id === model)?.tools ?? true;
+    const agent = new Agent({
+      client: this.deps.client(),
+      config: { ...this.deps.config(), model, temperature: mate.temperature, autoCompactTokens: 0, maxTurns: 25 },
+      tools: supportsTools ? tools : [],
+      permissions: run.permissions,
+      ui: new TeammateUI(send),
+      cwd: project?.folder ?? homedir(),
+      systemPrompt: () =>
+        `${systemPrompt({ ...this.setup(virtual), recalled, team: [] })}\n\n# Working with ${lead.name}\n${lead.name} handed you this task as part of a larger request from the user. ` +
+        `The user won't see your reply directly: ${lead.name} will use it. Do the task and reply with the finished result, without small talk.`,
+    });
+    agent.messages = [{ role: 'user', content: task }];
+    try {
+      await agent.run(null, run.signal);
+    } catch (err: any) {
+      send('error', err?.message ?? String(err));
+      throw err;
+    } finally {
+      run.usage.promptTokens += agent.usage.promptTokens;
+      run.usage.completionTokens += agent.usage.completionTokens;
+      run.usage.cost += agent.usage.cost;
+      run.usage.requests += agent.usage.requests;
+    }
+    const last = agent.messages.findLast((m) => m.role === 'assistant' && typeof m.content === 'string' && m.content.trim());
+    const answer = typeof last?.content === 'string' ? last.content : '';
+    send('done', '');
+    return answer;
   }
 
   /** Learns from a finished exchange in the background. */
@@ -350,8 +437,13 @@ export class ChatRunner {
     const toolset = await this.allTools(chat, (artifact) => emit({ type: 'artifact', artifact }));
     for (const w of toolset.warnings) emit({ type: 'warn', message: w });
     const tools = toolset.tools;
-    const supportsTools = (await catalog.list().catch(() => [])).find((m) => m.id === chat.model)?.tools ?? true;
+    const teamUsage: UsageTotalsLike = { promptTokens: 0, completionTokens: 0, cost: 0, requests: 0 };
+    const team = this.teamFor(bot);
     const permissions = new Permissions(project?.permissionMode ?? 'default', chat.allowedRules, approver);
+    if (team.length) {
+      tools.push(delegateTool(team, (mate, task, callId, toolSignal) => this.runTeammate(chat, bot, mate, task, { callId, permissions, emit, usage: teamUsage, signal: toolSignal ?? signal })));
+    }
+    const supportsTools = (await catalog.list().catch(() => [])).find((m) => m.id === chat.model)?.tools ?? true;
     const ui = new WebUI(emit);
     const config: Config = {
       ...this.deps.config(),
@@ -411,10 +503,10 @@ export class ChatRunner {
       }
       const ts = Date.now();
       chat.messages.push(...added.map((m) => ({ ...m, ts, ...(m.role === 'assistant' ? { model: chat.model } : {}) })));
-      chat.usage.promptTokens += agent.usage.promptTokens;
-      chat.usage.completionTokens += agent.usage.completionTokens;
-      chat.usage.cost += agent.usage.cost;
-      chat.usage.requests += agent.usage.requests;
+      chat.usage.promptTokens += agent.usage.promptTokens + teamUsage.promptTokens;
+      chat.usage.completionTokens += agent.usage.completionTokens + teamUsage.completionTokens;
+      chat.usage.cost += agent.usage.cost + teamUsage.cost;
+      chat.usage.requests += agent.usage.requests + teamUsage.requests;
       if (agent.lastPromptTokens) chat.lastPromptTokens = agent.lastPromptTokens;
       chat.allowedRules = [...new Set([...chat.allowedRules, ...permissions.sessionRules])];
       chat.updatedAt = now();

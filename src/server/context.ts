@@ -4,6 +4,7 @@ import { buildSystemPrompt } from '../prompt.js';
 import type { Artifact, Bot, Chat, ContextBreakdown, ContextSection, ModelInfo, Project, RecalledMemory, SkillInfo, UiSettings } from '../shared/types.js';
 import { focusPrompt } from './workspace.js';
 import { skillsPrompt } from './extensions/skills.js';
+import { teamPrompt } from './team.js';
 
 const DEFAULT_CONTEXT_LENGTH = 128_000;
 
@@ -25,6 +26,8 @@ export interface ChatSetup {
   toolNames: string[];
   /** The artifact open in the workspace beside the chat. */
   focus?: Artifact;
+  /** Bots this bot can hand tasks to with the Delegate tool. */
+  team?: Bot[];
 }
 
 interface PromptSection {
@@ -126,6 +129,10 @@ export function promptSections(setup: ChatSetup): PromptSection[] {
 
   if (setup.focus) {
     sections.push({ label: `Open artifact: ${setup.focus.title}`, kind: 'project', text: focusPrompt(setup.focus) });
+  }
+
+  if (setup.team?.length) {
+    sections.push({ label: `Team (${setup.team.length} bot${setup.team.length === 1 ? '' : 's'})`, kind: 'tools', text: teamPrompt(setup.team) });
   }
 
   if (toolNames.includes('Skill') && setup.skills.length) {

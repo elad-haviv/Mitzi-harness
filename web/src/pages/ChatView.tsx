@@ -35,11 +35,12 @@ import { AssistantTurn, Avatar, buildTurns, messageText, Reasoning, CompactDivid
 import { Menu, useConfirm } from '../components/ui';
 import { href, navigate, parseRoute } from '../router';
 import { LOGO, relativeTime, useApp } from '../state';
+import { applyDelegateEvent, TeamProgress } from '../components/Team';
 
 type LiveBlock =
   | { kind: 'text'; text: string }
   | { kind: 'reasoning'; text: string }
-  | { kind: 'tool'; id: string; name: string; summary: string; args: any; result?: { output: string; isError: boolean } }
+  | { kind: 'tool'; id: string; name: string; summary: string; args: any; result?: { output: string; isError: boolean }; team?: TeamProgress }
   | { kind: 'permission'; req: PermissionRequest };
 
 interface Live {
@@ -190,6 +191,21 @@ export function ChatView({
   useEffect(() => {
     stick.current = true;
   }, [chatId]);
+  // Streamed text grows inside the messages without re-rendering this page; follow it too.
+  useEffect(() => {
+    const el = scroller.current;
+    const inner = el?.firstElementChild;
+    if (!el || !inner || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => stick.current && (el.scrollTop = el.scrollHeight));
+    ro.observe(inner);
+    return () => ro.disconnect();
+  });
+
+  // Renames and moves made from the sidebar.
+  const listed = app.chats.find((c) => c.id === chat?.id);
+  useEffect(() => {
+    if (listed) setChat((c) => (c && c.id === listed.id && (c.title !== listed.title || c.pinned !== listed.pinned || c.projectId !== listed.projectId) ? { ...c, title: listed.title, pinned: listed.pinned, projectId: listed.projectId } : c));
+  }, [listed?.id, listed?.title, listed?.pinned, listed?.projectId]);
 
   const project = projects.find((p) => p.id === (chat?.projectId ?? projectId));
   const bot = bots.find((b) => b.id === (chat?.botId ?? botId ?? DEFAULT_BOT_ID));
@@ -223,6 +239,9 @@ export function ChatView({
               blocks: l.blocks.map((b) => (b.kind === 'tool' && b.id === e.id ? { ...b, result: { output: e.output, isError: e.isError } } : b)),
             },
         );
+        break;
+      case 'delegate':
+        setLive((l) => l && { ...l, blocks: l.blocks.map((b) => (b.kind === 'tool' && b.id === e.callId ? { ...b, team: applyDelegateEvent(b.team, e) } : b)) });
         break;
       case 'permission':
         setLive((l) => l && { ...l, blocks: [...l.blocks, { kind: 'permission', req: e }] });
@@ -580,6 +599,7 @@ export function ChatView({
                 summary={b.summary}
                 result={b.result}
                 running
+                team={b.team}
                 artifacts={artifacts}
                 activeArtifact={activeArtifact?.id}
                 onOpenArtifact={openArtifact}

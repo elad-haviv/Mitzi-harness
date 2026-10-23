@@ -767,6 +767,7 @@ function applyBot(bot: Bot, body: any, creating: boolean): Bot {
     skills: tools.skills ?? bot.tools?.skills ?? true,
     connectors: tools.connectors ?? bot.tools?.connectors ?? true,
     media: tools.media ?? bot.tools?.media ?? true,
+    team: tools.team ?? bot.tools?.team ?? true,
   };
   if (creating || Array.isArray(body?.starters)) {
     bot.starters = (Array.isArray(body?.starters) ? body.starters : []).filter((s: unknown) => typeof s === 'string' && s.trim()).slice(0, 6);

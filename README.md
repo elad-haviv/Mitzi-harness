@@ -7,19 +7,22 @@ An open-source, Claude-style AI workspace that runs on **any model available thr
 ## Features
 
 **Chats**
-- Responses stream in with Markdown, tables and syntax-highlighted code.
+- Responses stream in smoothly, at an even pace rather than in bursts, with Markdown, tables and syntax-highlighted code.
 - Attach text files or images. You can paste or drag and drop them into the message box.
 - Edit any earlier message, regenerate the last answer, stop a response mid-stream, and copy replies.
 - Switch models per chat. The model picker is searchable and shows each model's price, context size, and vision and tool support.
 - One-click web search uses OpenRouter's `:online` option.
-- Chats get titles automatically. You can pin, rename, search, and move chats between projects.
+- Chats get titles automatically. Rename, pin, delete or move a chat to a project from its **⋯** menu in the sidebar (or right-click it), and search them.
+- **Group the chat list** by date, project, bot or model; click a group's name to fold it.
 - **Branch** a chat from any answer: the new chat has the conversation up to that point (and copies of its artifacts), and the original stays as it was.
-- **Read aloud** any answer, with your browser's voices or a natural voice from OpenAI or ElevenLabs.
+- **Read aloud** any answer, with your browser's voices or a natural voice from OpenAI, ElevenLabs, Google Gemini or any text-to-speech model on OpenRouter. If the speech model fails, Mitzi tells you why and reads with the browser's voice instead.
 - **Rate answers** with 👍 / 👎 and an optional comment. The bot distills each rating into a lesson ("Keep explanations short and lead with an example"), keeps it in mind in later chats and saves it to its memory bank. Lessons are listed, and can be removed, in the bot's settings.
 
 ![A rating becomes a lesson](docs/screenshots/rating-lesson.png)
 
 **Providers.** Add as many providers as you like in Settings → Providers. Each provider's models appear in the model picker, grouped by provider, with ids like `openai:gpt-5`, `anthropic:claude-sonnet-4-5` or `google:gemini-2.5-pro`; OpenRouter ids stay as they are (`anthropic/claude-sonnet-4.5`). Anthropic is called through its native Messages API (with prompt caching); the others through their OpenAI-compatible APIs. Keys can also come from environment variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`, …).
+
+Every job can use a different provider: for example chat with a model on OpenRouter, speech with Google's Gemini voices and transcription with Groq. Settings → Models shows which model and provider each job uses.
 
 ![Providers](docs/screenshots/providers.png)
 
@@ -58,6 +61,8 @@ An open-source, Claude-style AI workspace that runs on **any model available thr
   - **Connect a repository…** clones a GitHub, GitLab or any git repository (`owner/repo`, an https or SSH URL, a branch, and an access token for private ones) and opens it as a project. The project page shows its branch, local changes and commits to push or pull, with a **Pull latest** button. Tokens are stored only on your computer and never written into the repository's config.
 
 ![Coding agent asking for permission](docs/screenshots/coding-permission.png)
+
+**Bot teams.** A bot can hand parts of a task to your other bots. Ask Mitzi to research something and write it up, and it can give the research to your Researcher bot and the draft to your Writer bot. They work at the same time, each with its own instructions, model, tools and memory, and Mitzi combines their results. The chat shows each teammate's task and progress, and you can open each one's answer. Turn this off per bot with its **Team** capability.
 
 **Bots** are reusable assistants with their own icon, instructions, model, temperature, capabilities and conversation starters. Once a bot knows you, the starters on the new-chat screen are written from its memories and your recent conversations ("Make a study plan for my biology exam on Nov 12"), and refresh as you keep talking. **Mitzi** 🐱, the default bot, is always there and handles every chat that doesn't pick another bot. You can customize it but not delete it. Three example bots are included.
 

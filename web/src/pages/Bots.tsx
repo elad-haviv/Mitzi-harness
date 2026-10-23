@@ -1,4 +1,4 @@
-import { Brain, Globe, ImageIcon, Layers, MessageSquare, Pencil, Plug, Plus, ThumbsDown, ThumbsUp, Trash2, WandSparkles, X } from 'lucide-react';
+import { Brain, Globe, ImageIcon, Layers, MessageSquare, Pencil, Plug, Plus, ThumbsDown, ThumbsUp, Trash2, Users, WandSparkles, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, BankProfile, Bot, BotTools, Lesson } from '../api';
 import { ModelPicker } from '../components/ModelPicker';
@@ -207,6 +207,7 @@ function BotEditor({ bot, onClose, onSaved }: { bot?: Bot; onClose(): void; onSa
               ['skills', <WandSparkles size={18} key="s" />, 'Skills', 'Load skills from the Skills page when a task calls for one'],
               ['connectors', <Plug size={18} key="c" />, 'Connectors', 'Use tools from your connectors (MCP servers)'],
               ['media', <ImageIcon size={18} key="i" />, 'Media', 'Generate images, video, speech, sounds and music (set up models in Settings)'],
+              ['team', <Users size={18} key="t" />, 'Team', 'Hand parts of a task to your other bots, which work on them in parallel'],
             ] as const
           ).map(([k, icon, t, s]) => (
             <div key={k} className="tool-toggle">

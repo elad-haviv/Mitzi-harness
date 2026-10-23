@@ -84,6 +84,8 @@ export interface BotTools {
   skills: boolean;
   /** Use tools from connectors / MCP servers. */
   connectors: boolean;
+  /** Hand parts of a task to other bots and combine their results. */
+  team?: boolean;
 }
 
 /** Hindsight-style traits shaping how a bank forms and interprets memories, each 1–5. */
@@ -362,6 +364,8 @@ export type StreamEvent =
   | { type: 'reasoning'; text: string }
   | { type: 'tool_call'; id: string; name: string; summary: string; args: unknown }
   | { type: 'tool_result'; id: string; output: string; isError: boolean }
+  /** Progress of a bot working on a task handed to it with the Delegate tool (callId is that call's id). */
+  | { type: 'delegate'; callId: string; botId: string; event: 'start' | 'text' | 'tool' | 'done' | 'error'; text: string }
   | { type: 'permission'; requestId: string; callId?: string; tool: string; summary: string; preview?: string; alwaysRule: string }
   | { type: 'permission_resolved'; requestId: string }
   | { type: 'artifact'; artifact: Artifact }

@@ -58,6 +58,8 @@ class Speaker {
   current: string | null = null;
   /** Server speech is used when Settings → Media & voice has a speech model. */
   useServer = false;
+  /** Told when the speech model fails and the browser's voice is used instead. */
+  onServerError?: (message: string) => void;
   private audio?: HTMLAudioElement;
   private listeners = new Set<Listener>();
   private token = 0;
@@ -88,8 +90,17 @@ class Speaker {
     if (!text) return;
     this.set(id);
     try {
-      if (this.useServer) await this.playServer(text, token);
-      else await this.playBrowser(text, token);
+      if (this.useServer) {
+        try {
+          await this.playServer(text, token);
+        } catch (err) {
+          if (token !== this.token) return;
+          // A broken speech model shouldn't leave read-aloud silent.
+          this.onServerError?.((err as Error).message);
+          if (typeof speechSynthesis === 'undefined') throw err;
+          await this.playBrowser(text, token);
+        }
+      } else await this.playBrowser(text, token);
     } finally {
       if (token === this.token) this.set(null);
     }

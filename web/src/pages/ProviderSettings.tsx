@@ -249,11 +249,18 @@ function KeyModal({
 const MEDIA_FIELDS: { key: keyof MediaModels; label: string; hint: string; empty: string }[] = [
   { key: 'imageModel', label: 'Images', hint: 'Lets bots create images.', empty: 'Add OpenAI, Google, OpenRouter or another provider with image models.' },
   { key: 'videoModel', label: 'Video', hint: 'Short clips; slow and costly, so the bot asks before each one.', empty: 'Add OpenAI (Sora) or Google (Veo) to generate video.' },
-  { key: 'speechModel', label: 'Speech (text to speech)', hint: 'Natural voices for read-aloud and live mode. Without it, your browser’s voices are used.', empty: 'Add OpenAI or ElevenLabs for natural voices.' },
+  { key: 'speechModel', label: 'Speech (text to speech)', hint: 'Natural voices for read-aloud and live mode. Without it, your browser’s voices are used.', empty: 'Add OpenAI, ElevenLabs, Google or OpenRouter for natural voices.' },
   { key: 'soundModel', label: 'Sound effects', hint: 'Sound design from a description.', empty: 'Add ElevenLabs to generate sound effects.' },
   { key: 'musicModel', label: 'Music', hint: 'Original music from a description.', empty: 'Add ElevenLabs to generate music.' },
-  { key: 'transcribeModel', label: 'Transcription (speech to text)', hint: 'For live mode in browsers without built-in speech recognition (Firefox, some Safari).', empty: 'Add OpenAI or Groq (Whisper) for transcription.' },
+  { key: 'transcribeModel', label: 'Transcription (speech to text)', hint: 'For live mode in browsers without built-in speech recognition (Firefox, some Safari).', empty: 'Add OpenAI, Groq, Google or OpenRouter for transcription.' },
 ];
+
+function voicePlaceholder(model: string): string {
+  if (model.startsWith('elevenlabs:')) return 'ElevenLabs voice id (default: George)';
+  if (model.startsWith('google:')) return 'Kore, Puck, Charon, Zephyr, Aoede… (default: Kore)';
+  if (!/^[a-z0-9-]+:/.test(model)) return 'Voice name; depends on the model (empty: its default voice)';
+  return 'alloy, ash, coral, nova, sage, shimmer…';
+}
 
 export function MediaSettingsSection() {
   const { settings, refreshSettings, toast, models } = useApp();
@@ -291,7 +298,7 @@ export function MediaSettingsSection() {
   return (
     <section className="settings-section card">
       <p className="muted small" style={{ marginTop: 0 }}>
-        Pick models for each kind of media. They use the providers above (OpenAI, Google, OpenRouter, ElevenLabs). Any <code>provider:model</code> id works.
+        Each kind of media can use a different provider: for example chat through OpenRouter and speech through Google. Any <code>provider:model</code> id works.
       </p>
       {MEDIA_FIELDS.map((f) => (
         <div key={f.key} className="field">
@@ -321,7 +328,7 @@ export function MediaSettingsSection() {
             <input
               className="input mono"
               value={voiceId}
-              placeholder={settings.media.speechModel.startsWith('elevenlabs') ? 'ElevenLabs voice id (default: George)' : 'alloy, ash, coral, nova, sage, shimmer…'}
+              placeholder={voicePlaceholder(settings.media.speechModel)}
               onChange={(e) => setVoiceId(e.target.value)}
             />
             <button className="btn" disabled={voiceId.trim() === settings.media.voice}>

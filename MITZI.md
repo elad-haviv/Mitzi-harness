@@ -63,3 +63,9 @@
 - Updates (`src/updater.ts`, `src/server/routes-update.ts`): installs are git checkouts. Updating fast-forwards the
   tracked branch, runs `npm install` only when the package files changed, rebuilds, and on any failure resets to the
   previous commit and rebuilds. `MITZI_APP_DIR` points it at another checkout (the tests use this).
+- Teams (`src/server/team.ts`): bots with `tools.team` (on unless false) get the Delegate tool, listing the other
+  bots. `ChatRunner.runTeammate` runs each assignment as a fresh Agent in the same chat (teammate's prompt, model,
+  tools and memory, no Delegate of its own), in parallel, sharing the lead's permissions. Progress streams as
+  `delegate` events keyed by the Delegate call id; teammates' usage is added to the chat.
+- Streaming text (`web/src/components/Markdown.tsx`): `useSmoothText` reveals text at the stream's average rate, and
+  streaming Markdown renders per top-level block so only the last block re-parses each frame.

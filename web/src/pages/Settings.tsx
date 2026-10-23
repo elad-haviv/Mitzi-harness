@@ -151,11 +151,47 @@ function GeneralSettings() {
   );
 }
 
+const PROVIDER_NAMES: Record<string, string> = {
+  openai: 'OpenAI',
+  google: 'Google',
+  anthropic: 'Anthropic',
+  elevenlabs: 'ElevenLabs',
+  groq: 'Groq',
+  xai: 'xAI',
+  mistral: 'Mistral',
+  deepseek: 'DeepSeek',
+  together: 'Together AI',
+  ollama: 'Ollama',
+  lmstudio: 'LM Studio',
+};
+
+/** The provider a model id runs on: "google:…" → Google; ids without a prefix go through OpenRouter. */
+function providerOf(id: string): string {
+  const prefix = /^([a-z0-9-]+):/.exec(id)?.[1];
+  return prefix ? (PROVIDER_NAMES[prefix] ?? prefix) : 'OpenRouter';
+}
+
+const JOBS = [
+  ['imageModel', 'Images'],
+  ['videoModel', 'Video'],
+  ['speechModel', 'Speech'],
+  ['transcribeModel', 'Transcription'],
+  ['soundModel', 'Sound effects'],
+  ['musicModel', 'Music'],
+] as const;
+
 function ModelSettings() {
-  const { settings } = useApp();
+  const { settings, models } = useApp();
   const save = useSave();
   if (!settings) return null;
+  const name = (id: string) => models.find((m) => m.id === id)?.name ?? id;
+  const jobs: [string, string | undefined][] = [
+    ['Chat', settings.defaultModel],
+    ['Fast tasks', settings.smallModel || settings.defaultModel],
+    ...JOBS.map(([k, label]): [string, string | undefined] => [label, settings.media[k] || undefined]),
+  ];
   return (
+    <>
     <section className="settings-section card">
       <div className="field">
         <span className="field-label">Default model</span>
@@ -168,6 +204,29 @@ function ModelSettings() {
         <span className="field-hint">A cheaper model for titles, summaries, memory, suggestions and learning from ratings.</span>
       </div>
     </section>
+    <section className="settings-section card">
+      <h2>Who does what</h2>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        Every job can use its own provider, for example chat through OpenRouter and speech through Google. Bots can also have their own model.
+      </p>
+      <div className="jobs">
+        {jobs.map(([label, id]) => (
+          <div key={label} className="job-row">
+            <span className="job-label">{label}</span>
+            {id ? (
+              <>
+                <span className="job-model" title={id}>{name(id)}</span>
+                <span className="badge">{providerOf(id)}</span>
+              </>
+            ) : (
+              <span className="muted">Off</span>
+            )}
+          </div>
+        ))}
+      </div>
+      <a className="link-btn small" href={href({ page: 'settings', section: 'media' })}>Choose media and voice models →</a>
+    </section>
+    </>
   );
 }
 
