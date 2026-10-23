@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 export type Route =
   | { page: 'new'; projectId?: string; botId?: string }
-  | { page: 'chat'; id: string }
+  | { page: 'chat'; id: string; message?: number }
   | { page: 'projects' }
   | { page: 'project'; id: string }
   | { page: 'bots' }
@@ -24,7 +24,7 @@ export function parseRoute(hash: string): Route {
   const parts = path.split('/').filter(Boolean);
   switch (parts[0]) {
     case 'chat':
-      if (parts[1]) return { page: 'chat', id: parts[1] };
+      if (parts[1]) return { page: 'chat', id: parts[1], message: params.has('m') ? Number(params.get('m')) : undefined };
       break;
     case 'projects':
       return parts[1] ? { page: 'project', id: parts[1] } : { page: 'projects' };
@@ -62,7 +62,7 @@ export function href(route: Route): string {
       return `#/new${qs ? `?${qs}` : ''}`;
     }
     case 'chat':
-      return `#/chat/${route.id}`;
+      return `#/chat/${route.id}${route.message !== undefined ? `?m=${route.message}` : ''}`;
     case 'project':
       return `#/projects/${route.id}`;
     case 'artifact':

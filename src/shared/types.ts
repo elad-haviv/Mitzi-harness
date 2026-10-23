@@ -291,6 +291,29 @@ export interface Plan {
   createdAt: string;
 }
 
+// ---------- Search ----------
+
+export type SearchKind = 'message' | 'artifact' | 'memory';
+
+export interface SearchHit {
+  kind: SearchKind;
+  /** Chat title, artifact title, or the bot a memory belongs to. */
+  title: string;
+  snippet: string;
+  /** Matches in the snippet, as [start, end) character offsets. */
+  marks: [number, number][];
+  ts: string;
+  chatId?: string;
+  /** Index of the matching message in its chat. */
+  index?: number;
+  artifactId?: string;
+  memoryId?: string;
+  botId?: string;
+  projectId?: string;
+  /** Other messages in the same chat that matched too. */
+  more?: number;
+}
+
 // ---------- Usage ----------
 
 export type UsageKind = 'chat' | 'title' | 'memory' | 'workflow' | 'task' | 'btw' | 'goal' | 'learning' | 'other';

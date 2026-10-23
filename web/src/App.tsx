@@ -1,3 +1,4 @@
+import { SearchDialog } from './components/SearchDialog';
 import { InsightsPage } from './pages/Insights';
 import { WorkflowEditor, WorkflowsPage } from './pages/Workflows';
 import { KeyRound, PanelLeft } from 'lucide-react';
@@ -30,6 +31,23 @@ export function App() {
   const { authError } = useApp();
   const narrow = () => window.matchMedia('(max-width: 860px)').matches;
   const [collapsed, setCollapsed] = useState(() => narrow() || readCollapsed());
+  // Search everything: Ctrl/⌘+K, or from the sidebar.
+  const [searching, setSearching] = useState<string>();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearching((s) => (s === undefined ? '' : undefined));
+      }
+    };
+    const onOpen = (e: Event) => setSearching((e as CustomEvent<string>).detail ?? '');
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('mitzi:search', onOpen);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mitzi:search', onOpen);
+    };
+  }, []);
 
   // On small screens the sidebar is an overlay: close it after navigating.
   useEffect(() => {
@@ -67,7 +85,7 @@ export function App() {
   let page;
   switch (route.page) {
     case 'chat':
-      page = <ChatView key="chat" routeId={route.id} />;
+      page = <ChatView key="chat" routeId={route.id} focusMessage={route.message} />;
       break;
     case 'new':
       page = <ChatView key="chat" projectId={route.projectId} botId={route.botId} />;
@@ -118,6 +136,7 @@ export function App() {
 
   return (
     <div className="app">
+      {searching !== undefined && <SearchDialog initial={searching} onClose={() => setSearching(undefined)} />}
       <Sidebar route={route} collapsed={collapsed} onCollapse={toggle} />
       {!collapsed && narrow() && <div className="sidebar-scrim" onClick={toggle} />}
       <main className="main">

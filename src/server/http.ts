@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { Config, loadConfig, MITZI_HOME, PERMISSION_MODES, PermissionMode } from '../config.js';
 import { PROVIDER_PRESETS, providerView, resolveProviders, RoutingClient, usable } from '../providers.js';
-import type { ProviderConfig, ProviderKind } from '../shared/types.js';
+import type { ProviderConfig, ProviderKind, SearchKind } from '../shared/types.js';
 import type { ApprovalAnswer } from '../permissions.js';
 import { Attachment, BankProfile, BankSummary, Bot, BotTools, Chat, DEFAULT_BOT_ID, MemoryType, Project, PublicSettings, SettingsUpdate, StreamEvent } from '../shared/types.js';
 import { toToolSpecs } from '../tools/index.js';
@@ -27,6 +27,7 @@ import { registerImportRoutes } from './importer.js';
 import { mediaUpdate, registerFeatureRoutes } from './routes-features.js';
 import { newId, now, Store } from './store.js';
 import { UsageLog } from './usage.js';
+import { SearchIndex } from './search.js';
 import { BrowserService } from './browser.js';
 import { registerWorkRoutes } from './routes-work.js';
 import { registerWorkflowRoutes } from './routes-workflows.js';
@@ -591,6 +592,19 @@ export function createApp(opts: AppOptions) {
   registerWorkflowRoutes(route, { store, engine: workflows });
   const { scheduler } = registerFeatureRoutes(route, { store, runner, client, config, memory, media, newChat, workflows });
   registerWorkRoutes(route, { store, runner, client, config, memory, usage });
+
+  // Search across chats, artifacts and memories.
+  const search = new SearchIndex(join(opts.dataDir, 'search'), store, memory, () => {
+    const model = store.settings.embeddingModel;
+    if (!model || !hasChatProvider()) return undefined;
+    return { client: router(), model };
+  });
+  route('GET', '/api/search', async ({ query }) => {
+    const q = (query.get('q') ?? '').trim();
+    if (!q) return { hits: [], semantic: false };
+    const kinds = (query.get('kinds') ?? '').split(',').filter((k): k is SearchKind => k === 'message' || k === 'artifact' || k === 'memory');
+    return search.search(q.slice(0, 500), { kinds, projectId: query.get('projectId') || undefined, botId: query.get('botId') || undefined, limit: 60 });
+  });
   scheduler.start();
 
   // ---- Helpers ---------------------------------------------------------------

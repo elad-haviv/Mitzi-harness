@@ -168,7 +168,20 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
         ))}
         <div className="sidebar-search">
           <Search size={14} />
-          <input placeholder="Search chats" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search chats" />
+          <input
+            placeholder="Search chats"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              // Enter searches inside chats, artifacts and memories too.
+              if (e.key === 'Enter') window.dispatchEvent(new CustomEvent('mitzi:search', { detail: query }));
+            }}
+            aria-label="Search chats"
+            title="Filter chat titles; press Enter to search inside everything"
+          />
+          <kbd title="Search everything" onClick={() => window.dispatchEvent(new CustomEvent('mitzi:search', { detail: query }))}>
+            {/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K'}
+          </kbd>
         </div>
       </div>
       <div className="chat-list-head">

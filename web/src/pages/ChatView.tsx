@@ -96,8 +96,11 @@ export function ChatView({
   onArtifact,
   onTurnDone,
   sendRef,
+  focusMessage,
 }: {
   routeId?: string;
+  /** A message to scroll to and highlight (from search). */
+  focusMessage?: number;
   projectId?: string;
   botId?: string;
   /** Shown inside another page (a document's chat): no header or side panel. */
@@ -211,6 +214,22 @@ export function ChatView({
     }, 1500);
     return () => clearInterval(timer);
   }, [background, chatId, reload, refreshChats]);
+
+  // Opened from search: show the message that matched.
+  const focused = useRef<string>(undefined);
+  useEffect(() => {
+    if (focusMessage === undefined || !chat || chat.id !== routeId || focused.current === `${chat.id}:${focusMessage}`) return;
+    const anchors = [...(scroller.current?.querySelectorAll<HTMLElement>('.turn-anchor') ?? [])];
+    const el = anchors.find((a) => Number(a.dataset.msgStart) <= focusMessage && focusMessage <= Number(a.dataset.msgEnd));
+    if (!el) return;
+    focused.current = `${chat.id}:${focusMessage}`;
+    stick.current = false;
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ block: 'center' });
+      el.classList.add('flash');
+      setTimeout(() => el.classList.remove('flash'), 2400);
+    });
+  });
 
   // Keep the newest content in view while the user is at the bottom.
   useEffect(() => {
@@ -795,8 +814,13 @@ export function ChatView({
           {turns.map((t, i) => {
             if (t.kind === 'divider') return <CompactDivider key={`d${i}`} count={t.count} summary={chat?.summary} />;
             if (t.kind === 'user')
-              return <UserTurn key={`u${t.index}`} message={t.message} disabled={running} onEdit={(text, att) => void send(text, att, t.index)} />;
+              return (
+                <div key={`u${t.index}`} className="turn-anchor" data-msg-start={t.index} data-msg-end={t.index}>
+                  <UserTurn message={t.message} disabled={running} onEdit={(text, att) => void send(text, att, t.index)} />
+                </div>
+              );
             return (
+              <div key={`a${t.index}`} className="turn-anchor" data-msg-start={t.index} data-msg-end={t.lastIndex}>
               <AssistantTurn
                 key={`a${t.index}`}
                 id={`${chat?.id}:${t.index}`}
@@ -812,6 +836,7 @@ export function ChatView({
                 onRate={chat ? (v, c) => void rate(t.lastIndex, v, c) : undefined}
                 reviewIndex={chat && !running ? t.lastIndex : undefined}
               />
+              </div>
             );
           })}
           {liveTurn}

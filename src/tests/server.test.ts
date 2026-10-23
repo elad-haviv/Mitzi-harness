@@ -665,6 +665,36 @@ test('workflows: run step by step, branch, run from chats and on a schedule', as
   }
 });
 
+test('search finds messages, artifacts and memories, and points at the message', async () => {
+  reply = () => textChunks('Basil and cherry tomatoes grow well in pots.');
+  const chat = (await call('POST', '/api/chats', {})).data;
+  await stream(`/api/chats/${chat.id}/messages`, { content: 'What can I grow on my sunny balcony?' });
+  reply = () => textChunks('שלום! עגבניות שרי גדלות היטב בעציצים.');
+  await stream(`/api/chats/${chat.id}/messages`, { content: 'ואיך מגדלים עגבניות?' });
+  await call('POST', '/api/banks/mitzi/memories', { content: 'The user keeps a herb garden on the balcony.' });
+  reply = () => toolCallChunks('call_doc', 'Artifact', { command: 'create', type: 'markdown', title: 'Balcony planting calendar', content: '# March\nSow basil indoors.' });
+  const other = (await call('POST', '/api/chats', {})).data;
+  await stream(`/api/chats/${other.id}/messages`, { content: 'Make a planting calendar' });
+
+  const res = (await call('GET', `/api/search?q=${encodeURIComponent('balcony basil')}`)).data;
+  const kinds = res.hits.map((h: any) => h.kind);
+  assert.ok(kinds.includes('message') && kinds.includes('artifact') && kinds.includes('memory'), JSON.stringify(kinds));
+  const msg = res.hits.find((h: any) => h.kind === 'message' && h.chatId === chat.id);
+  assert.ok([0, 1].includes(msg.index));
+  const marked = msg.marks.map(([a, b]: [number, number]) => msg.snippet.slice(a, b).toLowerCase());
+  assert.ok(marked.some((m: string) => m.startsWith('balcony') || m.startsWith('basil')), JSON.stringify(marked));
+  // Messages from one chat are grouped: the best one, plus how many more matched.
+  assert.equal(res.hits.filter((h: any) => h.chatId === chat.id && h.kind === 'message').length, 1);
+  // Other scripts work too.
+  const he = (await call('GET', `/api/search?q=${encodeURIComponent('עגבניות')}`)).data;
+  assert.equal(he.hits[0].chatId, chat.id);
+  assert.equal(he.hits[0].more, 1);
+  // Filters.
+  const onlyMemories = (await call('GET', '/api/search?q=balcony&kinds=memory')).data;
+  assert.ok(onlyMemories.hits.length && onlyMemories.hits.every((h: any) => h.kind === 'memory'));
+  assert.deepEqual((await call('GET', '/api/search?q=')).data.hits, []);
+});
+
 /** Polls until a server reaches a status. */
 async function waitFor(id: string, status: string) {
   for (let i = 0; i < 200; i++) {
