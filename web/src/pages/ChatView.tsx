@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronRight,
   AudioLines,
+  Download,
   CalendarClock,
   FolderOpen,
   GitBranch,
@@ -22,6 +23,7 @@ import {
 } from 'lucide-react';
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, Artifact, Attachment, Chat, ChatMessage, DEFAULT_BOT_ID, RecalledMemory, RepoStatus, StreamEvent } from '../api';
+import { ImportModal } from '../components/Import';
 import { LiveMode } from '../components/LiveMode';
 import { ProjectChip } from '../components/ProjectChip';
 import { speaker } from '../speech';
@@ -103,6 +105,7 @@ export function ChatView({
   const [contextVersion, setContextVersion] = useState(0);
   const [confirmNode, confirm] = useConfirm();
   const [liveMode, setLiveMode] = useState(false);
+  const [importing, setImporting] = useState(false);
   const onArtifactRef = useRef(onArtifact);
   onArtifactRef.current = onArtifact;
 
@@ -545,6 +548,12 @@ export function ChatView({
         )}
         {composerNode}
         {showStarters && bot && <Starters botId={bot.id} onPick={(s) => composer.current?.setText(s)} />}
+        {!app.chats.length && !project && (
+          <button className="link-btn small import-nudge" onClick={() => setImporting(true)}>
+            <Download size={13} /> Coming from ChatGPT, Claude or Gemini? Bring your memories and chats
+          </button>
+        )}
+        {importing && <ImportModal onClose={() => setImporting(false)} onDone={() => void app.refreshChats()} />}
       </div>
     </div>
   );
@@ -614,6 +623,12 @@ export function ChatView({
               <span>
                 Branched from <a href={href({ page: 'chat', id: chat.branchedFrom.chatId })}>{chat.branchedFrom.title}</a>
               </span>
+            </div>
+          )}
+          {chat?.imported && (
+            <div className="origin-banner">
+              <Download size={14} />
+              <span>Imported from {chat.imported.source === 'chatgpt' ? 'ChatGPT' : 'Claude'}. You can continue it here.</span>
             </div>
           )}
           {chat?.taskId && (

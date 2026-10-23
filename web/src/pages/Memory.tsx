@@ -1,6 +1,7 @@
-import { Brain, Check, Loader2, MessageCircleQuestion, Pencil, Plus, Search, Settings2, Sparkles, Trash2, X } from 'lucide-react';
+import { Brain, Check, Download, Loader2, MessageCircleQuestion, Pencil, Plus, Search, Settings2, Sparkles, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, BankSummary, DEFAULT_BOT_ID, MemoryType, MemoryUnit, RecalledMemory, ReflectResult } from '../api';
+import { ImportModal } from '../components/Import';
 import { Markdown } from '../components/Markdown';
 import { Empty, Toggle, useConfirm } from '../components/ui';
 import { href, navigate } from '../router';
@@ -21,6 +22,8 @@ function total(b: BankSummary): number {
 export function MemoryPage({ botId }: { botId?: string }) {
   const { settings, refreshSettings, bots, toast } = useApp();
   const [banks, setBanks] = useState<BankSummary[]>();
+  const [importing, setImporting] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const selectedId = botId ?? DEFAULT_BOT_ID;
   const bot = bots.find((b) => b.id === selectedId);
 
@@ -48,6 +51,18 @@ export function MemoryPage({ botId }: { botId?: string }) {
               to each new message.
             </p>
           </div>
+          <button className="btn" onClick={() => setImporting(true)} title="Bring memories and chats over from ChatGPT, Claude, Gemini and others">
+            <Download size={15} /> Import from other AIs
+          </button>
+          {importing && (
+            <ImportModal
+              onClose={() => setImporting(false)}
+              onDone={() => {
+                void loadBanks();
+                setRefreshKey((k) => k + 1);
+              }}
+            />
+          )}
           {settings && (
             <label className="row small">
               {settings.memoryEnabled ? 'Memory on' : 'Memory off'}
@@ -92,7 +107,7 @@ export function MemoryPage({ botId }: { botId?: string }) {
           </div>
 
           {bank && bot ? (
-            <BankDetail key={bank.bot.id} bank={bank} onChanged={loadBanks} />
+            <BankDetail key={`${bank.bot.id}-${refreshKey}`} bank={bank} onChanged={loadBanks} />
           ) : (
             <div className="muted">{banks ? 'Bot not found.' : 'Loading…'}</div>
           )}

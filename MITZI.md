@@ -51,4 +51,8 @@
   cloning a repository creates (or reuses) a project whose `folder` is set, so chats get the coding tools. git always
   runs through `src/server/git.ts` (no prompts). Clone tokens live in `data/repo-tokens` (0600) and are passed to
   git through `GIT_CONFIG_*` environment variables, never the remote URL.
+- Importing (`src/server/importer.ts`, `src/shared/importFormats.ts`): the browser unzips a data export
+  (`web/src/unzip.ts`), converts it with the shared format readers, and posts conversations in batches; imported chats
+  carry `chat.imported` so importing twice doesn't duplicate. Pasted memory summaries are split by the fast model
+  (falling back to one memory per line) and saved with `remember`.
 - The logo is the 🐱 emoji (`LOGO` in `web/src/state.tsx` and `src/server/http.ts`); the default bot uses it as its icon.

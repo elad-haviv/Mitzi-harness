@@ -220,6 +220,8 @@ export interface Chat {
   focusArtifactId?: string;
   /** Set on chats created by a scheduled task. */
   taskId?: string;
+  /** Set on chats imported from another assistant. */
+  imported?: { source: ImportSource; id: string };
   createdAt: string;
   updatedAt: string;
 }
@@ -665,4 +667,18 @@ export interface RepoStatus {
   /** Files changed, added or deleted in the working tree. */
   changed: number;
   remote?: string;
+}
+
+// ---------- Importing from other assistants ----------
+
+export type ImportSource = 'chatgpt' | 'claude';
+
+/** A conversation from another assistant's data export, in a common shape. */
+export interface ImportedConversation {
+  /** The other app's id, so importing twice doesn't duplicate. */
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: { role: 'user' | 'assistant'; text: string; ts?: number }[];
 }

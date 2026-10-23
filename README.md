@@ -67,6 +67,7 @@ An open-source, Claude-style AI workspace that runs on **any model available thr
 - **Reflect:** ask a bank a broad question and it reasons over everything it remembers.
 - **Per-bank settings:** each bank has a *mission* (what to focus on) and a *disposition* (skepticism, literalism and empathy, 1–5) that shapes how memories are formed and interpreted.
 - **Memory page:** browse, search, edit, forget or teach each bank, test recall, or ask it to reflect. The model can also save, search and forget memories itself.
+- **Import from other AIs:** like Gemini's memory import. Mitzi gives you a prompt to run in ChatGPT, Claude or Gemini; paste the answer back and Mitzi splits it into separate memories for you to review, edit and save to any bot. You can also import your **chat history** from a ChatGPT or Claude data export (the .zip, unpacked in your browser): conversations appear in your chat list and can be continued, and Mitzi can learn about you from the most recent ones in the background.
 - **Hindsight server (optional):** you can point Mitzi at a real Hindsight server instead of the built-in engine (Settings → Memory).
 
 ![Memory bank](docs/screenshots/memory-bank.png)

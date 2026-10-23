@@ -32,6 +32,8 @@ import type {
   ScheduledTask,
   DirListing,
   RepoStatus,
+  ImportSource,
+  ImportedConversation,
 } from '../../src/shared/types';
 
 export type * from '../../src/shared/types';
@@ -173,6 +175,12 @@ export const api = {
   cloneRepo: (body: { url: string; branch?: string; token?: string; parent?: string; name?: string }) => request<ProjectView>('POST', '/api/repos/clone', body),
   repoStatus: (projectId: string) => request<RepoStatus | null>('GET', `/api/projects/${projectId}/git`),
   pull: (projectId: string) => request<{ output: string; status?: RepoStatus }>('POST', `/api/projects/${projectId}/pull`, {}),
+
+  importPrompt: () => request<{ prompt: string }>('GET', '/api/import/prompt'),
+  parseMemories: (text: string) => request<{ memories: string[]; fallback?: boolean }>('POST', '/api/import/memory/parse', { text }),
+  importMemories: (botId: string, memories: string[]) => request<{ imported: number }>('POST', '/api/import/memory', { botId, memories }),
+  importChats: (body: { source: ImportSource; botId: string; conversations: ImportedConversation[]; learn: boolean }) =>
+    request<{ imported: number; skipped: number; learning: number }>('POST', '/api/import/chats', body),
 
   bots: () => request<Bot[]>('GET', '/api/bots'),
   createBot: (body: Partial<Bot>) => request<Bot>('POST', '/api/bots', body),

@@ -22,6 +22,7 @@ import { MediaService } from './media.js';
 import { StarterService } from './starters.js';
 import { migrateDocs } from './workspace.js';
 import { registerFolderRoutes } from './folders.js';
+import { registerImportRoutes } from './importer.js';
 import { mediaUpdate, registerFeatureRoutes } from './routes-features.js';
 import { newId, now, Store } from './store.js';
 import { clamp, fail, Handler, HttpError, Req, STREAMED, str } from './util.js';
@@ -554,6 +555,7 @@ export function createApp(opts: AppOptions) {
 
   registerExtensionRoutes(route, extensions);
   registerFolderRoutes(route, store, projectView);
+  registerImportRoutes(route, { store, memory, client, config, newChat, memoryOn: (bot) => runner.memoryOn(bot) });
   const { scheduler } = registerFeatureRoutes(route, { store, runner, client, config, memory, media, newChat });
   scheduler.start();
 

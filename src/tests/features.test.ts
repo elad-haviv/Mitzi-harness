@@ -8,6 +8,7 @@ import { toAnthropic } from '../anthropic.js';
 import { resolveProviders, RoutingClient } from '../providers.js';
 import { nextRun, parseCron, validateSchedule } from '../server/scheduler.js';
 import { tempDir, textChunks, toolCallChunks } from './helpers.js';
+import { fromChatGPT, fromClaude, parseExport } from '../shared/importFormats.js';
 
 process.env.MITZI_HOME = tempDir();
 process.env.OPENROUTER_API_KEY = 'test-key';
@@ -23,7 +24,7 @@ let close: () => Promise<void>;
 let reply: (body: any) => object[] = () => textChunks('Hello!');
 const requests: any[] = [];
 const isBackground = (body: any) =>
-  body.max_tokens === 60 || /Extract memories worth keeping|You maintain \\?"observations|reflective memory of|rated an AI assistant|conversation starters/.test(JSON.stringify(body.messages?.[0] ?? ''));
+  body.max_tokens === 60 || /Extract memories worth keeping|You maintain \\?"observations|reflective memory of|rated an AI assistant|conversation starters|another AI assistant wrote/.test(JSON.stringify(body.messages?.[0] ?? ''));
 const lastMain = (): any => requests.filter((r) => !isBackground(r)).at(-1);
 
 before(async () => {
@@ -52,6 +53,8 @@ before(async () => {
       const chunks =
         body.max_tokens === 60
           ? textChunks('Generated Title')
+          : /another AI assistant wrote/.test(text)
+            ? textChunks('{"memories": ["The user is named Dana.", "The user lives in Haifa and works as a nurse."]}')
           : /conversation starters/.test(text)
             ? textChunks(`Sure:\n["Continue my ${/Trip notes|Rome/.test(text) ? 'Rome' : 'other'} plans", "What's new in AI?"]`)
             : /rated an AI assistant/.test(text)
@@ -205,6 +208,79 @@ test('folders: browse, open as a project, clone a repository, status and pull', 
   assert.match(pulled.output, /CHANGELOG|Fast-forward|file changed/);
   assert.equal(readFileSync(join(clones, 'my-repo', 'CHANGELOG.md'), 'utf8'), 'v2\n');
   assert.equal((await call('GET', `/api/projects/${p1.id}/git`)).status, 400);
+});
+
+const CHATGPT_EXPORT = [
+  {
+    title: 'Trip ideas',
+    create_time: 1700000000.5,
+    update_time: 1700000100,
+    conversation_id: 'conv-1',
+    current_node: 'a2',
+    mapping: {
+      root: { message: null, parent: null, children: ['sys'] },
+      sys: { message: { author: { role: 'system' }, content: { content_type: 'text', parts: [''] } }, parent: 'root', children: ['u1'] },
+      u1: { message: { author: { role: 'user' }, content: { content_type: 'text', parts: ['Where should I go in May?'] }, create_time: 1700000001 }, parent: 'sys', children: ['a1', 'a2'] },
+      a1: { message: { author: { role: 'assistant' }, content: { content_type: 'text', parts: ['An old draft answer'] } }, parent: 'u1', children: [] },
+      a2: { message: { author: { role: 'assistant' }, content: { content_type: 'text', parts: ['Try Lisbon.'] } }, parent: 'u1', children: [] },
+    },
+  },
+  { title: 'Empty', mapping: { r: { message: null, parent: null, children: [] } }, current_node: 'r' },
+];
+
+const CLAUDE_EXPORT = [
+  {
+    uuid: 'c-1',
+    name: 'Bread recipe',
+    created_at: '2025-01-02T10:00:00Z',
+    updated_at: '2025-01-02T11:00:00Z',
+    chat_messages: [
+      { sender: 'human', text: 'How do I make sourdough?', content: [{ type: 'text', text: 'How do I make sourdough?' }], created_at: '2025-01-02T10:00:00Z' },
+      { sender: 'assistant', text: '', content: [{ type: 'text', text: 'Start with a starter.' }, { type: 'tool_use' }] },
+    ],
+  },
+];
+
+test('chat exports from ChatGPT and Claude are read into conversations', () => {
+  const gpt = fromChatGPT(CHATGPT_EXPORT);
+  assert.equal(gpt.length, 1);
+  assert.deepEqual(gpt[0].messages.map((m) => [m.role, m.text]), [['user', 'Where should I go in May?'], ['assistant', 'Try Lisbon.']]);
+  assert.equal(gpt[0].id, 'conv-1');
+  assert.equal(gpt[0].createdAt, new Date(1700000000500).toISOString());
+  const claude = fromClaude(CLAUDE_EXPORT);
+  assert.deepEqual(claude[0].messages.map((m) => m.text), ['How do I make sourdough?', 'Start with a starter.']);
+  assert.equal(parseExport(CLAUDE_EXPORT).source, 'claude');
+  assert.throws(() => parseExport([{ foo: 1 }]), /recognize/);
+});
+
+test('importing memories and chats from other assistants', async () => {
+  assert.match((await call('GET', '/api/import/prompt')).data.prompt, /everything you know or remember about me/);
+  const parsed = (await call('POST', '/api/import/memory/parse', { text: 'Name: Dana. Lives in Haifa, nurse.' })).data;
+  assert.deepEqual(parsed.memories, ['The user is named Dana.', 'The user lives in Haifa and works as a nurse.']);
+  const bot = (await call('POST', '/api/bots', { name: 'Importer' })).data;
+  assert.equal((await call('POST', '/api/import/memory', { botId: bot.id, memories: parsed.memories })).data.imported, 2);
+  const bank = (await call('GET', `/api/banks/${bot.id}/memories`)).data;
+  assert.ok(bank.items.some((m: any) => m.text === 'The user is named Dana.'));
+
+  const extractions = () => requests.filter((r) => /Extract memories worth keeping/.test(JSON.stringify(r.messages?.[0] ?? ''))).length;
+  const before = extractions();
+  const conversations = fromChatGPT(CHATGPT_EXPORT);
+  const res = (await call('POST', '/api/import/chats', { source: 'chatgpt', botId: bot.id, conversations, learn: true })).data;
+  assert.deepEqual(res, { imported: 1, skipped: 0, learning: 1 });
+  const chat = (await call('GET', '/api/chats')).data.find((c: any) => c.imported?.id === 'conv-1');
+  assert.equal(chat.title, 'Trip ideas');
+  assert.equal(chat.botId, bot.id);
+  const full = (await call('GET', `/api/chats/${chat.id}`)).data;
+  assert.deepEqual(full.messages.map((m: any) => m.content), ['Where should I go in May?', 'Try Lisbon.']);
+  // Learning happens in the background.
+  await until(async () => extractions() > before || undefined);
+  // Importing again skips what's already there.
+  assert.deepEqual((await call('POST', '/api/import/chats', { source: 'chatgpt', botId: bot.id, conversations })).data, { imported: 0, skipped: 1, learning: 0 });
+
+  // An imported chat continues like any other.
+  reply = () => textChunks('Lisbon in May is lovely.');
+  await send(chat.id, 'Tell me more');
+  assert.match(JSON.stringify(lastMain().messages), /Try Lisbon/);
 });
 
 test('cron and schedules compute the next run in local time', () => {
