@@ -53,6 +53,32 @@ export async function mockOpenRouter(script: object[][]): Promise<{ url: string;
   return { url: `http://127.0.0.1:${port}/api/v1`, requests, server };
 }
 
+/** Fake OpenRouter that routes scripted SSE chunks by model id (for parallel /compare tests). */
+export async function mockByModel(script: Map<string, object[][]>): Promise<{ url: string; requests: any[]; server: Server }> {
+  const requests: any[] = [];
+  const server = createServer((req, res) => {
+    let body = '';
+    req.on('data', (d) => (body += d));
+    req.on('end', () => {
+      const parsed = JSON.parse(body);
+      requests.push(parsed);
+      const chunks = script.get(parsed.model)?.shift();
+      if (!chunks) {
+        res.writeHead(500, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: { message: 'script exhausted' } }));
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.write(': OPENROUTER PROCESSING\n\n');
+      for (const c of chunks) res.write(`data: ${JSON.stringify(c)}\n\n`);
+      res.end('data: [DONE]\n\n');
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const { port } = server.address() as AddressInfo;
+  return { url: `http://127.0.0.1:${port}/api/v1`, requests, server };
+}
+
 export const textChunks = (text: string) => [
   { choices: [{ delta: { content: text.slice(0, 3) } }] },
   { choices: [{ delta: { content: text.slice(3) }, finish_reason: 'stop' }] },

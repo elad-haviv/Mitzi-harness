@@ -134,3 +134,154 @@ export class TerminalUI implements UI {
     this.breakLine();
   }
 }
+
+/** Hard-wraps text into pane rows, keeping at most maxRows with an overflow marker. */
+function wrapPane(text: string, width: number, maxRows: number): string[] {
+  const all: string[] = [];
+  for (const raw of text.replace(/\r/g, '').split('\n')) {
+    if (!raw) {
+      all.push('');
+      continue;
+    }
+    for (let i = 0; i < raw.length; i += width) all.push(raw.slice(i, i + width));
+  }
+  while (all.length && all[all.length - 1] === '') all.pop();
+  if (all.length <= maxRows) return all;
+  return [...all.slice(0, maxRows - 1), `… +${all.length - (maxRows - 1)} more lines`];
+}
+
+/**
+ * Live side-by-side renderer for /compare: A and B stream into two columns that
+ * are redrawn in place with cursor controls. Without a TTY (tests, pipes) it
+ * degrades to printing both answers once they finish.
+ */
+export class CompareUI {
+  private static readonly MAX_ROWS = 20;
+
+  private textA = '';
+  private textB = '';
+  private doneA = false;
+  private doneB = false;
+  private readonly startedAt = Date.now();
+  private endedA?: number;
+  private endedB?: number;
+  private paintedRows = 0;
+  private ticks = 0;
+  private ticker?: NodeJS.Timeout;
+  private flush?: NodeJS.Timeout;
+  private dirty = false;
+
+  constructor(
+    private readonly labelA: string,
+    private readonly labelB: string,
+    private readonly out: Writable & { isTTY?: boolean } = process.stdout,
+  ) {}
+
+  private get live(): boolean {
+    return !!this.out.isTTY;
+  }
+
+  start(): void {
+    this.out.write(`  ${color.bold('A')} ${color.dim(this.labelA)}    ${color.bold('B')} ${color.dim(this.labelB)}\n`);
+    if (!this.live) return;
+    this.out.write(`  ${color.dim('Both answers stream below — Ctrl+C skips the race entirely.')}\n`);
+    this.ticker = setInterval(() => this.schedule(), 150);
+  }
+
+  pushA(chunk: string): void {
+    this.textA += chunk;
+    this.schedule();
+  }
+
+  pushB(chunk: string): void {
+    this.textB += chunk;
+    this.schedule();
+  }
+
+  endA(): void {
+    this.doneA = true;
+    this.endedA ??= Date.now();
+    this.schedule();
+  }
+
+  endB(): void {
+    this.doneB = true;
+    this.endedB ??= Date.now();
+    this.schedule();
+  }
+
+  /** Marks a side as failed, showing the error in its column. */
+  failA(message: string): void {
+    this.textA = `${this.textA ? `${this.textA}\n` : ''}⚠ ${message}`;
+    this.endA();
+  }
+
+  failB(message: string): void {
+    this.textB = `${this.textB ? `${this.textB}\n` : ''}⚠ ${message}`;
+    this.endB();
+  }
+
+  /** Final paint once both sides settled; returns per-side elapsed seconds. */
+  finish(): { a: number; b: number } {
+    if (this.ticker) {
+      clearInterval(this.ticker);
+      this.ticker = undefined;
+    }
+    if (this.flush) {
+      clearTimeout(this.flush);
+      this.flush = undefined;
+    }
+    const elapsed = (ended?: number) => ((ended ?? Date.now()) - this.startedAt) / 1000;
+    const result = { a: elapsed(this.endedA), b: elapsed(this.endedB) };
+    if (!this.live) {
+      const rule = color.dim('─'.repeat(60));
+      this.out.write(
+        `  ${rule}\n` +
+          `${color.bold('A')} ${color.dim(this.labelA)}\n${this.textA || color.dim('(no output)')}\n` +
+          `${color.bold('B')} ${color.dim(this.labelB)}\n${this.textB || color.dim('(no output)')}\n`,
+      );
+      return result;
+    }
+    this.repaint();
+    return result;
+  }
+
+  private schedule(): void {
+    if (!this.live || (this.doneA && this.doneB)) return;
+    this.dirty = true;
+    if (this.flush) return;
+    this.flush = setTimeout(() => {
+      this.flush = undefined;
+      if (this.dirty) this.repaint();
+    }, 60);
+  }
+
+  private repaint(): void {
+    this.dirty = false;
+    const w = this.width();
+    const paneA = wrapPane(this.textA, w, CompareUI.MAX_ROWS);
+    const paneB = wrapPane(this.textB, w, CompareUI.MAX_ROWS);
+    const rows = Math.max(paneA.length, paneB.length, 1);
+    const spinner = SPINNER[this.ticks++ % SPINNER.length];
+    const elapsed = (ended?: number) => ((ended ?? Date.now()) - this.startedAt) / 1000;
+    const status = (done: boolean, ended?: number) =>
+      done ? `${color.green('✓')} ${elapsed(ended).toFixed(1)}s` : `${color.magenta(spinner)} ${color.dim(`${elapsed().toFixed(1)}s…`)}`;
+    const rule = '─'.repeat(w);
+    const block: string[] = [`  ${color.gray(rule)}   ${color.gray(rule)}`];
+    for (let i = 0; i < rows; i++) {
+      block.push(`  ${(paneA[i] ?? '').padEnd(w)}${color.gray(' │ ')}${paneB[i] ?? ''}`);
+    }
+    block.push(`  ${color.gray(rule)}   ${color.gray(rule)}`);
+    block.push(`  ${status(this.doneA, this.endedA)}    ${status(this.doneB, this.endedB)}`);
+
+    if (this.paintedRows > 0) this.out.write(`\x1b[${this.paintedRows}A`);
+    this.out.write(block.map((line) => `${line}\x1b[K\n`).join(''));
+    if (block.length < this.paintedRows) this.out.write('\x1b[J');
+    this.paintedRows = block.length;
+  }
+
+  private width(): number {
+    const cols = (this.out as { columns?: number }).columns ?? 100;
+    return Math.max(24, Math.min(80, Math.floor((cols - 6) / 2)));
+  }
+}

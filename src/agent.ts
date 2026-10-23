@@ -90,7 +90,7 @@ export class Agent {
     return copy;
   }
 
-  private recordUsage(usage?: Usage): void {
+  recordUsage(usage?: Usage): void {
     this.usage.requests++;
     if (!usage) return;
     this.usage.promptTokens += usage.prompt_tokens ?? 0;

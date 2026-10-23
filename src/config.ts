@@ -11,6 +11,8 @@ export interface Config {
   model: string;
   /** Cheaper model used for summarising history on /compact. Defaults to `model`. */
   smallModel?: string;
+  /** Challenger for /compare. If unset, /compare needs explicit model ids. */
+  compareModel?: string;
   maxTokens?: number;
   temperature?: number;
   maxTurns: number;

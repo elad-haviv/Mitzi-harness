@@ -1,10 +1,12 @@
 import * as readline from 'node:readline/promises';
 import type { Agent } from './agent.js';
 import { PERMISSION_MODES, PermissionMode } from './config.js';
+import { applyOutcome, parseCompareArgs, runCompare, tallyFor } from './compare.js';
+import { loadInsights, recordPick, renderInsights, saveInsights } from './insights.js';
 import type { OpenRouterClient } from './openrouter.js';
 import { listSessions, newSessionId, saveSession, SessionData } from './session.js';
 import { bashTool } from './tools/bash.js';
-import { color, UI } from './ui.js';
+import { color, CompareUI, UI } from './ui.js';
 
 export interface ReplOptions {
   agent: Agent;
@@ -32,6 +34,8 @@ ${color.bold('Commands')}
   /cost                Show token usage and cost for this session
   /todos               Show the current todo list
   /sessions            List saved sessions for this directory
+  /compare [a] [b] …   Send one prompt to two models side by side; pick the winner
+  /insights            Show your model preferences tallied from /compare picks
   /init                Create a MITZI.md with notes about this codebase
   /exit                Quit
 
@@ -89,6 +93,21 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
     } finally {
       controller = undefined;
       persist();
+    }
+  };
+
+  const askPick = async (): Promise<'A' | 'B' | 'skip'> => {
+    for (;;) {
+      let answer: string;
+      try {
+        answer = (await rl.question(`  Winner: ${color.bold('A')}, ${color.bold('B')}, or ${color.bold('s')}kip? `)).trim().toLowerCase();
+      } catch {
+        return 'skip';
+      }
+      if (answer === 'a') return 'A';
+      if (answer === 'b') return 'B';
+      if (!answer || answer === 's' || answer === 'skip') return 'skip';
+      ui.warn('Answer a, b, or s(kip).');
     }
   };
 
@@ -155,6 +174,59 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
         process.stdout.write(`  ${color.cyan(s.id)}  ${color.dim(s.updatedAt.slice(0, 16).replace('T', ' '))}  ${s.title || color.dim('(untitled)')}\n`);
       }
       ui.info('Resume one with: mitzi --resume <id>');
+    },
+    compare: async (arg) => {
+      if (!arg) {
+        ui.info('Usage: /compare [modelA] [modelB] <prompt> — defaults: current model vs config.compareModel');
+        return;
+      }
+      // Known model ids keep prompts like "npm/test scripts" from being misread as model ids.
+      let knownIds: Set<string> | undefined;
+      try {
+        knownIds = new Set((await client.listModels()).map((m) => m.id));
+      } catch {
+        // Offline or API hiccup: fall back to shape-only matching.
+      }
+      const parsed = parseCompareArgs(arg, agent.model, agent.config.compareModel, knownIds);
+      if ('error' in parsed) return ui.error(parsed.error);
+
+      const race = new AbortController();
+      controller = race;
+      try {
+        const cui = new CompareUI(parsed.modelA, parsed.modelB);
+        const outcome = await runCompare({
+          client,
+          ui: cui,
+          modelA: parsed.modelA,
+          modelB: parsed.modelB,
+          prompt: parsed.prompt,
+          signal: race.signal,
+          onUsage: (u) => agent.recordUsage(u),
+          pick: () => askPick(),
+        });
+        if (race.signal.aborted) {
+          ui.info('Race interrupted — nothing added, nothing tallied.');
+        } else {
+          const { winner, loser } = tallyFor(outcome);
+          const insights = loadInsights();
+          recordPick(insights, winner, loser);
+          saveInsights(insights);
+          if (outcome.winner) {
+            applyOutcome(agent, outcome, parsed.prompt);
+            persist();
+            ui.info(`Winner (${outcome.winner}) added as this turn's answer. Model unchanged.`);
+          } else {
+            ui.info('Skipped — nothing added to the conversation.');
+          }
+        }
+      } finally {
+        if (controller === race) controller = undefined;
+      }
+    },
+    insights: async () => {
+      const data = loadInsights();
+      ui.info(`Comparisons: ${data.comparisons}  ·  skipped: ${data.skipped}`);
+      for (const line of renderInsights(data)) process.stdout.write(`${line}\n`);
     },
     init: async () => runAgent(INIT_PROMPT),
   };
