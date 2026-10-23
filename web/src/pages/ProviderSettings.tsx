@@ -1,5 +1,6 @@
 import { AlertTriangle, Check, ExternalLink, KeyRound, Loader2, Mic, Plus, RefreshCw, Trash2, Volume2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import { languageName, LANGUAGES } from '../languages';
 import { api, MediaModels, MediaSettings, ModelInfo, ProviderKind, ProviderPresetView, ProviderView } from '../api';
 import { ModelPicker } from '../components/ModelPicker';
 import { Modal, Toggle } from '../components/ui';
@@ -315,6 +316,20 @@ export function MediaSettingsSection() {
           <span className="field-hint">{f.hint}</span>
         </div>
       ))}
+      <div className="field">
+        <span className="field-label">Language you speak</span>
+        <select className="select" style={{ maxWidth: 320 }} value={prefs.language} onChange={(e) => setPref({ language: e.target.value })}>
+          <option value="">{settings.media.transcribeModel ? 'Detect automatically' : `Same as the browser (${languageName(navigator.language || 'en-US')})`}</option>
+          {LANGUAGES.map((l) => (
+            <option key={l.code} value={l.code}>
+              {l.name}
+            </option>
+          ))}
+        </select>
+        <span className="field-hint">
+          For live conversations. {settings.media.transcribeModel ? 'Your transcription model detects the language, so you can switch languages mid-conversation.' : 'The browser’s speech recognition understands one language at a time; choose a transcription model above to have the language detected for you.'} Answers are read in their own language, with a voice that speaks it.
+        </span>
+      </div>
       {settings.media.speechModel && (
         <form
           className="field"

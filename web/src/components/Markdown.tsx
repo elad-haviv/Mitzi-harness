@@ -149,6 +149,19 @@ function MarkdownBody({ text }: { text: string }) {
         rehypePlugins={rehype}
         components={{
           pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
+          // Each paragraph takes the direction of its own text, so Hebrew and Arabic read right to left.
+          p: ({ children }) => <p dir="auto">{children}</p>,
+          li: ({ children }) => <li dir="auto">{children}</li>,
+          ul: ({ children }) => <ul dir="auto">{children}</ul>,
+          ol: ({ children, start }) => (
+            <ol dir="auto" start={start}>
+              {children}
+            </ol>
+          ),
+          h1: ({ children }) => <h1 dir="auto">{children}</h1>,
+          h2: ({ children }) => <h2 dir="auto">{children}</h2>,
+          h3: ({ children }) => <h3 dir="auto">{children}</h3>,
+          blockquote: ({ children }) => <blockquote dir="auto">{children}</blockquote>,
           a: ({ children, href }) => (
             <a href={href} target="_blank" rel="noreferrer noopener">
               {children}

@@ -213,7 +213,11 @@ function UserBubble({ message, onEdit, disabled }: { message: ChatMessage; onEdi
           {showPrompt && <div className="bubble small">{text}</div>}
         </>
       ) : (
-        text && <div className="bubble">{text}</div>
+        text && (
+          <div className="bubble" dir="auto">
+            {text}
+          </div>
+        )
       )}
       {!editing && (
         <div className="msg-actions">

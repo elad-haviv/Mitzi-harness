@@ -159,6 +159,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
           autoFocus={props.autoFocus}
           placeholder={props.placeholder ?? 'Message Mitzi…'}
           aria-label="Message"
+          dir="auto"
           onChange={(e) => setText(e.target.value)}
           onPaste={(e) => {
             const files = Array.from(e.clipboardData.files);

@@ -1,6 +1,7 @@
-import { Mic, MicOff, PhoneOff, SkipForward } from 'lucide-react';
+import { Languages, Mic, MicOff, PhoneOff, SkipForward } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { hasBrowserRecognition, listen, ListenHandle, speaker, stripMarkdown } from '../speech';
+import { guessLanguage, languageName, LANGUAGES } from '../languages';
+import { hasBrowserRecognition, listen, ListenHandle, loadVoicePrefs, saveVoicePrefs, speaker, stripMarkdown } from '../speech';
 import { useApp } from '../state';
 
 type Phase = 'starting' | 'listening' | 'thinking' | 'speaking' | 'paused' | 'error';
@@ -24,9 +25,12 @@ export function LiveMode({
   onSend,
   onInterrupt,
   onClose,
+  recentText = '',
 }: {
   title: string;
   emoji?: string;
+  /** The conversation so far, to guess which language you speak. */
+  recentText?: string;
   onSend(text: string): Promise<string | undefined>;
   onInterrupt(): void;
   onClose(): void;
@@ -38,6 +42,7 @@ export function LiveMode({
   const [error, setError] = useState('');
   const [level, setLevel] = useState(0);
   const listener = useRef<ListenHandle | undefined>(undefined);
+  const spoken = useRef<string | undefined>(undefined);
   const alive = useRef(true);
   const phaseRef = useRef<Phase>('starting');
   const emptyTurns = useRef(0);
@@ -46,6 +51,13 @@ export function LiveMode({
   sendRef.current = onSend;
 
   const canTranscribe = !!settings?.media.transcribeModel;
+  // '' = detect: with a transcription model the server detects it; otherwise guess from the chat or the browser.
+  const [language, setLanguage] = useState(() => loadVoicePrefs().language);
+  const languageRef = useRef(language);
+  languageRef.current = language;
+  const guessed = guessLanguage(recentText);
+  const detecting = !language && canTranscribe;
+  const listeningIn = language || guessed || navigator.language || 'en-US';
   const go = (p: Phase) => {
     phaseRef.current = p;
     setPhase(p);
@@ -78,6 +90,8 @@ export function LiveMode({
             return startListening();
           }
           emptyTurns.current = 0;
+          // Answer in the voice of the language just spoken.
+          spoken.current = guessLanguage(text) ?? (languageRef.current || guessed || undefined);
           setHeard(text);
           setAnswer('');
           go('thinking');
@@ -86,15 +100,28 @@ export function LiveMode({
           if (!reply?.trim()) return startListening();
           setAnswer(reply);
           go('speaking');
-          await speaker.speak('live', reply).catch((err) => {
+          await speaker.speak('live', reply, spoken.current).catch((err) => {
             setError((err as Error).message);
           });
           if (alive.current && (phaseRef.current as Phase) === 'speaking') startListening();
         },
       },
-      { preferServer: canTranscribe && !hasBrowserRecognition() },
+      // The browser's recognizer hears one language only; the server's model detects it.
+      { preferServer: canTranscribe && (!hasBrowserRecognition() || !languageRef.current), language: languageRef.current || (canTranscribe ? '' : guessed || '') },
     );
-  }, [canTranscribe]);
+  }, [canTranscribe, guessed]);
+
+  const changeLanguage = (code: string) => {
+    setLanguage(code);
+    languageRef.current = code;
+    saveVoicePrefs({ ...loadVoicePrefs(), language: code });
+    // Start over in the new language.
+    listener.current?.stop();
+    listener.current = undefined;
+    speaker.stop();
+    setError('');
+    setTimeout(startListening, 50);
+  };
 
   useEffect(() => {
     alive.current = true;
@@ -133,6 +160,17 @@ export function LiveMode({
         <span className="live-title">
           {emoji && <span>{emoji}</span>} {title}
         </span>
+        <label className="live-lang" title={detecting ? 'Your transcription model detects the language you speak' : 'The language you speak'}>
+          <Languages size={15} />
+          <select value={language} onChange={(e) => changeLanguage(e.target.value)} aria-label="Language you speak">
+            <option value="">{detecting ? 'Detect language' : `Auto (${languageName(listeningIn)})`}</option>
+            {LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+        </label>
         <span className="muted small">Live conversation · Esc to end</span>
       </div>
       <div className="live-center">
@@ -146,8 +184,21 @@ export function LiveMode({
           <p className="live-caption error">{error}</p>
         ) : (
           <>
-            {heard && <p className="live-caption you">“{heard}”</p>}
-            {answer && (phase === 'speaking' || phase === 'paused') && <p className="live-caption">{stripMarkdown(answer).slice(0, 400)}</p>}
+            {heard && (
+              <p className="live-caption you" dir="auto">
+                “{heard}”
+              </p>
+            )}
+            {answer && (phase === 'speaking' || phase === 'paused') && (
+              <p className="live-caption" dir="auto">
+                {stripMarkdown(answer).slice(0, 400)}
+              </p>
+            )}
+            {phase === 'listening' && !detecting && !heard && (
+              <p className="muted small live-lang-hint">
+                Listening in {languageName(listeningIn)}. Speaking another language? Choose it above{canTranscribe ? '' : ', or set a transcription model in Settings → Media & voice to detect it automatically'}.
+              </p>
+            )}
             {phase === 'paused' && <p className="muted small">Tap the microphone to keep talking.</p>}
           </>
         )}

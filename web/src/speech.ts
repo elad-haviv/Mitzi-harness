@@ -2,6 +2,7 @@
 // for live mode (the browser's speech recognition, or recording + server transcription).
 import { useEffect, useState } from 'react';
 import { api } from './api';
+import { guessLanguage, voiceFor } from './languages';
 
 /** Turns markdown into plain text that sounds right when spoken. */
 export function stripMarkdown(md: string): string {
@@ -27,15 +28,17 @@ export interface VoicePrefs {
   /** Browser voice name; empty = the system default. */
   voice: string;
   rate: number;
+  /** The language you speak (BCP 47, e.g. "he-IL"); empty = detect it. */
+  language: string;
 }
 
 const PREFS_KEY = 'mitzi.voicePrefs';
 
 export function loadVoicePrefs(): VoicePrefs {
   try {
-    return { voice: '', rate: 1, ...JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') };
+    return { voice: '', rate: 1, language: '', ...JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') };
   } catch {
-    return { voice: '', rate: 1 };
+    return { voice: '', rate: 1, language: '' };
   }
 }
 
@@ -82,8 +85,8 @@ class Speaker {
     this.set(null);
   }
 
-  /** Speaks text; resolves when it finishes or is stopped. */
-  async speak(id: string, markdown: string): Promise<void> {
+  /** Speaks text; resolves when it finishes or is stopped. `lang` is a hint for which voice to use. */
+  async speak(id: string, markdown: string, lang?: string): Promise<void> {
     this.stop();
     const token = this.token;
     const text = stripMarkdown(markdown);
@@ -98,9 +101,9 @@ class Speaker {
           // A broken speech model shouldn't leave read-aloud silent.
           this.onServerError?.((err as Error).message);
           if (typeof speechSynthesis === 'undefined') throw err;
-          await this.playBrowser(text, token);
+          await this.playBrowser(text, token, lang);
         }
-      } else await this.playBrowser(text, token);
+      } else await this.playBrowser(text, token, lang);
     } finally {
       if (token === this.token) this.set(null);
     }
@@ -126,10 +129,12 @@ class Speaker {
     }
   }
 
-  private playBrowser(text: string, token: number): Promise<void> {
+  private playBrowser(text: string, token: number, hint?: string): Promise<void> {
     if (typeof speechSynthesis === 'undefined') return Promise.reject(new Error('This browser cannot read text aloud'));
     const prefs = loadVoicePrefs();
-    const voice = browserVoices().find((v) => v.name === prefs.voice);
+    // Speak in the text's own language: a Hebrew answer needs a Hebrew voice, whatever the browser's language.
+    const lang = guessLanguage(text) ?? hint ?? (prefs.language || navigator.language || 'en-US');
+    const voice = voiceFor(browserVoices(), lang, prefs.voice);
     // Chrome stops long utterances after ~15s, so speak sentence groups one after another.
     const parts = chunk(text, 220);
     return new Promise((resolve) => {
@@ -138,6 +143,7 @@ class Speaker {
         if (token !== this.token || i >= parts.length) return resolve();
         const u = new SpeechSynthesisUtterance(parts[i++]);
         if (voice) u.voice = voice;
+        u.lang = voice?.lang ?? lang;
         u.rate = prefs.rate;
         u.onend = speakNext;
         u.onerror = () => resolve();
@@ -206,15 +212,20 @@ export function hasBrowserRecognition(): boolean {
 }
 
 /** Listens for one utterance and ends after a pause. */
-export function listen(cb: ListenCallbacks, opts: { preferServer: boolean }): ListenHandle {
-  if (hasBrowserRecognition() && !opts.preferServer) return listenBrowser(cb);
-  return listenRecorder(cb);
+/**
+ * Listens for one utterance and ends after a pause. `language` is what the user speaks (BCP 47); empty means
+ * unknown. The browser's recognizer only understands the one language it is told, so when the language is
+ * unknown and a transcription model is set, the recording is transcribed on the server, which detects it.
+ */
+export function listen(cb: ListenCallbacks, opts: { preferServer: boolean; language: string }): ListenHandle {
+  if (hasBrowserRecognition() && !opts.preferServer) return listenBrowser(cb, opts.language || navigator.language || 'en-US');
+  return listenRecorder(cb, opts.language);
 }
 
-function listenBrowser(cb: ListenCallbacks): ListenHandle {
+function listenBrowser(cb: ListenCallbacks, language: string): ListenHandle {
   const Ctor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
   const rec: Recognition = new Ctor();
-  rec.lang = navigator.language || 'en-US';
+  rec.lang = language;
   rec.interimResults = true;
   rec.continuous = false;
   let final = '';
@@ -245,7 +256,7 @@ function listenBrowser(cb: ListenCallbacks): ListenHandle {
 }
 
 /** Records until about 1.2s of silence, then transcribes on the server. */
-function listenRecorder(cb: ListenCallbacks): ListenHandle {
+function listenRecorder(cb: ListenCallbacks, language: string): ListenHandle {
   let stopped = false;
   let stopFn = () => {
     stopped = true;
@@ -299,7 +310,7 @@ function listenRecorder(cb: ListenCallbacks): ListenHandle {
         r.readAsDataURL(blob);
       });
       try {
-        cb.onFinal((await api.transcribe(dataUrl)).text);
+        cb.onFinal((await api.transcribe(dataUrl, language || undefined)).text);
       } catch (err) {
         cb.onError((err as Error).message);
       }

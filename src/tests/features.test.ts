@@ -590,5 +590,10 @@ test('media: image generation tool, read-aloud and media files', async () => {
   const heard = await call('POST', '/api/transcribe', { audio: `data:audio/webm;base64,${Buffer.from('voice').toString('base64')}` });
   assert.equal(heard.data.text, 'hello there');
   assert.deepEqual(speechRequests[1], { model: 'openai/whisper-1', input_audio: { data: Buffer.from('voice').toString('base64'), format: 'webm' } });
+  // The language you speak, when known, is passed on rather than letting the model guess (or translate).
+  await call('POST', '/api/transcribe', { audio: `data:audio/webm;base64,${Buffer.from('shalom').toString('base64')}`, language: 'he-IL' });
+  assert.equal(speechRequests[2].language, 'he');
+  assert.equal((await call('POST', '/api/transcribe', { audio: 'data:audio/webm;base64,eA==', language: 'he IL; drop' })).status, 200);
+  assert.equal(speechRequests[3].language, undefined);
   await call('PUT', '/api/settings', { media: { speechModel: '', transcribeModel: '' } });
 });

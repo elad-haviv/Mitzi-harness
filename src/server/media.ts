@@ -401,7 +401,9 @@ export class MediaService {
     return this.save(Buffer.from(await res.arrayBuffer()), 'audio/mpeg');
   }
 
-  async transcribe(audio: Buffer, mimeType: string): Promise<string> {
+  /** `language` (BCP 47, e.g. "he-IL") helps when known; without it the model detects the language. */
+  async transcribe(audio: Buffer, mimeType: string, language?: string): Promise<string> {
+    const iso = language?.split('-')[0].toLowerCase();
     const id = this.settings().transcribeModel;
     if (!id) throw new ToolError('No transcription model is set up (Settings → Media & voice).');
     const { provider, model, base, key } = this.resolve(id);
@@ -411,7 +413,7 @@ export class MediaService {
         await fetch(`${base}/audio/transcriptions`, {
           method: 'POST',
           headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-          body: JSON.stringify({ model, input_audio: { data: audio.toString('base64'), format } }),
+          body: JSON.stringify({ model, input_audio: { data: audio.toString('base64'), format }, ...(iso ? { language: iso } : {}) }),
         }),
         'Transcription',
       );
@@ -423,7 +425,11 @@ export class MediaService {
           method: 'POST',
           headers: { 'x-goog-api-key': key, 'content-type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ parts: [{ inline_data: { mime_type: mimeType.split(';')[0], data: audio.toString('base64') } }, { text: 'Transcribe this recording word for word. Reply with only the transcript, or nothing if no one speaks.' }] }],
+            contents: [{ parts: [{ inline_data: { mime_type: mimeType.split(';')[0], data: audio.toString('base64') } }, {
+                  text:
+                    `Transcribe this recording word for word, in the language that is spoken${iso ? ` (most likely the language with ISO code "${iso}")` : ''} and in its own script. ` +
+                    'Never translate. Reply with only the transcript, or nothing if no one speaks.',
+                }] }],
           }),
         }),
         'Transcription',
@@ -433,6 +439,7 @@ export class MediaService {
     }
     const form = new FormData();
     form.set('model', model);
+    if (iso) form.set('language', iso);
     form.set('file', new Blob([new Uint8Array(audio)], { type: mimeType }), `speech.${format}`);
     const res = await check(await fetch(`${base}/audio/transcriptions`, { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: form }), 'Transcription');
     return String(((await res.json()) as { text?: string }).text ?? '').trim();

@@ -926,6 +926,11 @@ export function ChatView({
       onSend={(text) => send(text, [])}
       onInterrupt={stop}
       onClose={() => setLiveMode(false)}
+      recentText={(chat?.messages ?? [])
+        .filter((m) => m.role === 'user' && !m.auto)
+        .slice(-6)
+        .map(messageText)
+        .join('\n')}
     />
   );
 

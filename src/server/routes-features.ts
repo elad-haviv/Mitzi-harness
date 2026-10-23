@@ -378,7 +378,8 @@ export function registerFeatureRoutes(route: Route, deps: FeatureDeps): { schedu
   route('POST', '/api/transcribe', async ({ body }) => {
     const m = /^data:([^;,]+)(?:;[^,]*)?;base64,(.*)$/s.exec(str(body?.audio));
     if (!m) throw new HttpError(400, 'Send the recording as a base64 data URL');
-    return { text: await media.transcribe(Buffer.from(m[2], 'base64'), m[1]) };
+    const language = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(str(body?.language)) ? str(body.language) : undefined;
+    return { text: await media.transcribe(Buffer.from(m[2], 'base64'), m[1], language) };
   });
 
   return { scheduler };

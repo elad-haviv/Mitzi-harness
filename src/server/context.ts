@@ -60,7 +60,8 @@ function basePrompt(setup: ChatSetup): string {
     `You are ${setup.bot.name}, an AI assistant.`,
     setup.bot.systemPrompt.trim(),
     'Format responses with GitHub-flavored Markdown: headings for long answers, lists and tables where they help, and fenced code blocks with a language tag. ' +
-      'Match length to the question: brief for simple questions, thorough for complex ones. If something is ambiguous, ask.',
+      'Match length to the question: brief for simple questions, thorough for complex ones. If something is ambiguous, ask. ' +
+      'Reply in the language the user writes or speaks in, unless they ask for another.',
     `Today is ${date}. You are running as the model ${setup.chat.model}.`,
   ];
   if (setup.chat.webSearch) lines.push('Web search results may be provided; cite sources with markdown links.');

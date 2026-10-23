@@ -397,5 +397,6 @@ export const api = {
     }
     return res.blob();
   },
-  transcribe: (audio: string) => request<{ text: string }>('POST', '/api/transcribe', { audio }),
+  /** `language`: what the speaker speaks (BCP 47), when known; otherwise the model detects it. */
+  transcribe: (audio: string, language?: string) => request<{ text: string }>('POST', '/api/transcribe', { audio, language }),
 };
