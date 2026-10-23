@@ -1,6 +1,6 @@
 # Mitzi development notes
 
-- Build: `npm run build` (tsc → `dist/`). Tests: `npm test` (builds, then `node --test "dist/tests/*.test.js"`).
+- Build: `npm run build` (tsc → `dist/`). Tests: `npm test` (builds, then `node --test dist/tests/` — directory form, since node's glob expansion needs Node ≥22.6 and CI runs Node 20).
 - Run a single test file: `npx tsc -p . && node --test dist/tests/tools.test.js`; filter by name with `--test-name-pattern`.
 - No runtime dependencies: use Node built-ins only (fetch, readline, child_process, node:test).
 - ESM with NodeNext resolution: relative imports must end in `.js`.
