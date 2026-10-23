@@ -38,7 +38,9 @@ export interface UiSettings {
   routing?: RoutingSettings;
   /** Approval level for chats that don't set their own. */
   approval?: ApprovalLevel;
-  /** Chatting with Mitzi through a Telegram bot. */
+  /** Chatting with Mitzi through Telegram, Discord, Slack, WhatsApp or email. */
+  channels?: Partial<Record<ChannelKind, ChannelSettings>>;
+  /** Telegram settings from before `channels` (moved there on start). */
   telegram?: TelegramSettings;
 }
 
@@ -67,7 +69,65 @@ export interface TelegramSettings {
   notify: boolean;
 }
 
-/** A Telegram chat paired with Mitzi, and the Mitzi chat it talks in. */
+/** Messaging services Mitzi can be reached through. */
+export const CHANNEL_KINDS = ['telegram', 'discord', 'slack', 'whatsapp', 'email'] as const;
+export type ChannelKind = (typeof CHANNEL_KINDS)[number];
+
+export interface ChannelSettings {
+  enabled: boolean;
+  /** The service's credentials and options, by field key (secrets are never sent back). */
+  config: Record<string, string>;
+  /** Sent to Mitzi there to pair a conversation. */
+  pairingCode: string;
+  links: ChannelLink[];
+  /** Send workflow approvals and finished scheduled tasks to paired conversations. */
+  notify: boolean;
+}
+
+/** A conversation on a messaging service paired with Mitzi, and the Mitzi chat it talks in. */
+export interface ChannelLink {
+  /** The conversation's id there: a chat, a channel, a phone number or an email address. */
+  address: string;
+  name: string;
+  mitziChatId?: string;
+  linkedAt: string;
+}
+
+/** A setting a messaging service needs, as the settings page shows it. */
+export interface ChannelField {
+  key: string;
+  label: string;
+  /** Kept on this computer and never shown again once saved. */
+  secret?: boolean;
+  placeholder?: string;
+  optional?: boolean;
+}
+
+/** A messaging service as the settings page sees it. */
+export interface ChannelView {
+  kind: ChannelKind;
+  label: string;
+  /** How to set it up, step by step (simple Markdown). */
+  steps: string[];
+  fields: ChannelField[];
+  /** Field values: secrets only say whether they're set. */
+  values: Record<string, string | boolean>;
+  /** How to pair, e.g. "Send /start 123456 to your bot". */
+  pairHint: string;
+  /** Where the service should send its events, for services that call Mitzi (needs a public address). */
+  webhookPath?: string;
+  /** Doesn't work on this computer, and why (e.g. needs a newer Node.js). */
+  unsupported?: string;
+  running: boolean;
+  username?: string;
+  error?: string;
+  enabled: boolean;
+  pairingCode: string;
+  notify: boolean;
+  links: ChannelLink[];
+}
+
+/** A Telegram chat paired with Mitzi (settings from before messaging channels; moved to `channels`). */
 export interface TelegramLink {
   chatId: number;
   name: string;

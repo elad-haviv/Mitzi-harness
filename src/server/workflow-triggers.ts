@@ -167,7 +167,7 @@ export class WorkflowTriggers {
   }
 }
 
-function readRaw(req: IncomingMessage): Promise<string> {
+export function readRaw(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks: Buffer[] = [];

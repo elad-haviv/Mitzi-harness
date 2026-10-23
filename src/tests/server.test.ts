@@ -1132,14 +1132,16 @@ test('Telegram: pairing, chatting, and strangers kept out', { timeout: 30_000 },
   let update = 1;
   const say = (chatId: number, text: string) => tgUpdates.push({ update_id: update++, message: { message_id: update, chat: { id: chatId, first_name: 'Dana' }, text } });
 
-  assert.equal((await call('PUT', '/api/telegram', { enabled: true })).status, 400, 'a token comes first');
-  const tg = (await call('PUT', '/api/telegram', { token: 'secret-token', enabled: true })).data;
+  assert.equal((await call('PUT', '/api/channels/telegram', { enabled: true })).status, 400, 'a token comes first');
+  const tg = (await call('PUT', '/api/channels/telegram', { config: { token: 'secret-token' }, enabled: true })).data;
   assert.equal(tg.running, true);
   assert.equal(tg.username, 'mitzi_test_bot');
   assert.match(tg.pairingCode, /^\d{6}$/);
   // The token never comes back.
   assert.ok(!JSON.stringify(tg).includes('secret-token'));
   assert.ok(!JSON.stringify((await call('GET', '/api/settings')).data).includes('secret-token'));
+  assert.ok(!JSON.stringify((await call('GET', '/api/channels')).data).includes('secret-token'));
+  assert.equal(tg.values.token, true);
 
   say(42, 'hello?');
   await until(() => sent(42).some((t) => /private/.test(t)));
@@ -1147,13 +1149,13 @@ test('Telegram: pairing, chatting, and strangers kept out', { timeout: 30_000 },
   await until(() => sent(42).some((t) => /pairing code/.test(t)));
   say(42, `/start ${tg.pairingCode}`);
   await until(() => sent(42).some((t) => /Connected/.test(t)));
-  const after = (await call('GET', '/api/telegram')).data;
-  assert.deepEqual(after.links.map((l: any) => [l.chatId, l.name]), [[42, 'Dana']]);
+  const after = (await call('GET', '/api/channels')).data.find((c: any) => c.kind === 'telegram');
+  assert.deepEqual(after.links.map((l: any) => [l.address, l.name]), [['42', 'Dana']]);
   assert.notEqual(after.pairingCode, tg.pairingCode, 'a used code is replaced');
 
   say(42, 'What is up');
   await until(() => sent(42).some((t) => t === 'Hi from Mitzi: What is up'));
-  const link = (await call('GET', '/api/telegram')).data.links[0];
+  const link = (await call('GET', '/api/channels')).data.find((c: any) => c.kind === 'telegram').links[0];
   const chat = (await call('GET', `/api/chats/${link.mitziChatId}`)).data;
   assert.equal(chat.title, 'Telegram: Dana');
   assert.deepEqual(chat.messages.map((m: any) => m.content), ['What is up', 'Hi from Mitzi: What is up']);
@@ -1175,8 +1177,10 @@ test('Telegram: pairing, chatting, and strangers kept out', { timeout: 30_000 },
   // Another Telegram user can't use it.
   say(99, 'let me in');
   await until(() => sent(99).some((t) => /private/.test(t)));
-  await call('PUT', '/api/telegram', { unlink: 42, enabled: false });
-  assert.equal((await call('GET', '/api/telegram')).data.running, false);
+  await call('PUT', '/api/channels/telegram', { unlink: '42', enabled: false });
+  const off = (await call('GET', '/api/channels')).data.find((c: any) => c.kind === 'telegram');
+  assert.equal(off.running, false);
+  assert.deepEqual(off.links, []);
 });
 
 test('share links: a sandboxed read-only page, turned off with the link or the chat', async () => {

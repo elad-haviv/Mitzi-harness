@@ -7,7 +7,7 @@ import { Config, loadConfig, MITZI_HOME, PERMISSION_MODES, PermissionMode } from
 import { PROVIDER_PRESETS, providerView, resolveProviders, RoutingClient, usable } from '../providers.js';
 import type { ProviderConfig, ProviderKind, SearchKind } from '../shared/types.js';
 import type { ApprovalAnswer } from '../permissions.js';
-import { APPROVAL_LEVELS, Attachment, TelegramSettings, AUTO_MODEL, BankProfile, BankSummary, Bot, BotTools, Chat, DEFAULT_BOT_ID, MemoryType, Project, PublicSettings, SettingsUpdate, StreamEvent } from '../shared/types.js';
+import { APPROVAL_LEVELS, Attachment, AUTO_MODEL, BankProfile, BankSummary, Bot, BotTools, Chat, DEFAULT_BOT_ID, MemoryType, Project, PublicSettings, SettingsUpdate, StreamEvent } from '../shared/types.js';
 import { toToolSpecs } from '../tools/index.js';
 import { compactChat, contextBreakdown, ModelCatalog, systemPrompt } from './context.js';
 import { MemoryService } from './memory/index.js';
@@ -31,7 +31,7 @@ import { INLINE_LIMIT, KnowledgeIndex } from './knowledge.js';
 import { PythonSandbox } from './python.js';
 import { WorkflowTriggers } from './workflow-triggers.js';
 import { registerShareRoutes, serveShare } from './shares.js';
-import { newPairingCode, TelegramBot } from './telegram.js';
+import { Channels } from './channels/index.js';
 import { budgetMessage, BudgetExceeded, budgetStatus, UsageLog } from './usage.js';
 import { SearchIndex } from './search.js';
 import { ComputerService, systemBackend } from './computer.js';
@@ -163,7 +163,7 @@ export function createApp(opts: AppOptions) {
 
   const publicSettings = (): PublicSettings => {
     const c = config();
-    const { telegram: _telegram, ...ui } = store.settings;
+    const { telegram: _telegram, channels: _channels, ...ui } = store.settings;
     return {
       ...ui,
       hasApiKey: hasChatProvider(),
@@ -727,37 +727,22 @@ export function createApp(opts: AppOptions) {
   registerWorkflowRoutes(route, { store, engine: workflows, client, config, triggers, validateFolder });
   const { scheduler } = registerFeatureRoutes(route, { store, runner, client, config, memory, media, newChat, workflows });
 
-  // ---- Telegram ----------------------------------------------------------------------------
-  const telegram = new TelegramBot({ store, runner, media, workflows, newChat, apiBase: process.env.MITZI_TELEGRAM_API });
-  void telegram.sync();
+  // ---- Messaging (Telegram, Discord, Slack, WhatsApp, email) --------------------------------
+  const channels = new Channels({ store, runner, media, workflows, newChat }, { apiBase: { telegram: process.env.MITZI_TELEGRAM_API } });
+  channels.start();
   scheduler.finishedListeners.add((task) => {
     const run = task.runs.at(-1);
-    if (run) void telegram.notify(`${run.status === 'error' ? '⚠️' : '✅'} “${task.name}” ${run.status === 'error' ? `failed: ${run.error}` : `is done.${run.preview ? `\n\n${run.preview}` : ''}`}`);
+    if (run) channels.notify(`${run.status === 'error' ? '⚠️' : '✅'} “${task.name}” ${run.status === 'error' ? `failed: ${run.error}` : `is done.${run.preview ? `\n\n${run.preview}` : ''}`}`);
   });
-  const telegramView = () => {
-    const t = store.settings.telegram;
-    return {
-      ...telegram.status(),
-      enabled: !!t?.enabled,
-      hasToken: !!t?.token,
-      pairingCode: t?.pairingCode ?? '',
-      notify: t?.notify ?? true,
-      links: t?.links ?? [],
-    };
-  };
-  route('GET', '/api/telegram', () => telegramView());
-  route('PUT', '/api/telegram', async ({ body }) => {
-    const cur: TelegramSettings = store.settings.telegram ?? { enabled: false, token: '', pairingCode: newPairingCode(), links: [], notify: true };
-    const next: TelegramSettings = { ...cur };
-    if (typeof body?.token === 'string') next.token = body.token.trim();
-    if (typeof body?.enabled === 'boolean') next.enabled = body.enabled;
-    if (typeof body?.notify === 'boolean') next.notify = body.notify;
-    if (body?.newCode === true) next.pairingCode = newPairingCode();
-    if (typeof body?.unlink === 'number') next.links = next.links.filter((l) => l.chatId !== body.unlink);
-    if (next.enabled && !next.token) throw new HttpError(400, 'Paste the bot token from @BotFather first');
-    store.updateSettings({ telegram: next });
-    if (body?.token !== undefined || body?.enabled !== undefined) await telegram.sync();
-    return telegramView();
+  route('GET', '/api/channels', () => [...channels.hubs.values()].map((h) => h.view()));
+  route('PUT', '/api/channels/:kind', async ({ params, body }) => {
+    const hub = channels.get(params.kind) ?? fail(404, 'Unknown messaging service');
+    try {
+      await hub.update(body ?? {});
+    } catch (err) {
+      throw new HttpError((err as { status?: number }).status ?? 500, (err as Error).message);
+    }
+    return hub.view();
   });
   registerWorkRoutes(route, { store, runner, client, config, memory, usage });
 
@@ -798,6 +783,7 @@ export function createApp(opts: AppOptions) {
   const handle = async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? '/', 'http://localhost');
     // Webhooks come from other services (through a tunnel or proxy, so any host); the secret in the address authenticates them.
+    if (url.pathname.startsWith('/hooks/channels/')) return channels.webhook(url.pathname.slice(16), req, res);
     if (url.pathname.startsWith('/hooks/')) return triggers.webhook(decodeURIComponent(url.pathname.slice(7)), req, res);
     // Share links are for other people (on your network or through a tunnel); the secret in the address is the key.
     if (url.pathname.startsWith('/s/') && req.method === 'GET') return serveShare(store, url.pathname.slice(3), res);
@@ -848,7 +834,7 @@ export function createApp(opts: AppOptions) {
     dispose: () => {
       scheduler.stop();
       triggers.stop();
-      telegram.stop();
+      channels.stop();
       void browser.close();
       python.close();
       updates.dispose();

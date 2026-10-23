@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { chunk, KnowledgeIndex, scanFolder } from '../server/knowledge.js';
 import { NODE_SPECS, order, runJavaScript, splitItems } from '../server/workflows.js';
 import { fromGallery, GALLERY, parseDraft } from '../server/workflow-gallery.js';
-import { splitMessage, toTelegramHtml } from '../server/telegram.js';
+import { splitMessage, toTelegramHtml } from '../server/channels/format.js';
 import { qrMatrix, qrSvg } from '../shared/qr.js';
 import type { Project } from '../shared/types.js';
 import { tempDir } from './helpers.js';

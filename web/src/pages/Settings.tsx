@@ -1,6 +1,7 @@
 import { AlertTriangle, ArrowUpCircle, Wallet, Brain, Check, CircleDashed, Loader2, RefreshCw, Copy, Database, Download, KeyRound, MessagesSquare, Monitor, Moon, Palette, Plug, Puzzle, Sparkles, Sun, Volume2, WandSparkles, Send, X, Smartphone, Bell } from 'lucide-react';
 import { ReactNode, useEffect, useState } from 'react';
-import { api, TelegramView, UpdateStep } from '../api';
+import { api, UpdateStep } from '../api';
+import { MessagingSettings } from './MessagingSettings';
 import { ImportModal } from '../components/Import';
 import { ModelPicker } from '../components/ModelPicker';
 import { Toggle } from '../components/ui';
@@ -11,7 +12,7 @@ import { BudgetMeters } from './Insights';
 import { qrSvg } from '../../../src/shared/qr';
 import { APPROVAL, LEVELS } from '../components/Approval';
 
-type Section = 'general' | 'models' | 'providers' | 'media' | 'budget' | 'phone' | 'telegram' | 'memory' | 'data' | 'updates';
+type Section = 'general' | 'models' | 'providers' | 'media' | 'budget' | 'phone' | 'messaging' | 'memory' | 'data' | 'updates';
 
 const SECTIONS: { id: Section; label: string; icon: ReactNode; hint: string }[] = [
   { id: 'general', label: 'General', icon: <Palette size={16} />, hint: 'Appearance and long conversations' },
@@ -20,7 +21,7 @@ const SECTIONS: { id: Section; label: string; icon: ReactNode; hint: string }[] 
   { id: 'media', label: 'Media & voice', icon: <Volume2 size={16} />, hint: 'Image, video, speech, sound and music models, and read-aloud voices' },
   { id: 'budget', label: 'Usage & budget', icon: <Wallet size={16} />, hint: 'Spending limits and alerts' },
   { id: 'phone', label: 'Phone & notifications', icon: <Smartphone size={16} />, hint: 'Use Mitzi on your phone, and get notified when chats finish' },
-  { id: 'telegram', label: 'Telegram', icon: <Send size={16} />, hint: 'Chat with Mitzi from Telegram, and get approvals there' },
+  { id: 'messaging', label: 'Messaging', icon: <Send size={16} />, hint: 'Chat with Mitzi from Telegram, Discord, Slack, WhatsApp or email, and get approvals there' },
   { id: 'memory', label: 'Memory', icon: <Brain size={16} />, hint: 'How bots remember, and importing memories from other AIs' },
   { id: 'data', label: 'Data & about', icon: <Database size={16} />, hint: 'Where your data lives, importing chats, and version' },
   { id: 'updates', label: 'Updates', icon: <ArrowUpCircle size={16} />, hint: 'Get the latest version of Mitzi' },
@@ -37,6 +38,8 @@ export function SettingsPage({ section }: { section?: string }) {
   const { settings, update } = useApp();
   if (!settings) return <div className="page muted">Loading…</div>;
   // Without a provider there's nothing else to do, so start there.
+  // Telegram had its own section before the other messaging services came.
+  if (section === 'telegram') section = 'messaging';
   const current: Section = SECTIONS.some((s) => s.id === section) ? (section as Section) : settings.hasApiKey ? 'general' : 'providers';
   const info = SECTIONS.find((s) => s.id === current)!;
 
@@ -79,7 +82,7 @@ export function SettingsPage({ section }: { section?: string }) {
           {current === 'providers' && <ProvidersSection />}
           {current === 'media' && <MediaSettingsSection />}
           {current === 'budget' && <BudgetSettings />}
-          {current === 'telegram' && <TelegramSettingsView />}
+          {current === 'messaging' && <MessagingSettings />}
           {current === 'phone' && <PhoneSettings />}
           {current === 'memory' && <MemorySettings />}
           {current === 'data' && <DataSettings />}
@@ -452,117 +455,6 @@ function PhoneSettings() {
           </button>
         )}
       </section>
-    </>
-  );
-}
-
-function TelegramSettingsView() {
-  const { toast } = useApp();
-  const [tg, setTg] = useState<TelegramView>();
-  const [token, setToken] = useState('');
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    api.telegram().then(setTg, (err) => toast(err.message));
-  }, [toast]);
-  // Pairing happens on the phone; keep the list fresh while this page is open.
-  useEffect(() => {
-    if (!tg?.running) return;
-    const timer = setInterval(() => api.telegram().then(setTg, () => {}), 3000);
-    return () => clearInterval(timer);
-  }, [tg?.running]);
-  if (!tg) return <Loader2 className="spin muted" size={18} />;
-  const update = async (body: Parameters<typeof api.updateTelegram>[0], message?: string) => {
-    setBusy(true);
-    try {
-      const next = await api.updateTelegram(body);
-      setTg(next);
-      if (next.error) toast(`Telegram: ${next.error}`);
-      else if (message) toast(message, 'info');
-    } catch (err) {
-      toast((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <>
-      <section className="settings-section card">
-        <h2>Your Telegram bot</h2>
-        <ol className="steps-list">
-          <li>
-            In Telegram, open <a href="https://t.me/BotFather" target="_blank" rel="noreferrer">@BotFather</a>, send <code>/newbot</code>, and pick a name. It gives you a token.
-          </li>
-          <li>Paste the token here and turn the bot on.</li>
-          <li>Open your bot in Telegram and send it the pairing message below. Only paired chats can use it.</li>
-        </ol>
-        <form
-          className="row"
-          style={{ gap: 8 }}
-          onSubmit={(e) => {
-            e.preventDefault();
-            void update({ token, enabled: true }, 'Telegram bot on').then(() => setToken(''));
-          }}
-        >
-          <input className="input mono" type="password" placeholder={tg.hasToken ? 'Token saved · paste a new one to replace it' : '123456789:AA…'} value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" />
-          <button className="btn btn-primary" disabled={!token.trim() || busy}>
-            Save
-          </button>
-        </form>
-        <div className="tool-toggle" style={{ padding: 0, border: 0, marginTop: 14 }}>
-          <div className="grow">
-            <div className="t">
-              Bot {tg.running ? <span className="badge ok">on{tg.username ? ` · @${tg.username}` : ''}</span> : <span className="badge">off</span>}
-            </div>
-            <div className="s">{tg.error ? <span className="danger-text">{tg.error}</span> : 'Mitzi answers while it’s running on this computer.'}</div>
-          </div>
-          <Toggle label="Telegram bot" on={tg.enabled && tg.running} onChange={(v) => void update({ enabled: v }, v ? 'Telegram bot on' : 'Telegram bot off')} />
-        </div>
-      </section>
-      {tg.running && (
-        <section className="settings-section card">
-          <h2>Pair a chat</h2>
-          <p className="muted small" style={{ marginTop: 0 }}>
-            Send this to {tg.username ? <a href={`https://t.me/${tg.username}?start=${tg.pairingCode}`} target="_blank" rel="noreferrer">@{tg.username}</a> : 'your bot'} (the link opens it with the message ready). Each code works once.
-          </p>
-          <div className="row" style={{ gap: 8 }}>
-            <code className="pairing-code">/start {tg.pairingCode}</code>
-            <button className="btn btn-sm btn-ghost" onClick={() => void update({ newCode: true })}>
-              New code
-            </button>
-          </div>
-          <div className="panel-subhead" style={{ marginTop: 16 }}>
-            Paired chats
-          </div>
-          {tg.links.length ? (
-            tg.links.map((l) => {
-              return (
-                <div key={l.chatId} className="file-row">
-                  <Send size={14} className="muted" />
-                  <span className="name">{l.name}</span>
-                  {l.mitziChatId && (
-                    <a className="small" href={href({ page: 'chat', id: l.mitziChatId })}>
-                      Open chat
-                    </a>
-                  )}
-                  <button className="icon-btn sm" aria-label={`Unpair ${l.name}`} title="Unpair" onClick={() => void update({ unlink: l.chatId }, `${l.name} unpaired`)}>
-                    <X size={13} />
-                  </button>
-                </div>
-              );
-            })
-          ) : (
-            <p className="muted small">None yet.</p>
-          )}
-          <div className="tool-toggle" style={{ padding: 0, border: 0, marginTop: 12 }}>
-            <div className="grow">
-              <div className="t">Notifications</div>
-              <div className="s">Workflow approvals (with Approve and Reject buttons) and finished scheduled tasks</div>
-            </div>
-            <Toggle label="Notifications" on={tg.notify} onChange={(v) => void update({ notify: v })} />
-          </div>
-          <p className="muted small">In Telegram: write or send voice notes and photos to chat; /new starts a new chat, /stop stops an answer, /workflow &lt;name&gt; &lt;input&gt; runs a workflow.</p>
-        </section>
-      )}
     </>
   );
 }

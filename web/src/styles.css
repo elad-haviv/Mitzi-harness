@@ -6986,3 +6986,45 @@ button.todo-check:not(:disabled):hover {
 .asked-answer {
   font-weight: 560;
 }
+
+/* ---------- Messaging settings ---------- */
+.channel-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.channel-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.channel-tab:hover {
+  border-color: var(--border-strong, var(--muted));
+}
+.channel-tab.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 560;
+}
+.channel-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok, #2f9e44);
+}
+.channel-form {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 12px;
+}

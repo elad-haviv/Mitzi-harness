@@ -50,6 +50,8 @@ import type {
   ApprovalLevel,
   QueuedMessage,
   Share,
+  ChannelKind,
+  ChannelView,
 } from '../../src/shared/types';
 
 export type * from '../../src/shared/types';
@@ -61,16 +63,6 @@ export { AUTO_MODEL, DEFAULT_BOT_ID, TEXT_ARTIFACT_TYPES } from '../../src/share
 export type ProjectView = Project & { chatCount: number; knowledge?: { chars: number; docs: number; searched: boolean } };
 export type WorkflowView = Workflow & { running: boolean };
 export type ShareView = Omit<Share, 'html'> & { url: string };
-export interface TelegramView {
-  running: boolean;
-  username?: string;
-  error?: string;
-  enabled: boolean;
-  hasToken: boolean;
-  pairingCode: string;
-  notify: boolean;
-  links: { chatId: number; name: string; mitziChatId?: string; linkedAt: string }[];
-}
 export interface GalleryItem {
   id: string;
   category: string;
@@ -299,8 +291,9 @@ export const api = {
   createShare: (body: { kind: 'chat' | 'artifact'; targetId: string; title: string; html: string; expiresInDays: number }) => request<ShareView>('POST', '/api/shares', body),
   deleteShare: (id: string) => request('DELETE', `/api/shares/${id}`),
   phone: () => request<{ lan: boolean; urls: string[] }>('GET', '/api/phone'),
-  telegram: () => request<TelegramView>('GET', '/api/telegram'),
-  updateTelegram: (body: Partial<{ token: string; enabled: boolean; notify: boolean; newCode: boolean; unlink: number }>) => request<TelegramView>('PUT', '/api/telegram', body),
+  channels: () => request<ChannelView[]>('GET', '/api/channels'),
+  updateChannel: (kind: ChannelKind, body: Partial<{ config: Record<string, string>; enabled: boolean; notify: boolean; newCode: boolean; unlink: string }>) =>
+    request<ChannelView>('PUT', `/api/channels/${kind}`, body),
   /** Approves or rejects a run waiting at an approval step. */
   decideWorkflowRun: (id: string, runId: string, approved: boolean, note?: string) => request('POST', `/api/workflows/${id}/runs/${runId}/decide`, { approved, note }),
   answerPermission: (id: string, requestId: string, answer: 'yes' | 'always' | 'no' | 'feedback', feedback?: string) =>
