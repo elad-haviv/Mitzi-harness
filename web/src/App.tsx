@@ -1,4 +1,3 @@
-import { ChatTabs } from './components/ChatTabs';
 import { SearchDialog } from './components/SearchDialog';
 import { InsightsPage } from './pages/Insights';
 import { WorkflowEditor, WorkflowsPage } from './pages/Workflows';
@@ -147,7 +146,6 @@ export function App() {
           </button>
         )}
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', paddingLeft: collapsed && !narrow() ? 36 : 0 }}>
-          <ChatTabs route={route} />
           {page}
         </div>
       </main>

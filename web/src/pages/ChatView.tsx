@@ -51,6 +51,7 @@ import {
   UsagePanel,
 } from '../components/Work';
 import { Markdown } from '../components/Markdown';
+import { ChatTabs } from '../components/ChatTabs';
 import { APPROVAL, ApprovalPicker, approvalOf, nextLevel } from '../components/Approval';
 import { AssistantTurn, Avatar, buildTurns, messageText, Reasoning, CompactDivider, MemoryRecall, PermissionCard, PermissionRequest, RouteBadge, ToolBlock, UserTurn } from '../components/Messages';
 import { Menu, useConfirm } from '../components/ui';
@@ -636,12 +637,18 @@ export function ChatView({
             }}
           />
         ) : (
-          <button className="chat-title-btn" onClick={() => setRenaming(true)} title="Rename">
-            {chat.title}
-          </button>
+          <ChatTabs
+            activeId={chat.id}
+            onRename={() => setRenaming(true)}
+            fallback={
+              <button className="chat-title-btn" onClick={() => setRenaming(true)} title="Rename">
+                {chat.title}
+              </button>
+            }
+          />
         )
       ) : (
-        <span />
+        <ChatTabs fallback={<span />} />
       )}
       {project && !isEmpty && (
         <a className="badge" href={href({ page: 'project', id: project.id })}>

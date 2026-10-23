@@ -1,8 +1,8 @@
 // Tabs for the chats you have open, so several can work at once: each shows whether it is responding,
 // waiting for you, or done, and runs keep going while you're in another tab.
 import { Loader2, Plus, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { href, navigate, Route } from '../router';
+import { ReactNode, useEffect, useState } from 'react';
+import { href, navigate } from '../router';
 import { useApp } from '../state';
 
 const KEY = 'mitzi.tabs';
@@ -25,10 +25,13 @@ function save(ids: string[]): void {
   }
 }
 
-export function ChatTabs({ route }: { route: Route }) {
+/**
+ * The open chats as tabs, in the chat header. With fewer than two open, shows `fallback` (the chat's title) instead.
+ * Double-clicking the active tab renames the chat.
+ */
+export function ChatTabs({ activeId: active, fallback, onRename }: { activeId?: string; fallback: ReactNode; onRename?(): void }) {
   const { chats } = useApp();
   const [tabs, setTabs] = useState<string[]>(load);
-  const active = route.page === 'chat' ? route.id : undefined;
 
   // Opening a chat opens its tab (the oldest unused tab makes room).
   useEffect(() => {
@@ -58,7 +61,7 @@ export function ChatTabs({ route }: { route: Route }) {
     if (id === active) navigate(next.length ? { page: 'chat', id: next[Math.min(i, next.length - 1)] } : { page: 'new' });
   };
 
-  if (open.length < 2 || (route.page !== 'chat' && route.page !== 'new')) return null;
+  if (open.length < 2) return <>{fallback}</>;
   return (
     <div className="chat-tabs" role="tablist" aria-label="Open chats">
       {open.map((id) => {
@@ -73,6 +76,7 @@ export function ChatTabs({ route }: { route: Route }) {
             href={href({ page: 'chat', id })}
             title={`${c.title}${c.waiting ? ' · waiting for your approval' : c.running ? ' · working' : ''}`}
             onAuxClick={(e) => e.button === 1 && (e.preventDefault(), close(id))}
+            onDoubleClick={(e) => id === active && onRename && (e.preventDefault(), onRename())}
           >
             {c.waiting ? <span className="tab-paw" aria-label="Needs you">🐾</span> : c.running ? <Loader2 size={12} className="spin" aria-label="Working" /> : null}
             <span className="chat-tab-title">{c.title}</span>

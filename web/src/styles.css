@@ -6497,43 +6497,41 @@ button.todo-check:not(:disabled):hover {
   }
 }
 
-/* ---------- Chat tabs ---------- */
+/* ---------- Chat tabs (in the chat header) ---------- */
 .chat-tabs {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 2px;
-  padding: 8px 12px 0;
-  border-bottom: 1px solid var(--border);
+  flex: 0 1 auto;
+  min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
-  flex-shrink: 0;
 }
 .chat-tab {
   display: flex;
   align-items: center;
   gap: 6px;
-  max-width: 200px;
-  min-width: 90px;
-  padding: 6px 6px 6px 12px;
-  border: 1px solid transparent;
-  border-bottom: 0;
-  border-radius: 9px 9px 0 0;
-  font-size: 12.5px;
+  max-width: 190px;
+  min-width: 70px;
+  padding: 5px 4px 5px 10px;
+  border-radius: 8px;
+  font-size: 13px;
   color: var(--muted);
-  text-decoration: none;
   white-space: nowrap;
 }
-.chat-tab:hover {
+.chat-tab,
+.chat-tab:hover,
+.chat-tab-new:hover {
   text-decoration: none;
+}
+.chat-tab:hover {
   background: var(--surface-2);
   color: var(--text);
 }
 .chat-tab.active {
-  background: var(--bg);
-  border-color: var(--border);
+  background: var(--surface-2);
   color: var(--text);
-  margin-bottom: -1px;
-  padding-bottom: 7px;
+  font-weight: 600;
 }
 .chat-tab.running .chat-tab-title,
 .chat-tab.waiting .chat-tab-title {
@@ -6563,16 +6561,15 @@ button.todo-check:not(:disabled):hover {
   opacity: 1;
 }
 .chat-tab-close:hover {
-  background: var(--surface-2);
+  background: var(--border);
   color: var(--text);
 }
 .chat-tab-new {
   display: inline-flex;
   align-items: center;
-  padding: 6px 8px;
+  padding: 5px 7px;
   color: var(--muted);
   border-radius: 8px;
-  margin-bottom: 3px;
 }
 .chat-tab-new:hover {
   background: var(--surface-2);
