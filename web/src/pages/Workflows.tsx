@@ -43,6 +43,7 @@ import { Empty, Modal, Toggle, useConfirm } from '../components/ui';
 import { duration, money } from '../components/Work';
 import { href, navigate } from '../router';
 import { relativeTime, useApp } from '../state';
+import { plural, tr } from '../i18n';
 
 export const NODE_ICON: Record<WorkflowNodeType, ReactNode> = {
   trigger: <LogIn size={15} />,
@@ -87,11 +88,11 @@ export function WorkflowsPage() {
     <div className="page">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Workflows</h1>
-          <p className="page-subtitle">Automations made of steps: ask a bot, read a page, call an API, branch, save the result. Run them yourself, on a schedule, or from a chat.</p>
+          <h1 className="page-title">{tr('Workflows')}</h1>
+          <p className="page-subtitle">{tr('Automations made of steps: ask a bot, read a page, call an API, branch, save the result. Run them yourself, on a schedule, or from a chat.')}</p>
         </div>
         <button className="btn btn-primary" onClick={() => setCreating(true)}>
-          <Plus size={16} /> New workflow
+          <Plus size={16} /> {tr('New workflow')}
         </button>
       </div>
       {!list ? (
@@ -99,14 +100,14 @@ export function WorkflowsPage() {
       ) : !list.length ? (
         <Empty
           icon={<WorkflowIcon size={28} />}
-          title="No workflows yet"
+          title={tr('No workflows yet')}
           action={
             <button className="btn btn-primary" onClick={() => setCreating(true)}>
-              <Plus size={16} /> New workflow
+              <Plus size={16} /> {tr('New workflow')}
             </button>
           }
         >
-          Start from a template, like a web page digest or a message triage, or from a blank canvas.
+          {tr('Start from a template, like a web page digest or a message triage, or from a blank canvas.')}
         </Empty>
       ) : (
         <div className="grid">
@@ -116,26 +117,26 @@ export function WorkflowsPage() {
               <a key={w.id} className="tile workflow-tile" href={href({ page: 'workflow', id: w.id })}>
                 <div className="workflow-tile-emoji">{w.emoji}</div>
                 <div className="tile-title">{w.name}</div>
-                <div className="tile-desc">{w.description || `${w.nodes.length} steps`}</div>
+                <div className="tile-desc">{w.description || tr('{0} steps', w.nodes.length)}</div>
                 <div className="tile-foot">
                   {last?.status === 'waiting' ? (
                     <span className="badge warn">
-                      <Hand size={11} /> Waiting for you
+                      <Hand size={11} /> {tr('Waiting for you')}
                     </span>
                   ) : w.running ? (
                     <>
-                      <Loader2 size={12} className="spin" /> Running
+                      <Loader2 size={12} className="spin" /> {tr('Running')}
                     </>
                   ) : last ? (
                     <>
-                      {last.status === 'error' ? <AlertTriangle size={12} /> : <Check size={12} />} Last run {relativeTime(last.startedAt)}
+                      {last.status === 'error' ? <AlertTriangle size={12} /> : <Check size={12} />} {tr('Last run')}{' '}{relativeTime(last.startedAt)}
                     </>
                   ) : (
-                    'Never run'
+                    tr('Never run')
                   )}
                   {w.exposeToChat && (
                     <span className="badge">
-                      <MessageSquare size={11} /> In chats
+                      <MessageSquare size={11} /> {tr('In chats')}
                     </span>
                   )}
                 </div>
@@ -162,7 +163,7 @@ function NewWorkflow({ onClose, onCreate }: { onClose(): void; onCreate(template
     setBuilding(true);
     try {
       const w = await api.draftWorkflow(description.trim());
-      toast(`Built “${w.name}”. Check each step before you run it.`, 'info');
+      toast(tr('Built “{0}”. Check each step before you run it.', w.name), 'info');
       navigate({ page: 'workflow', id: w.id });
     } catch (err) {
       toast((err as Error).message);
@@ -171,7 +172,7 @@ function NewWorkflow({ onClose, onCreate }: { onClose(): void; onCreate(template
   };
   const categories = [...new Set((gallery ?? []).map((g) => g.category))];
   return (
-    <Modal title="New workflow" onClose={onClose} wide>
+    <Modal title={tr('New workflow')} onClose={onClose} wide>
       <form
         className="wf-builder"
         onSubmit={(e) => {
@@ -181,7 +182,7 @@ function NewWorkflow({ onClose, onCreate }: { onClose(): void; onCreate(template
       >
         <label className="field" style={{ marginBottom: 8 }}>
           <span className="field-label">
-            <Sparkles size={14} className="accent" style={{ verticalAlign: -2 }} /> Describe it, and Mitzi builds it
+            <Sparkles size={14} className="accent" style={{ verticalAlign: -2 }} /> {tr('Describe it, and Mitzi builds it')}
           </span>
           <textarea
             className="textarea"
@@ -189,7 +190,7 @@ function NewWorkflow({ onClose, onCreate }: { onClose(): void; onCreate(template
             dir="auto"
             value={description}
             disabled={building}
-            placeholder="e.g. Every morning, read the Hacker News front page, pick the 5 stories about AI, summarize each in two lines and save a digest"
+            placeholder={tr('e.g. Every morning, read the Hacker News front page, pick the 5 stories about AI, summarize each in two lines and save a digest')}
             onChange={(e) => setDescription(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) (e.currentTarget.form as HTMLFormElement).requestSubmit();
@@ -199,17 +200,17 @@ function NewWorkflow({ onClose, onCreate }: { onClose(): void; onCreate(template
         <button className="btn btn-primary" disabled={!description.trim() || building}>
           {building ? (
             <>
-              <Loader2 size={15} className="spin" /> Building…
+              <Loader2 size={15} className="spin" /> {tr('Building…')}
             </>
           ) : (
             <>
-              <Sparkles size={15} /> Build workflow
+              <Sparkles size={15} /> {tr('Build workflow')}
             </>
           )}
         </button>
       </form>
       <div className="panel-subhead" style={{ marginTop: 18 }}>
-        Or start from the gallery
+        {tr('Or start from the gallery')}
       </div>
       {!gallery ? (
         <Loader2 className="spin muted" size={18} />
@@ -467,7 +468,7 @@ export function WorkflowEditor({ id }: { id: string }) {
     });
   }, [wf]);
 
-  if (!wf || !specs) return <div className="page muted">Loading…</div>;
+  if (!wf || !specs) return <div className="page muted">{tr('Loading…')}</div>;
 
   const wire = drag?.kind === 'wire' && drag.id && drag.x !== undefined ? (() => {
     const a = wf.nodes.find((n) => n.id === drag.id)!;
@@ -481,32 +482,32 @@ export function WorkflowEditor({ id }: { id: string }) {
   return (
     <div className="wf-editor">
       <div className="wf-top">
-        <a className="icon-btn" href={href({ page: 'workflows' })} aria-label="All workflows" title="All workflows">
+        <a className="icon-btn" href={href({ page: 'workflows' })} aria-label={tr('All workflows')} title={tr('All workflows')}>
           <ArrowLeft size={18} />
         </a>
-        <input className="wf-emoji" value={wf.emoji} onChange={(e) => change({ emoji: e.target.value })} aria-label="Icon" maxLength={4} />
+        <input className="wf-emoji" value={wf.emoji} onChange={(e) => change({ emoji: e.target.value })} aria-label={tr('Icon')} maxLength={4} />
         <div className="wf-titles">
-          <input className="wf-name" value={wf.name} onChange={(e) => change({ name: e.target.value })} aria-label="Workflow name" />
-          <input className="wf-desc" value={wf.description} placeholder="What it does (bots see this when it’s used in chats)" onChange={(e) => change({ description: e.target.value })} aria-label="Description" />
+          <input className="wf-name" value={wf.name} onChange={(e) => change({ name: e.target.value })} aria-label={tr('Workflow name')} />
+          <input className="wf-desc" value={wf.description} placeholder={tr('What it does (bots see this when it’s used in chats)')} onChange={(e) => change({ description: e.target.value })} aria-label={tr('Description')} />
         </div>
-        <span className="muted small wf-save">{saveState === 'saving' ? 'Saving…' : saveState === 'error' ? 'Not saved' : 'Saved'}</span>
-        <label className="wf-toggle" title="Bots can run this workflow from any chat (they ask first)">
-          <Toggle label="Use in chats" on={wf.exposeToChat} onChange={(v) => change({ exposeToChat: v })} />
-          <span>Use in chats</span>
+        <span className="muted small wf-save">{saveState === 'saving' ? tr('Saving…') : saveState === 'error' ? tr('Not saved') : tr('Saved')}</span>
+        <label className="wf-toggle" title={tr('Bots can run this workflow from any chat (they ask first)')}>
+          <Toggle label={tr('Use in chats')} on={wf.exposeToChat} onChange={(v) => change({ exposeToChat: v })} />
+          <span>{tr('Use in chats')}</span>
         </label>
         <button className={`btn btn-sm${wf.triggers?.webhook?.enabled || wf.triggers?.folder?.enabled ? ' on' : ''}`} onClick={() => setTriggering(true)}>
-          <Zap size={14} /> Triggers
+          <Zap size={14} /> {tr('Triggers')}
           {(wf.triggers?.webhook?.enabled || wf.triggers?.folder?.enabled) && <span className="dot-on" aria-label="on" />}
         </button>
         <button className="btn btn-sm" onClick={() => setScheduling(true)}>
-          <CalendarClock size={14} /> Schedule
+          <CalendarClock size={14} /> {tr('Schedule')}
         </button>
         <button
           className="icon-btn"
-          aria-label="Delete workflow"
-          title="Delete workflow"
+          aria-label={tr('Delete workflow')}
+          title={tr('Delete workflow')}
           onClick={async () => {
-            if (!(await confirm(`“${wf.name}” and its run history will be deleted. Scheduled tasks that run it are turned off.`, { title: 'Delete workflow?' }))) return;
+            if (!(await confirm(tr('“{0}” and its run history will be deleted. Scheduled tasks that run it are turned off.', wf.name), { title: tr('Delete workflow?') }))) return;
             await api.deleteWorkflow(id).catch((err) => toast(err.message));
             navigate({ page: 'workflows' });
           }}
@@ -515,8 +516,8 @@ export function WorkflowEditor({ id }: { id: string }) {
         </button>
       </div>
       <div className="wf-body">
-        <aside className="wf-palette" aria-label="Steps">
-          <div className="wf-palette-title">Add a step</div>
+        <aside className="wf-palette" aria-label={tr('Steps')}>
+          <div className="wf-palette-title">{tr('Add a step')}</div>
           {PALETTE.map((t) => (
             <button
               key={t}
@@ -567,7 +568,7 @@ export function WorkflowEditor({ id }: { id: string }) {
             </svg>
             {edgePaths.map((p) =>
               p && selected?.kind === 'edge' && selected.id === p.e.id ? (
-                <button key={`x${p.e.id}`} className="wf-edge-delete" style={{ left: p.mid.x - 11, top: p.mid.y - 11 }} onClick={removeSelected} aria-label="Remove connection">
+                <button key={`x${p.e.id}`} className="wf-edge-delete" style={{ left: p.mid.x - 11, top: p.mid.y - 11 }} onClick={removeSelected} aria-label={tr('Remove connection')}>
                   <X size={12} />
                 </button>
               ) : null,
@@ -610,7 +611,7 @@ export function WorkflowEditor({ id }: { id: string }) {
                       key={port}
                       className={`wf-port out${two ? ` ${port}` : ''}`}
                       style={two ? { top: i === 0 ? NODE_H * 0.32 - 6 : NODE_H * 0.72 - 6 } : undefined}
-                      title={two ? (port === 'true' ? 'Yes' : 'No') : 'Drag to connect'}
+                      title={two ? (port === 'true' ? tr('Yes') : tr('No')) : tr('Drag to connect')}
                       onPointerDown={(e) => {
                         e.stopPropagation();
                         (canvas.current as HTMLElement).setPointerCapture(e.pointerId);
@@ -618,7 +619,7 @@ export function WorkflowEditor({ id }: { id: string }) {
                         setDrag({ kind: 'wire', id: n.id, port, startX: e.clientX, startY: e.clientY, origX: 0, origY: 0, x: p.x, y: p.y });
                       }}
                     >
-                      {two && <span className="wf-port-label">{n.type === 'approval' ? (port === 'true' ? 'approved' : 'rejected') : port === 'true' ? 'yes' : 'no'}</span>}
+                      {two && <span className="wf-port-label">{n.type === 'approval' ? (port === 'true' ? tr('approved') : tr('rejected')) : port === 'true' ? tr('yes') : tr('no')}</span>}
                     </span>
                   ))}
                 </div>
@@ -626,46 +627,45 @@ export function WorkflowEditor({ id }: { id: string }) {
             })}
           </div>
           <div className="wf-zoom">
-            <button className="icon-btn sm" onClick={() => setView((v) => ({ ...v, k: Math.min(1.8, v.k * 1.15) }))} aria-label="Zoom in">
+            <button className="icon-btn sm" onClick={() => setView((v) => ({ ...v, k: Math.min(1.8, v.k * 1.15) }))} aria-label={tr('Zoom in')}>
               <Plus size={14} />
             </button>
-            <button className="icon-btn sm" onClick={() => setView((v) => ({ ...v, k: Math.max(0.4, v.k / 1.15) }))} aria-label="Zoom out">
+            <button className="icon-btn sm" onClick={() => setView((v) => ({ ...v, k: Math.max(0.4, v.k / 1.15) }))} aria-label={tr('Zoom out')}>
               <Minus size={14} />
             </button>
-            <button className="icon-btn sm" onClick={fit} aria-label="Fit to screen" title="Fit to screen">
+            <button className="icon-btn sm" onClick={fit} aria-label={tr('Fit to screen')} title={tr('Fit to screen')}>
               <Maximize size={14} />
             </button>
           </div>
-          <div className="wf-hint muted small">Drag from a step’s right edge to another step to connect them. Delete removes the selection.</div>
+          <div className="wf-hint muted small">{tr('Drag from a step’s right edge to another step to connect them. Delete removes the selection.')}</div>
         </div>
         <aside className="wf-side">
           {node ? (
             <NodeConfig key={node.id} node={node} spec={specs[node.type]} onLabel={(label) => updateNode(node.id, { label })} onConfig={(k, v) => setConfig(node.id, k, v)} onDelete={removeSelected} />
           ) : (
             <div className="wf-side-section">
-              <div className="wf-side-title">Run</div>
+              <div className="wf-side-title">{tr('Run')}</div>
               <label className="field">
-                <span className="field-label">Input</span>
+                <span className="field-label">{tr('Input')}</span>
                 <textarea
                   className="textarea"
                   rows={3}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder={String(trigger?.config.inputHint || 'What to run it with (available as {{trigger}})')}
+                  placeholder={String(trigger?.config.inputHint || tr('What to run it with (available as {{trigger}})'))}
                 />
               </label>
               {wf.running ? (
                 <button className="btn" onClick={() => void api.stopWorkflow(id)}>
-                  <Square size={13} /> Stop
+                  <Square size={13} /> {tr('Stop')}
                 </button>
               ) : (
                 <button className="btn btn-primary" onClick={() => void start()}>
-                  <Play size={14} /> Run workflow
+                  <Play size={14} /> {tr('Run workflow')}
                 </button>
               )}
               <p className="muted small" style={{ marginTop: 14 }}>
-                Select a step to change it. In prompts and fields, <code>{'{{input}}'}</code> is the previous step’s output, <code>{'{{trigger}}'}</code> the workflow’s input,
-                and <code>{'{{Step name}}'}</code> any step’s output.
+                {tr('Select a step to change it. In prompts and fields,')}{' '}<code>{'{{input}}'}</code> {tr('is the previous step’s output,')}{' '}<code>{'{{trigger}}'}</code> {tr('the workflow’s input, and')}{' '}<code>{'{{Step name}}'}</code> {tr('any step’s output.')}
               </p>
             </div>
           )}
@@ -703,21 +703,21 @@ function nodeSummary(n: WorkflowNode, bots: { id: string; name: string; emoji: s
     case 'http':
       return `${n.type === 'http' ? `${c.method ?? 'GET'} ` : ''}${String(c.url || 'no address yet')}`;
     case 'condition':
-      return c.test === 'empty' ? 'is empty' : `${c.test ?? 'contains'} “${c.value ?? ''}”`;
+      return c.test === 'empty' ? tr('is empty') : `${c.test ?? 'contains'} “${c.value ?? ''}”`;
     case 'trigger':
-      return String(c.inputHint || 'Manual, schedule or chat');
+      return String(c.inputHint || tr('Manual, schedule or chat'));
     case 'artifact':
-      return String(c.title || 'Untitled');
+      return String(c.title || tr('Untitled'));
     case 'loop':
-      return `each ${c.split === 'json' ? 'JSON item' : c.split === 'paragraphs' ? 'paragraph' : c.split === 'separator' ? `“${c.separator}”-separated item` : 'line'} · ${c.mode === 'template' ? 'text' : 'ask a bot'}`;
+      return tr('each {0} · {1}', c.split === 'json' ? 'JSON item' : c.split === 'paragraphs' ? 'paragraph' : c.split === 'separator' ? `“${c.separator}”-separated item` : 'line', c.mode === 'template' ? 'text' : 'ask a bot');
     case 'code':
-      return c.language === 'python' ? 'Python' : 'JavaScript';
+      return c.language === 'python' ? tr('Python') : tr('JavaScript');
     case 'delay': {
       const s = Number(c.seconds) || 0;
-      return s >= 60 ? `${Math.round(s / 6) / 10} min` : `${s} s`;
+      return s >= 60 ? tr('{0} min', Math.round(s / 6) / 10) : `${s} s`;
     }
     case 'approval':
-      return 'waits for you';
+      return tr('waits for you');
     default:
       return String(c.template ?? c.prompt ?? c.content ?? '').slice(0, 40);
   }
@@ -738,7 +738,7 @@ function NodeConfig({ node, spec, onLabel, onConfig, onDelete }: { node: Workflo
   );
   const botSelect = (
     <label className="field">
-      <span className="field-label">Bot</span>
+      <span className="field-label">{tr('Bot')}</span>
       <select className="select" value={c.botId ?? ''} onChange={(e) => onConfig('botId', e.target.value)}>
         {bots.map((b) => (
           <option key={b.id} value={b.id}>
@@ -757,41 +757,41 @@ function NodeConfig({ node, spec, onLabel, onConfig, onDelete }: { node: Workflo
         {spec.description}
       </p>
       <label className="field">
-        <span className="field-label">Name</span>
+        <span className="field-label">{tr('Name')}</span>
         <input className="input" value={node.label} onChange={(e) => onLabel(e.target.value)} />
       </label>
-      {node.type === 'trigger' && text('inputHint', 'What the input is', 'e.g. A web address')}
+      {node.type === 'trigger' && text('inputHint', 'What the input is', tr('e.g. A web address'))}
       {node.type === 'ai' && (
         <>
           {botSelect}
           <div className="field">
-            <span className="field-label">Model</span>
-            <ModelPicker value={c.model ?? ''} onChange={(m) => onConfig('model', m)} variant="input" direction="down" allowEmpty="The bot’s model" auto />
+            <span className="field-label">{tr('Model')}</span>
+            <ModelPicker value={c.model ?? ''} onChange={(m) => onConfig('model', m)} variant="input" direction="down" allowEmpty={tr('The bot’s model')} auto />
           </div>
-          {text('prompt', 'Prompt', 'What should the bot do? Use {{input}} for the previous step.', 6)}
+          {text('prompt', tr('Prompt'), tr('What should the bot do? Use {{input}} for the previous step.'), 6)}
           <div className="tool-toggle">
             <div className="grow">
-              <div className="t">Let it use its tools</div>
-              <div className="s">Web, memory, media, browser and connectors, as set for the bot</div>
+              <div className="t">{tr('Let it use its tools')}</div>
+              <div className="s">{tr('Web, memory, media, browser and connectors, as set for the bot')}</div>
             </div>
-            <Toggle label="Use tools" on={!!c.tools} onChange={(v) => onConfig('tools', v)} />
+            <Toggle label={tr('Use tools')} on={!!c.tools} onChange={(v) => onConfig('tools', v)} />
           </div>
           {c.tools && (
             <div className="tool-toggle">
               <div className="grow">
-                <div className="t">Allow tools that would ask</div>
-                <div className="s">Nobody is there to approve during a run; otherwise those tools are skipped</div>
+                <div className="t">{tr('Allow tools that would ask')}</div>
+                <div className="s">{tr('Nobody is there to approve during a run; otherwise those tools are skipped')}</div>
               </div>
-              <Toggle label="Allow" on={!!c.autoApprove} onChange={(v) => onConfig('autoApprove', v)} />
+              <Toggle label={tr('Allow')} on={!!c.autoApprove} onChange={(v) => onConfig('autoApprove', v)} />
             </div>
           )}
         </>
       )}
-      {node.type === 'browse' && text('url', 'Web address', '{{input}} or https://…')}
+      {node.type === 'browse' && text('url', 'Web address', tr('{{input}} or https://…'))}
       {node.type === 'http' && (
         <>
           <label className="field">
-            <span className="field-label">Method</span>
+            <span className="field-label">{tr('Method')}</span>
             <select className="select" value={c.method ?? 'GET'} onChange={(e) => onConfig('method', e.target.value)}>
               {['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((m) => (
                 <option key={m}>{m}</option>
@@ -799,69 +799,69 @@ function NodeConfig({ node, spec, onLabel, onConfig, onDelete }: { node: Workflo
             </select>
           </label>
           {text('url', 'URL', 'https://api.example.com/…')}
-          {text('headers', 'Headers (one per line)', 'Authorization: Bearer …\nContent-Type: application/json', 3)}
-          {c.method !== 'GET' && text('body', 'Body', '{"text": "{{input}}"}', 4)}
+          {text('headers', tr('Headers (one per line)'), 'Authorization: Bearer …\nContent-Type: application/json', 3)}
+          {c.method !== 'GET' && text('body', tr('Body'), '{"text": "{{input}}"}', 4)}
         </>
       )}
       {node.type === 'condition' && (
         <>
           {text('text', 'Check this text', '{{input}}')}
           <label className="field">
-            <span className="field-label">Test</span>
+            <span className="field-label">{tr('Test')}</span>
             <select className="select" value={c.test ?? 'contains'} onChange={(e) => onConfig('test', e.target.value)}>
               <option value="contains">contains</option>
               <option value="equals">equals</option>
-              <option value="regex">matches pattern</option>
-              <option value="number">number is (e.g. &gt; 10)</option>
-              <option value="empty">is empty</option>
+              <option value="regex">{tr('matches pattern')}</option>
+              <option value="number">{tr('number is (e.g. &gt; 10)')}</option>
+              <option value="empty">{tr('is empty')}</option>
             </select>
           </label>
-          {c.test !== 'empty' && text('value', 'Value', c.test === 'number' ? '> 10' : 'urgent')}
-          <p className="muted small">Connect the “yes” and “no” outputs to the steps for each case.</p>
+          {c.test !== 'empty' && text('value', tr('Value'), c.test === 'number' ? '> 10' : 'urgent')}
+          <p className="muted small">{tr('Connect the “yes” and “no” outputs to the steps for each case.')}</p>
         </>
       )}
-      {(node.type === 'transform' || node.type === 'output') && text('template', node.type === 'output' ? 'Result' : 'Text', '{{input}}', 5)}
-      {node.type === 'image' && text('prompt', 'Image prompt', 'A watercolor of {{input}}', 4)}
+      {(node.type === 'transform' || node.type === 'output') && text('template', node.type === 'output' ? tr('Result') : tr('Text'), '{{input}}', 5)}
+      {node.type === 'image' && text('prompt', 'Image prompt', tr('A watercolor of {{input}}'), 4)}
       {node.type === 'artifact' && (
         <>
-          {text('title', 'Title', 'Weekly digest {{date}}')}
+          {text('title', tr('Title'), tr('Weekly digest {{date}}'))}
           <label className="field">
-            <span className="field-label">Type</span>
+            <span className="field-label">{tr('Type')}</span>
             <select className="select" value={c.type ?? 'markdown'} onChange={(e) => onConfig('type', e.target.value)}>
-              <option value="markdown">Document</option>
-              <option value="html">Web page</option>
-              <option value="code">Code</option>
-              <option value="svg">SVG graphic</option>
-              <option value="mermaid">Diagram</option>
+              <option value="markdown">{tr('Document')}</option>
+              <option value="html">{tr('Web page')}</option>
+              <option value="code">{tr('Code')}</option>
+              <option value="svg">{tr('SVG graphic')}</option>
+              <option value="mermaid">{tr('Diagram')}</option>
             </select>
           </label>
-          {text('content', 'Content', '{{input}}', 4)}
+          {text('content', tr('Content'), '{{input}}', 4)}
         </>
       )}
       {node.type === 'memory' && (
         <>
           {botSelect}
-          {text('content', 'Memory', '{{input}}', 3)}
+          {text('content', tr('Memory'), '{{input}}', 3)}
         </>
       )}
       {node.type === 'loop' && (
         <>
           <label className="field">
-            <span className="field-label">Split the input into</span>
+            <span className="field-label">{tr('Split the input into')}</span>
             <select className="select" value={c.split ?? 'lines'} onChange={(e) => onConfig('split', e.target.value)}>
-              <option value="lines">Lines (bullets and numbers removed)</option>
-              <option value="paragraphs">Paragraphs</option>
-              <option value="json">A JSON list</option>
-              <option value="separator">Pieces split by…</option>
+              <option value="lines">{tr('Lines (bullets and numbers removed)')}</option>
+              <option value="paragraphs">{tr('Paragraphs')}</option>
+              <option value="json">{tr('A JSON list')}</option>
+              <option value="separator">{tr('Pieces split by…')}</option>
             </select>
           </label>
-          {c.split === 'separator' && text('separator', 'Separator', ',')}
+          {c.split === 'separator' && text('separator', tr('Separator'), ',')}
           <div className="segmented" style={{ marginBottom: 10 }}>
             <button className={c.mode !== 'template' ? 'active' : ''} onClick={() => onConfig('mode', 'ai')}>
-              Ask a bot
+              {tr('Ask a bot')}
             </button>
             <button className={c.mode === 'template' ? 'active' : ''} onClick={() => onConfig('mode', 'template')}>
-              Text only
+              {tr('Text only')}
             </button>
           </div>
           {c.mode === 'template' ? (
@@ -869,13 +869,13 @@ function NodeConfig({ node, spec, onLabel, onConfig, onDelete }: { node: Workflo
           ) : (
             <>
               {botSelect}
-              {text('prompt', 'Prompt for each item', 'Use {{item}} for the item and {{index}} for its number', 5)}
+              {text('prompt', 'Prompt for each item', tr('Use {{item}} for the item and {{index}} for its number'), 5)}
               <label className="field">
-                <span className="field-label">At the same time</span>
+                <span className="field-label">{tr('At the same time')}</span>
                 <select className="select" value={c.parallel ?? 3} onChange={(e) => onConfig('parallel', Number(e.target.value))}>
                   {[1, 2, 3, 4, 5].map((n) => (
                     <option key={n} value={n}>
-                      {n} item{n === 1 ? '' : 's'}
+                      {plural(n, '1 item', '{0} items')}
                     </option>
                   ))}
                 </select>
@@ -883,11 +883,11 @@ function NodeConfig({ node, spec, onLabel, onConfig, onDelete }: { node: Workflo
             </>
           )}
           <label className="field">
-            <span className="field-label">Join the results as</span>
+            <span className="field-label">{tr('Join the results as')}</span>
             <select className="select" value={c.join ?? 'paragraphs'} onChange={(e) => onConfig('join', e.target.value)}>
-              <option value="paragraphs">Paragraphs</option>
-              <option value="lines">Lines</option>
-              <option value="json">A JSON list</option>
+              <option value="paragraphs">{tr('Paragraphs')}</option>
+              <option value="lines">{tr('Lines')}</option>
+              <option value="json">{tr('A JSON list')}</option>
             </select>
           </label>
         </>
@@ -897,32 +897,32 @@ function NodeConfig({ node, spec, onLabel, onConfig, onDelete }: { node: Workflo
           <div className="segmented" style={{ marginBottom: 10 }}>
             {(['javascript', 'python'] as const).map((l) => (
               <button key={l} className={(c.language ?? 'javascript') === l ? 'active' : ''} onClick={() => onConfig('language', l)}>
-                {l === 'python' ? 'Python' : 'JavaScript'}
+                {l === 'python' ? tr('Python') : tr('JavaScript')}
               </button>
             ))}
           </div>
-          {text('code', 'Code', c.language === 'python' ? 'input.upper()' : 'return input.toUpperCase();', 9)}
+          {text('code', tr('Code'), c.language === 'python' ? 'input.upper()' : 'return input.toUpperCase();', 9)}
           <p className="muted small">
             {c.language === 'python'
-              ? 'input, trigger and steps (outputs by step name) are set; the value of the last line is the result (or what it prints).'
-              : 'input, trigger and steps (outputs by step name) are set; return the result (or console.log it). Runs up to 5 seconds.'}
+              ? tr('input, trigger and steps (outputs by step name) are set; the value of the last line is the result (or what it prints).')
+              : tr('input, trigger and steps (outputs by step name) are set; return the result (or console.log it). Runs up to 5 seconds.')}
           </p>
         </>
       )}
       {node.type === 'delay' && (
         <label className="field">
-          <span className="field-label">Wait (seconds, up to an hour)</span>
+          <span className="field-label">{tr('Wait (seconds, up to an hour)')}</span>
           <input className="input" type="number" min={0} max={3600} value={c.seconds ?? 60} onChange={(e) => onConfig('seconds', Number(e.target.value))} />
         </label>
       )}
       {node.type === 'approval' && (
         <>
-          {text('message', 'What to ask', 'Send this email?\n\n{{input}}', 5)}
-          <p className="muted small">The run pauses here until you approve or reject it, in this editor. Connect “approved” and “rejected” to what should happen next.</p>
+          {text('message', 'What to ask', tr('Send this email?\n\n{{input}}'), 5)}
+          <p className="muted small">{tr('The run pauses here until you approve or reject it, in this editor. Connect “approved” and “rejected” to what should happen next.')}</p>
         </>
       )}
       <button className="btn btn-sm btn-ghost danger-text" onClick={onDelete}>
-        <Trash2 size={13} /> Delete step
+        <Trash2 size={13} /> {tr('Delete step')}
       </button>
     </div>
   );
@@ -934,12 +934,12 @@ function RunLog({ run, wf, onClose, onPick, onDecide }: { run: WorkflowRun; wf: 
     <div className="wf-side-section wf-runlog">
       <div className="wf-side-title">
         {run.status === 'running' ? <Loader2 size={14} className="spin" /> : run.status === 'waiting' ? <Hand size={14} /> : run.status === 'error' ? <AlertTriangle size={14} /> : <Check size={14} />}
-        <span>{run.status === 'running' ? 'Running…' : run.status === 'waiting' ? 'Waiting for your approval' : run.status === 'error' ? 'Run failed' : 'Run finished'}</span>
+        <span>{run.status === 'running' ? tr('Running…') : run.status === 'waiting' ? tr('Waiting for your approval') : run.status === 'error' ? tr('Run failed') : tr('Run finished')}</span>
         <span className="muted small" style={{ marginLeft: 'auto' }}>
           {run.finishedAt ? duration(new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime()) : ''}
           {run.cost ? ` · ${money(run.cost)}` : ''}
         </span>
-        <button className="icon-btn sm" onClick={onClose} aria-label="Close run log">
+        <button className="icon-btn sm" onClick={onClose} aria-label={tr('Close run log')}>
           <X size={14} />
         </button>
       </div>
@@ -957,13 +957,13 @@ function RunLog({ run, wf, onClose, onPick, onDecide }: { run: WorkflowRun; wf: 
                 {s.status === 'waiting' ? (
                   <div className="wf-approval">
                     <StepOutput text={s.ask ?? ''} />
-                    <textarea className="textarea" rows={2} placeholder="A note for the next steps (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+                    <textarea className="textarea" rows={2} placeholder={tr('A note for the next steps (optional)')} value={note} onChange={(e) => setNote(e.target.value)} />
                     <div className="row" style={{ gap: 8 }}>
                       <button className="btn btn-primary btn-sm" onClick={() => onDecide(true, note)}>
-                        <Check size={14} /> Approve
+                        <Check size={14} /> {tr('Approve')}
                       </button>
                       <button className="btn btn-sm" onClick={() => onDecide(false, note)}>
-                        <X size={14} /> Reject
+                        <X size={14} /> {tr('Reject')}
                       </button>
                     </div>
                   </div>
@@ -979,12 +979,12 @@ function RunLog({ run, wf, onClose, onPick, onDecide }: { run: WorkflowRun; wf: 
       </ol>
       {wf.runs.length > 1 && (
         <>
-          <div className="panel-subhead">Earlier runs</div>
+          <div className="panel-subhead">{tr('Earlier runs')}</div>
           <ul className="wf-history">
             {wf.runs.slice(0, 10).map((r) => (
               <li key={r.id}>
                 <button className={`link-btn small${r.id === run.id ? ' on' : ''}`} onClick={() => onPick(r)}>
-                  {r.status === 'error' ? '⚠︎' : '✓'} {relativeTime(r.startedAt)} · {r.trigger === 'schedule' ? 'scheduled' : r.trigger === 'chat' ? 'from a chat' : r.trigger === 'webhook' ? 'webhook' : r.trigger === 'folder' ? `file ${r.source ?? ''}` : 'manual'}
+                  {r.status === 'error' ? '⚠︎' : '✓'} {relativeTime(r.startedAt)} · {r.trigger === 'schedule' ? tr('scheduled') : r.trigger === 'chat' ? tr('from a chat') : r.trigger === 'webhook' ? tr('webhook') : r.trigger === 'folder' ? tr('file {0}', r.source ?? '') : tr('manual')}
                 </button>
               </li>
             ))}
@@ -996,7 +996,7 @@ function RunLog({ run, wf, onClose, onPick, onDecide }: { run: WorkflowRun; wf: 
 }
 
 function StepOutput({ text }: { text: string }) {
-  if (/^\/media\/[a-f0-9]{32}\.\w+$/.test(text)) return <img className="wf-step-img" src={text} alt="Generated" />;
+  if (/^\/media\/[a-f0-9]{32}\.\w+$/.test(text)) return <img className="wf-step-img" src={text} alt={tr('Generated')} />;
   return (
     <div className="wf-step-output">
       <Markdown text={text.length > 4000 ? `${text.slice(0, 4000)}\n\n…` : text} />
@@ -1021,18 +1021,18 @@ function TriggersModal({ wf, onClose, onSaved }: { wf: WorkflowView; onClose(): 
     }
   };
   return (
-    <Modal title="Triggers" onClose={onClose} wide>
+    <Modal title={tr('Triggers')} onClose={onClose} wide>
       <p className="muted small" style={{ marginTop: 0 }}>
-        Start “{wf.name}” by itself, besides running it here, from a chat, or on a schedule.
+        {tr('Start “')}{wf.name}{tr('” by itself, besides running it here, from a chat, or on a schedule.')}
       </p>
       <section className="trigger-card">
         <div className="tool-toggle" style={{ padding: 0, border: 0 }}>
           <Webhook size={18} className="muted" />
           <div className="grow">
-            <div className="t">Webhook</div>
-            <div className="s">Anything sent to a secret address runs the workflow, with what was sent as its input. Use it from other apps, scripts, or email services that forward mail to a webhook.</div>
+            <div className="t">{tr('Webhook')}</div>
+            <div className="s">{tr('Anything sent to a secret address runs the workflow, with what was sent as its input. Use it from other apps, scripts, or email services that forward mail to a webhook.')}</div>
           </div>
-          <Toggle label="Webhook" on={!!hook?.enabled} onChange={(v) => void save({ webhook: { enabled: v } }, v ? 'Webhook on' : 'Webhook off')} />
+          <Toggle label={tr('Webhook')} on={!!hook?.enabled} onChange={(v) => void save({ webhook: { enabled: v } }, v ? 'Webhook on' : 'Webhook off')} />
         </div>
         {hook?.enabled && (
           <>
@@ -1046,14 +1046,14 @@ function TriggersModal({ wf, onClose, onSaved }: { wf: WorkflowView; onClose(): 
                   setTimeout(() => setCopied(false), 1500);
                 }}
               >
-                {copied ? <Check size={14} /> : null} {copied ? 'Copied' : 'Copy'}
+                {copied ? <Check size={14} /> : null} {copied ? tr('Copied') : tr('Copy')}
               </button>
-              <button className="btn btn-sm btn-ghost" title="Make a new address; the old one stops working" onClick={() => void save({ webhook: { enabled: true, regenerate: true } }, 'New address made; the old one no longer works')}>
-                New address
+              <button className="btn btn-sm btn-ghost" title={tr('Make a new address; the old one stops working')} onClick={() => void save({ webhook: { enabled: true, regenerate: true } }, tr('New address made; the old one no longer works'))}>
+                {tr('New address')}
               </button>
             </div>
             <pre className="trigger-example">{`curl -X POST ${url} -d 'text to work on'\n# or JSON: -H 'content-type: application/json' -d '{"input": "…"}'\n# add ?wait=1 to get the result back`}</pre>
-            <p className="muted small">Keep the address private: anyone who has it can run the workflow. Other services can reach it only if Mitzi is reachable from where they run (on your network, or through a tunnel).</p>
+            <p className="muted small">{tr('Keep the address private: anyone who has it can run the workflow. Other services can reach it only if Mitzi is reachable from where they run (on your network, or through a tunnel).')}</p>
           </>
         )}
       </section>
@@ -1061,44 +1061,44 @@ function TriggersModal({ wf, onClose, onSaved }: { wf: WorkflowView; onClose(): 
         <div className="tool-toggle" style={{ padding: 0, border: 0 }}>
           <FolderOpen size={18} className="muted" />
           <div className="grow">
-            <div className="t">Watch a folder</div>
-            <div className="s">Each new or changed text file in the folder runs the workflow, with the file’s text as its input. Files already there when you start watching don’t count.</div>
+            <div className="t">{tr('Watch a folder')}</div>
+            <div className="s">{tr('Each new or changed text file in the folder runs the workflow, with the file’s text as its input. Files already there when you start watching don’t count.')}</div>
           </div>
           <Toggle
-            label="Watch a folder"
+            label={tr('Watch a folder')}
             on={!!wf.triggers?.folder?.enabled}
             onChange={(v) => {
               if (v && !folder.path) return setBrowsing(true);
-              void save({ folder: { ...folder, enabled: v } }, v ? `Watching ${folder.path}` : 'Stopped watching');
+              void save({ folder: { ...folder, enabled: v } }, v ? tr('Watching {0}', folder.path) : 'Stopped watching');
             }}
           />
         </div>
         <div className="row" style={{ gap: 6, marginTop: 10 }}>
-          <input className="input mono" placeholder="Choose a folder" value={folder.path} readOnly onClick={() => setBrowsing(true)} />
+          <input className="input mono" placeholder={tr('Choose a folder')} value={folder.path} readOnly onClick={() => setBrowsing(true)} />
           <button className="btn btn-sm" onClick={() => setBrowsing(true)}>
-            <FolderSearch size={14} /> Choose…
+            <FolderSearch size={14} /> {tr('Choose…')}
           </button>
         </div>
         <label className="field" style={{ marginTop: 10, marginBottom: 0 }}>
-          <span className="field-label">Files</span>
+          <span className="field-label">{tr('Files')}</span>
           <input
             className="input"
             value={folder.pattern}
-            placeholder="*.txt, *.md"
+            placeholder={tr('*.txt, *.md')}
             onChange={(e) => setFolder((f) => ({ ...f, pattern: e.target.value }))}
             onBlur={() => wf.triggers?.folder?.enabled && void save({ folder: { ...folder, enabled: true } })}
           />
         </label>
         {browsing && (
           <FolderPicker
-            title="Watch a folder"
+            title={tr('Watch a folder')}
             action="Watch this folder"
             start={folder.path || undefined}
             onClose={() => setBrowsing(false)}
             onPick={(path) => {
               setBrowsing(false);
               setFolder((f) => ({ ...f, path }));
-              void save({ folder: { ...folder, path, enabled: true } }, `Watching ${path}`);
+              void save({ folder: { ...folder, path, enabled: true } }, tr('Watching {0}', path));
             }}
           />
         )}
@@ -1122,7 +1122,7 @@ function ScheduleModal({ wf, input, onClose }: { wf: WorkflowView; input: string
         schedule: kind === 'interval' ? { kind: 'interval', everyMinutes: every } : kind === 'weekly' ? { kind: 'weekly', time, days: [1] } : { kind: 'daily', time },
       } as never);
       void refreshTasks();
-      toast(`“${wf.name}” will run on its schedule. You'll find it under Scheduled.`, 'info');
+      toast(tr('“{0}” will run on its schedule. You\'ll find it under Scheduled.', wf.name), 'info');
       onClose();
     } catch (err) {
       toast((err as Error).message);
@@ -1130,15 +1130,15 @@ function ScheduleModal({ wf, input, onClose }: { wf: WorkflowView; input: string
   };
   return (
     <Modal
-      title="Run on a schedule"
+      title={tr('Run on a schedule')}
       onClose={onClose}
       footer={
         <>
           <a className="btn btn-ghost" href={href({ page: 'tasks' })}>
-            All scheduled tasks
+            {tr('All scheduled tasks')}
           </a>
           <button className="btn btn-primary" onClick={() => void save()}>
-            Schedule it
+            {tr('Schedule it')}
           </button>
         </>
       }
@@ -1146,24 +1146,24 @@ function ScheduleModal({ wf, input, onClose }: { wf: WorkflowView; input: string
       <div className="segmented" style={{ marginBottom: 12 }}>
         {(['daily', 'weekly', 'interval'] as const).map((k) => (
           <button key={k} className={kind === k ? 'active' : ''} onClick={() => setKind(k)}>
-            {k === 'daily' ? 'Every day' : k === 'weekly' ? 'Every Monday' : 'Every few minutes'}
+            {k === 'daily' ? tr('Every day') : k === 'weekly' ? tr('Every Monday') : tr('Every few minutes')}
           </button>
         ))}
       </div>
       {kind === 'interval' ? (
         <label className="field">
-          <span className="field-label">Every (minutes)</span>
+          <span className="field-label">{tr('Every (minutes)')}</span>
           <input className="input" type="number" min={5} value={every} onChange={(e) => setEvery(Number(e.target.value))} />
         </label>
       ) : (
         <label className="field">
-          <span className="field-label">At</span>
+          <span className="field-label">{tr('At')}</span>
           <input className="input" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
         </label>
       )}
       <label className="field">
-        <span className="field-label">Input for each run</span>
-        <textarea className="textarea" rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder={String(wf.nodes.find((n) => n.type === 'trigger')?.config.inputHint || 'Optional')} />
+        <span className="field-label">{tr('Input for each run')}</span>
+        <textarea className="textarea" rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder={String(wf.nodes.find((n) => n.type === 'trigger')?.config.inputHint || tr('Optional'))} />
       </label>
     </Modal>
   );

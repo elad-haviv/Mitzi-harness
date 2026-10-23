@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { api } from './api';
 import { guessLanguage, voiceFor } from './languages';
+import { tr } from './i18n';
 
 /** Turns markdown into plain text that sounds right when spoken. */
 export function stripMarkdown(md: string): string {
@@ -244,7 +245,7 @@ function listenBrowser(cb: ListenCallbacks, language: string): ListenHandle {
     if (done) return;
     if (e.error === 'no-speech' || e.error === 'aborted') return;
     done = true;
-    cb.onError(e.error === 'not-allowed' ? 'Microphone access was blocked. Allow it in your browser to use live mode.' : `Speech recognition failed: ${e.error}`);
+    cb.onError(e.error === 'not-allowed' ? tr('Microphone access was blocked. Allow it in your browser to use live mode.') : tr('Speech recognition failed: {0}', e.error));
   };
   rec.onend = () => {
     if (done) return;
@@ -266,7 +267,7 @@ function listenRecorder(cb: ListenCallbacks, language: string): ListenHandle {
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
     } catch {
-      return cb.onError('Microphone access was blocked. Allow it in your browser to use live mode.');
+      return cb.onError(tr('Microphone access was blocked. Allow it in your browser to use live mode.'));
     }
     if (stopped) return stream.getTracks().forEach((t) => t.stop());
     const ctx = new AudioContext();

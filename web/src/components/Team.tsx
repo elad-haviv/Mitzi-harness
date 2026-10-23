@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { Bot, StreamEvent } from '../api';
 import { useApp } from '../state';
 import { Markdown } from './Markdown';
+import { tr } from '../i18n';
 
 type DelegateEvent = Extract<StreamEvent, { type: 'delegate' }>;
 
@@ -67,7 +68,7 @@ export function SubagentsCard({ args, result, running, progress, bot }: { args: 
       <div className="team-head">
         <Split size={14} />
         <span>
-          {busy ? 'Working with' : 'Worked with'} {tasks.length === 1 ? 'a subagent' : `${tasks.length} subagents`}
+          {busy ? tr('Working with') : tr('Worked with')} {tasks.length === 1 ? tr('a subagent') : tr('{0} subagents', tasks.length)}
         </span>
         {result?.isError && <span className="team-error">{result.output}</span>}
       </div>
@@ -91,7 +92,7 @@ export function TeamCard({ args, result, running, progress }: { args: any; resul
       <div className="team-head">
         <Users size={14} />
         <span>
-          {busy ? 'Working with' : 'Worked with'} {assignments.length === 1 ? 'a teammate' : `${assignments.length} teammates`}
+          {busy ? tr('Working with') : tr('Worked with')} {assignments.length === 1 ? tr('a teammate') : tr('{0} teammates', assignments.length)}
         </span>
         {result?.isError && <span className="team-error">{result.output}</span>}
       </div>

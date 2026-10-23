@@ -17,6 +17,7 @@ import { TasksPage } from './pages/Tasks';
 import { ProjectPage, ProjectsPage } from './pages/Projects';
 import { useRoute } from './router';
 import { useApp } from './state';
+import { tr } from './i18n';
 
 function readCollapsed(): boolean {
   try {
@@ -72,10 +73,9 @@ export function App() {
           <div className="empty-icon">
             <KeyRound size={22} />
           </div>
-          <h3>Open Mitzi from your terminal</h3>
+          <h3>{tr('Open Mitzi from your terminal')}</h3>
           <p>
-            For your security, Mitzi only accepts requests that carry the access token from the link printed by <code>mitzi ui</code>. Open that link
-            to continue.
+            {tr('For your security, Mitzi only accepts requests that carry the access token from the link printed by')}{' '}<code>mitzi ui</code>{tr('. Open that link to continue.')}
           </p>
         </div>
       </div>
@@ -141,7 +141,7 @@ export function App() {
       {!collapsed && narrow() && <div className="sidebar-scrim" onClick={toggle} />}
       <main className="main">
         {collapsed && (
-          <button className="icon-btn" style={{ position: 'absolute', top: 12, left: 10, zIndex: 20 }} onClick={toggle} aria-label="Open sidebar" title="Open sidebar">
+          <button className="icon-btn" style={{ position: 'absolute', top: 12, left: 10, zIndex: 20 }} onClick={toggle} aria-label={tr('Open sidebar')} title={tr('Open sidebar')}>
             <PanelLeft size={18} />
           </button>
         )}

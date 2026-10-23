@@ -4,16 +4,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { guessLanguage, languageName, LANGUAGES } from '../languages';
 import { hasBrowserRecognition, listen, ListenHandle, loadVoicePrefs, saveVoicePrefs, speaker, stripMarkdown } from '../speech';
 import { useApp } from '../state';
+import { tr } from '../i18n';
 
 type Phase = 'starting' | 'listening' | 'thinking' | 'speaking' | 'paused' | 'error';
 
 const LABEL: Record<Phase, string> = {
-  starting: 'Starting…',
-  listening: 'Listening',
-  thinking: 'Thinking',
-  speaking: 'Speaking',
-  paused: 'Paused',
-  error: 'Something went wrong',
+  starting: tr('Starting…'),
+  listening: tr('Listening'),
+  thinking: tr('Thinking'),
+  speaking: tr('Speaking'),
+  paused: tr('Paused'),
+  error: tr('Something went wrong'),
 };
 
 /**
@@ -67,7 +68,7 @@ export function LiveMode({
   const startListening = useCallback(() => {
     if (!alive.current) return;
     if (!hasBrowserRecognition() && !canTranscribe) {
-      setError('This browser has no built-in speech recognition. Choose a transcription model in Settings → Media & voice to use live mode here.');
+      setError(tr('This browser has no built-in speech recognition. Choose a transcription model in Settings → Media & voice to use live mode here.'));
       return go('error');
     }
     go('listening');
@@ -155,15 +156,15 @@ export function LiveMode({
   };
 
   return (
-    <div className="live-overlay" role="dialog" aria-label="Live conversation">
+    <div className="live-overlay" role="dialog" aria-label={tr('Live conversation')}>
       <div className="live-top">
         <span className="live-title">
           {emoji && <span>{emoji}</span>} {title}
         </span>
-        <label className="live-lang" title={detecting ? 'Your transcription model detects the language you speak' : 'The language you speak'}>
+        <label className="live-lang" title={detecting ? tr('Your transcription model detects the language you speak') : tr('The language you speak')}>
           <Languages size={15} />
-          <select value={language} onChange={(e) => changeLanguage(e.target.value)} aria-label="Language you speak">
-            <option value="">{detecting ? 'Detect language' : `Auto (${languageName(listeningIn)})`}</option>
+          <select value={language} onChange={(e) => changeLanguage(e.target.value)} aria-label={tr('Language you speak')}>
+            <option value="">{detecting ? tr('Detect language') : tr('Auto ({0})', languageName(listeningIn))}</option>
             {LANGUAGES.map((l) => (
               <option key={l.code} value={l.code}>
                 {l.name}
@@ -171,7 +172,7 @@ export function LiveMode({
             ))}
           </select>
         </label>
-        <span className="muted small">Live conversation · Esc to end</span>
+        <span className="muted small">{tr('Live conversation · Esc to end')}</span>
       </div>
       <div className="live-center">
         <VoiceCat state={phase === 'listening' && level > 0.12 ? 'hearing' : phase} level={level} />
@@ -194,29 +195,29 @@ export function LiveMode({
             )}
             {phase === 'listening' && !detecting && !heard && (
               <p className="muted small live-lang-hint">
-                Listening in {languageName(listeningIn)}. Speaking another language? Choose it above{canTranscribe ? '' : ', or set a transcription model in Settings → Media & voice to detect it automatically'}.
+                {tr('Listening in')}{' '}{languageName(listeningIn)}{tr('. Speaking another language? Choose it above')}{canTranscribe ? '' : tr(', or set a transcription model in Settings → Media & voice to detect it automatically')}.
               </p>
             )}
-            {phase === 'paused' && <p className="muted small">Tap the microphone to keep talking.</p>}
+            {phase === 'paused' && <p className="muted small">{tr('Tap the microphone to keep talking.')}</p>}
           </>
         )}
       </div>
       <div className="live-controls">
         {phase === 'paused' || phase === 'error' ? (
-          <button className="live-btn" onClick={() => (setError(''), startListening())} aria-label="Resume listening" title="Resume">
+          <button className="live-btn" onClick={() => (setError(''), startListening())} aria-label={tr('Resume listening')} title={tr('Resume')}>
             <Mic size={22} />
           </button>
         ) : (
-          <button className="live-btn" onClick={pause} aria-label="Pause" title="Pause">
+          <button className="live-btn" onClick={pause} aria-label={tr('Pause')} title={tr('Pause')}>
             <MicOff size={22} />
           </button>
         )}
         {(phase === 'speaking' || phase === 'thinking') && (
-          <button className="live-btn" onClick={interrupt} aria-label="Interrupt" title="Interrupt and talk">
+          <button className="live-btn" onClick={interrupt} aria-label={tr('Interrupt')} title={tr('Interrupt and talk')}>
             <SkipForward size={22} />
           </button>
         )}
-        <button className="live-btn end" onClick={onClose} aria-label="End live conversation" title="End">
+        <button className="live-btn end" onClick={onClose} aria-label={tr('End live conversation')} title={tr('End')}>
           <PhoneOff size={22} />
         </button>
       </div>

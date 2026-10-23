@@ -3,22 +3,23 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, MarketplaceInfo, PluginInfo } from '../api';
 import { Empty, Menu, Modal, Toggle, useConfirm } from '../components/ui';
 import { useApp } from '../state';
+import { plural, tr } from '../i18n';
 
 const SUGGESTED = [
-  { source: 'anthropics/claude-plugins-official', label: 'Claude plugin directory' },
-  { source: 'anthropics/claude-code', label: 'Claude Code plugins' },
-  { source: 'anthropics/skills', label: 'Anthropic skills' },
+  { source: 'anthropics/claude-plugins-official', label: tr('Claude plugin directory') },
+  { source: 'anthropics/claude-code', label: tr('Claude Code plugins') },
+  { source: 'anthropics/skills', label: tr('Anthropic skills') },
 ];
 
 function summary(p: PluginInfo): string {
   const c = p.components;
   const parts = [
-    c.skills && `${c.skills} skill${c.skills === 1 ? '' : 's'}`,
-    c.commands && `${c.commands} command${c.commands === 1 ? '' : 's'}`,
-    c.agents && `${c.agents} bot${c.agents === 1 ? '' : 's'}`,
-    c.mcpServers && `${c.mcpServers} connector${c.mcpServers === 1 ? '' : 's'}`,
+    c.skills && plural(c.skills, '1 skill', '{0} skills'),
+    c.commands && plural(c.commands, '1 command', '{0} commands'),
+    c.agents && plural(c.agents, '1 bot', '{0} bots'),
+    c.mcpServers && plural(c.mcpServers, '1 connector', '{0} connectors'),
   ].filter(Boolean);
-  return parts.join(' · ') || 'Nothing Mitzi can use';
+  return parts.join(' · ') || tr('Nothing Mitzi can use');
 }
 
 export function PluginsPage() {
@@ -61,22 +62,22 @@ export function PluginsPage() {
       <div className="page-inner">
         <div className="page-header">
           <div>
-            <h1 className="page-title">Plugins</h1>
+            <h1 className="page-title">{tr('Plugins')}</h1>
             <p className="page-subtitle">
-              Bundles of skills, slash commands, bots and connectors. Mitzi installs Claude Code plugins and marketplaces as they are.
+              {tr('Bundles of skills, slash commands, bots and connectors. Mitzi installs Claude Code plugins and marketplaces as they are.')}
             </p>
           </div>
           <button className="btn btn-primary" onClick={() => setInstalling(true)}>
-            <Download size={16} /> Install plugin
+            <Download size={16} /> {tr('Install plugin')}
           </button>
         </div>
 
         <h2 className="section-title" style={{ marginTop: 0 }}>
-          Installed
+          {tr('Installed')}
         </h2>
         {plugins && plugins.length === 0 ? (
-          <Empty icon={<Puzzle size={22} />} title="No plugins installed">
-            Install one from a marketplace below, or from a git repository.
+          <Empty icon={<Puzzle size={22} />} title={tr('No plugins installed')}>
+            {tr('Install one from a marketplace below, or from a git repository.')}
           </Empty>
         ) : (
           <div className="list">
@@ -89,8 +90,8 @@ export function PluginsPage() {
                       {p.name}
                       {p.version && <span className="muted small">v{p.version}</span>}
                       {p.components.hooks && (
-                        <span className="badge warn" title="Hooks are Claude Code automations that Mitzi doesn't run">
-                          hooks not supported
+                        <span className="badge warn" title={tr('Hooks are Claude Code automations that Mitzi doesn\'t run')}>
+                          {tr('hooks not supported')}
                         </span>
                       )}
                     </div>
@@ -100,29 +101,29 @@ export function PluginsPage() {
                     </div>
                   </div>
                   {busy === p.id && <Loader2 size={16} className="spin muted" />}
-                  <Toggle label={`Enable ${p.name}`} on={p.enabled} onChange={(v) => void run(p.id, () => api.setPluginEnabled(p.id, v))} />
+                  <Toggle label={tr('Enable {0}', p.name)} on={p.enabled} onChange={(v) => void run(p.id, () => api.setPluginEnabled(p.id, v))} />
                   <Menu
                     trigger={(_o, toggle) => (
-                      <button className="icon-btn" onClick={toggle} aria-label={`${p.name} options`}>
+                      <button className="icon-btn" onClick={toggle} aria-label={tr('{0} options', p.name)}>
                         <MoreHorizontal size={17} />
                       </button>
                     )}
                   >
                     {(close) => (
                       <>
-                        <button onClick={() => (close(), void run(p.id, () => api.updatePlugin(p.id), `${p.name} updated`))}>
-                          <RefreshCw size={15} /> Update
+                        <button onClick={() => (close(), void run(p.id, () => api.updatePlugin(p.id), tr('{0} updated', p.name)))}>
+                          <RefreshCw size={15} /> {tr('Update')}
                         </button>
                         <hr />
                         <button
                           className="danger"
                           onClick={async () => {
                             close();
-                            if (!(await confirm(`Uninstall ${p.name}? Its skills, commands, bots and connectors are removed. Chats are kept.`, { title: 'Uninstall plugin?', action: 'Uninstall' }))) return;
+                            if (!(await confirm(tr('Uninstall {0}? Its skills, commands, bots and connectors are removed. Chats are kept.', p.name), { title: tr('Uninstall plugin?'), action: tr('Uninstall') }))) return;
                             void run(p.id, () => api.uninstallPlugin(p.id));
                           }}
                         >
-                          <Trash2 size={15} /> Uninstall
+                          <Trash2 size={15} /> {tr('Uninstall')}
                         </button>
                       </>
                     )}
@@ -134,7 +135,7 @@ export function PluginsPage() {
         )}
 
         <h2 className="section-title">
-          <Store size={17} /> Marketplaces
+          <Store size={17} /> {tr('Marketplaces')}
         </h2>
         <AddMarketplace existing={markets} onAdded={load} />
         {markets.map((m) => (
@@ -142,7 +143,7 @@ export function PluginsPage() {
             key={m.id}
             market={m}
             busy={busy}
-            onInstall={(name) => run(`${m.id}:${name}`, () => api.installFromMarketplace(m.id, name), `Installed ${name}`)}
+            onInstall={(name) => run(`${m.id}:${name}`, () => api.installFromMarketplace(m.id, name), tr('Installed {0}', name))}
             onRefresh={() => run(m.id, () => api.refreshMarketplace(m.id))}
             onRemove={() => run(m.id, () => api.removeMarketplace(m.id))}
           />
@@ -152,8 +153,8 @@ export function PluginsPage() {
         <InstallModal
           onClose={() => setInstalling(false)}
           onDone={(result) => {
-            if (result.marketplace) toast(`That repository is a marketplace; added “${result.marketplace.name}” below.`, 'info');
-            else if (result.plugin) toast(`Installed ${result.plugin.name}`, 'info');
+            if (result.marketplace) toast(tr('That repository is a marketplace; added “{0}” below.', result.marketplace.name), 'info');
+            else if (result.plugin) toast(tr('Installed {0}', result.plugin.name), 'info');
             void load();
             void refreshBots();
           }}
@@ -190,14 +191,14 @@ function AddMarketplace({ existing, onAdded }: { existing: MarketplaceInfo[]; on
           if (source.trim()) void add(source.trim());
         }}
       >
-        <input className="input mono" placeholder="owner/repo, a git URL, or a folder" value={source} onChange={(e) => setSource(e.target.value)} />
+        <input className="input mono" placeholder={tr('owner/repo, a git URL, or a folder')} value={source} onChange={(e) => setSource(e.target.value)} />
         <button className="btn" disabled={!source.trim() || !!busy}>
-          {busy === source.trim() && busy ? <Loader2 size={15} className="spin" /> : null} Add marketplace
+          {busy === source.trim() && busy ? <Loader2 size={15} className="spin" /> : null} {tr('Add marketplace')}
         </button>
       </form>
       {suggestions.length > 0 && (
         <div className="row small" style={{ marginTop: 10, flexWrap: 'wrap', gap: 6 }}>
-          <span className="muted">Suggested:</span>
+          <span className="muted">{tr('Suggested:')}</span>
           {suggestions.map((s) => (
             <button key={s.source} className="badge" style={{ cursor: 'pointer' }} disabled={!!busy} onClick={() => void add(s.source)} title={s.source}>
               {busy === s.source ? <Loader2 size={11} className="spin" /> : '+'} {s.label}
@@ -230,28 +231,28 @@ function Marketplace({
   return (
     <div className="list" style={{ marginBottom: 14 }}>
       <div className="ext-head" style={{ borderBottom: open ? '1px solid var(--border)' : 0 }}>
-        <button className="icon-btn sm" onClick={() => setOpen((o) => !o)} aria-label={open ? 'Collapse' : 'Expand'}>
+        <button className="icon-btn sm" onClick={() => setOpen((o) => !o)} aria-label={open ? tr('Collapse') : tr('Expand')}>
           {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
         </button>
         <div className="grow">
           <div className="t">{market.name}</div>
           <div className="s">
-            {market.plugins.length} plugins · {market.source}
+            {market.plugins.length} {tr('plugins ·')}{' '}{market.source}
             {market.description ? ` — ${market.description}` : ''}
           </div>
         </div>
         {busy === market.id && <Loader2 size={16} className="spin muted" />}
-        <button className="icon-btn sm" title="Refresh" aria-label="Refresh marketplace" onClick={onRefresh}>
+        <button className="icon-btn sm" title={tr('Refresh')} aria-label={tr('Refresh marketplace')} onClick={onRefresh}>
           <RefreshCw size={14} />
         </button>
-        <button className="icon-btn sm" title="Remove" aria-label="Remove marketplace" onClick={onRemove}>
+        <button className="icon-btn sm" title={tr('Remove')} aria-label={tr('Remove marketplace')} onClick={onRemove}>
           <Trash2 size={14} />
         </button>
       </div>
       {open && (
         <div style={{ padding: '10px 16px 14px' }}>
           {market.plugins.length > 8 && (
-            <input className="input" placeholder={`Search ${market.plugins.length} plugins`} value={q} onChange={(e) => setQ(e.target.value)} style={{ marginBottom: 10 }} />
+            <input className="input" placeholder={tr('Search {0} plugins', market.plugins.length)} value={q} onChange={(e) => setQ(e.target.value)} style={{ marginBottom: 10 }} />
           )}
           {shown.slice(0, limit).map((p) => (
             <div key={p.name} className="file-row" style={{ alignItems: 'flex-start', gap: 12 }}>
@@ -266,20 +267,20 @@ function Marketplace({
                 )}
               </div>
               {p.installed ? (
-                <span className="badge ok">Installed</span>
+                <span className="badge ok">{tr('Installed')}</span>
               ) : (
                 <button className="btn btn-sm" disabled={!!busy} onClick={() => onInstall(p.name)}>
-                  {busy === `${market.id}:${p.name}` ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Install
+                  {busy === `${market.id}:${p.name}` ? <Loader2 size={14} className="spin" /> : <Download size={14} />} {tr('Install')}
                 </button>
               )}
             </div>
           ))}
           {shown.length > limit && (
             <button className="btn btn-ghost btn-sm" style={{ marginTop: 8 }} onClick={() => setLimit((l) => l + 50)}>
-              Show more ({shown.length - limit})
+              {tr('Show more (')}{shown.length - limit})
             </button>
           )}
-          {!shown.length && <div className="muted small">No plugins match.</div>}
+          {!shown.length && <div className="muted small">{tr('No plugins match.')}</div>}
         </div>
       )}
     </div>
@@ -303,32 +304,32 @@ function InstallModal({ onClose, onDone }: { onClose(): void; onDone(r: { plugin
   };
   return (
     <Modal
-      title="Install a plugin"
+      title={tr('Install a plugin')}
       onClose={onClose}
       footer={
         <>
           <button className="btn btn-ghost" onClick={onClose}>
-            Cancel
+            {tr('Cancel')}
           </button>
           <button className="btn btn-primary" disabled={busy || !source.trim()} onClick={install}>
-            {busy ? <Loader2 size={15} className="spin" /> : <Download size={15} />} Install
+            {busy ? <Loader2 size={15} className="spin" /> : <Download size={15} />} {tr('Install')}
           </button>
         </>
       }
     >
       <label className="field">
-        <span className="field-label">Source</span>
+        <span className="field-label">{tr('Source')}</span>
         <input
           className="input mono"
           autoFocus
           value={source}
           onChange={(e) => setSource(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && source.trim() && !busy && void install()}
-          placeholder="owner/repo, https://github.com/…, or ~/path/to/plugin"
+          placeholder={tr('owner/repo, https://github.com/…, or ~/path/to/plugin')}
         />
-        <span className="field-hint">A folder or repository with .claude-plugin/plugin.json. Marketplace repositories are added as marketplaces.</span>
+        <span className="field-hint">{tr('A folder or repository with .claude-plugin/plugin.json. Marketplace repositories are added as marketplaces.')}</span>
       </label>
-      <div className="warning-note">Plugins can run programs on your computer through their connectors and command snippets. Only install plugins you trust.</div>
+      <div className="warning-note">{tr('Plugins can run programs on your computer through their connectors and command snippets. Only install plugins you trust.')}</div>
     </Modal>
   );
 }

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Artifact, ArtifactType } from '../api';
 import { href } from '../router';
 import { CopyButton, Markdown } from './Markdown';
+import { tr } from '../i18n';
 
 export function ArtifactIcon({ type, size = 18 }: { type: ArtifactType; size?: number }) {
   switch (type) {
@@ -32,16 +33,16 @@ export function ArtifactIcon({ type, size = 18 }: { type: ArtifactType; size?: n
 }
 
 export const TYPE_LABEL: Record<ArtifactType, string> = {
-  markdown: 'Document',
-  slides: 'Presentation',
-  code: 'Code',
-  html: 'Web page',
-  react: 'Component',
-  svg: 'Vector graphic',
-  mermaid: 'Diagram',
-  image: 'Image',
-  video: 'Video',
-  audio: 'Audio',
+  markdown: tr('Document'),
+  slides: tr('Presentation'),
+  code: tr('Code'),
+  html: tr('Web page'),
+  react: tr('Component'),
+  svg: tr('Vector graphic'),
+  mermaid: tr('Diagram'),
+  image: tr('Image'),
+  video: tr('Video'),
+  audio: tr('Audio'),
 };
 
 export const isMedia = (type: ArtifactType) => type === 'image' || type === 'video' || type === 'audio';
@@ -76,24 +77,24 @@ export function SlidesView({ content, compact }: { content: string; compact?: bo
         </div>
       </div>
       <div className="slide-bar">
-        <button className="icon-btn sm" disabled={at === 0} onClick={() => go(-1)} aria-label="Previous slide">
+        <button className="icon-btn sm" disabled={at === 0} onClick={() => go(-1)} aria-label={tr('Previous slide')}>
           <ChevronLeft size={16} />
         </button>
         <span className="small muted">
           {at + 1} / {slides.length}
         </span>
-        <button className="icon-btn sm" disabled={at >= slides.length - 1} onClick={() => go(1)} aria-label="Next slide">
+        <button className="icon-btn sm" disabled={at >= slides.length - 1} onClick={() => go(1)} aria-label={tr('Next slide')}>
           <ChevronRight size={16} />
         </button>
         <div style={{ flex: 1 }} />
-        <button className="btn btn-sm btn-ghost" onClick={() => void stage.current?.requestFullscreen?.()} title="Present full screen (arrow keys to move)">
-          <Maximize size={14} /> Present
+        <button className="btn btn-sm btn-ghost" onClick={() => void stage.current?.requestFullscreen?.()} title={tr('Present full screen (arrow keys to move)')}>
+          <Maximize size={14} /> {tr('Present')}
         </button>
       </div>
       {!compact && slides.length > 1 && (
         <div className="slide-thumbs">
           {slides.map((s, i) => (
-            <button key={i} className={`slide-thumb${i === at ? ' on' : ''}`} onClick={() => setIndex(i)} aria-label={`Slide ${i + 1}`}>
+            <button key={i} className={`slide-thumb${i === at ? ' on' : ''}`} onClick={() => setIndex(i)} aria-label={tr('Slide {0}', i + 1)}>
               <div className={`slide${i === 0 ? ' title-slide' : ''}`}>
                 <Markdown text={s} />
               </div>
@@ -253,11 +254,11 @@ export function ArtifactView({
         </div>
         {artifact.versions.length > 1 && (
           <div className="version-nav">
-            <button className="icon-btn sm" disabled={version === 0} onClick={() => setVersion((v) => v - 1)} aria-label="Previous version">
+            <button className="icon-btn sm" disabled={version === 0} onClick={() => setVersion((v) => v - 1)} aria-label={tr('Previous version')}>
               <ChevronLeft size={15} />
             </button>
             v{version + 1}/{artifact.versions.length}
-            <button className="icon-btn sm" disabled={version >= latest} onClick={() => setVersion((v) => v + 1)} aria-label="Next version">
+            <button className="icon-btn sm" disabled={version >= latest} onClick={() => setVersion((v) => v + 1)} aria-label={tr('Next version')}>
               <ChevronRight size={15} />
             </button>
           </div>
@@ -265,40 +266,40 @@ export function ArtifactView({
         {previewable && !media && (
           <div className="segmented">
             <button className={tab === 'preview' ? 'active' : ''} onClick={() => setTab('preview')}>
-              Preview
+              {tr('Preview')}
             </button>
             <button className={tab === 'code' ? 'active' : ''} onClick={() => setTab('code')}>
-              <Code size={13} /> Code
+              <Code size={13} /> {tr('Code')}
             </button>
           </div>
         )}
-        {!media && <CopyButton text={() => content} label="Copy content" />}
+        {!media && <CopyButton text={() => content} label={tr('Copy content')} />}
         {onOpenWorkspace && (
-          <button className="icon-btn sm" title="Open in workspace: edit, comment and see versions" aria-label="Open in workspace" onClick={onOpenWorkspace}>
+          <button className="icon-btn sm" title={tr('Open in workspace: edit, comment and see versions')} aria-label={tr('Open in workspace')} onClick={onOpenWorkspace}>
             <SquareArrowOutUpRight size={14} />
           </button>
         )}
-        <button className="icon-btn sm" title="Download" aria-label="Download" onClick={() => download(artifact, content)}>
+        <button className="icon-btn sm" title={tr('Download')} aria-label={tr('Download')} onClick={() => download(artifact, content)}>
           <Download size={14} />
         </button>
-        <button className="icon-btn sm" title="Share or download as a web page" aria-label="Share" onClick={() => setSharing(true)}>
+        <button className="icon-btn sm" title={tr('Share or download as a web page')} aria-label={tr('Share')} onClick={() => setSharing(true)}>
           <Share2 size={14} />
         </button>
         {sharing && (
           <ShareDialog kind="artifact" targetId={artifact.id} title={artifact.title} onClose={() => setSharing(false)} page={async () => (await import('../exporter')).artifactPage(artifact)} />
         )}
         {showChatLink && (
-          <a className="icon-btn sm" title="Open the chat that made this" aria-label="Open chat" href={href({ page: 'chat', id: artifact.chatId })}>
+          <a className="icon-btn sm" title={tr('Open the chat that made this')} aria-label={tr('Open chat')} href={href({ page: 'chat', id: artifact.chatId })}>
             <ExternalLink size={14} />
           </a>
         )}
         {onToggleExpand && (
-          <button className="icon-btn sm" title={expanded ? 'Restore' : 'Expand'} aria-label={expanded ? 'Restore' : 'Expand'} onClick={onToggleExpand}>
+          <button className="icon-btn sm" title={expanded ? tr('Restore') : tr('Expand')} aria-label={expanded ? tr('Restore') : tr('Expand')} onClick={onToggleExpand}>
             {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
         )}
         {onClose && (
-          <button className="icon-btn sm" title="Close" aria-label="Close" onClick={onClose}>
+          <button className="icon-btn sm" title={tr('Close')} aria-label={tr('Close')} onClick={onClose}>
             <X size={15} />
           </button>
         )}

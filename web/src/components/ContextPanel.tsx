@@ -4,6 +4,7 @@ import { api, ContextBreakdown, ContextSection } from '../api';
 import { href } from '../router';
 import { formatTokens, useApp } from '../state';
 import { ContextRing } from './Composer';
+import { tr } from '../i18n';
 
 const KIND_COLOR: Record<ContextSection['kind'], string> = {
   system: 'var(--c-system)',
@@ -32,7 +33,7 @@ export function ContextPanel({ chatId, refreshKey, onClose, onChanged, bare }: {
     setBusy('compact');
     try {
       const res = await api.compact(chatId);
-      if (!res.compacted) toast('Nothing to compact yet: the recent turns are always kept.', 'info');
+      if (!res.compacted) toast(tr('Nothing to compact yet: the recent turns are always kept.'), 'info');
       onChanged();
       load();
     } catch (err) {
@@ -59,8 +60,8 @@ export function ContextPanel({ chatId, refreshKey, onClose, onChanged, bare }: {
       {!bare && (
         <div className="panel-head">
           <Gauge size={18} className="muted" />
-          <div className="panel-title">Context window</div>
-          <button className="icon-btn sm" onClick={onClose} aria-label="Close">
+          <div className="panel-title">{tr('Context window')}</div>
+          <button className="icon-btn sm" onClick={onClose} aria-label={tr('Close')}>
             <X size={15} />
           </button>
         </div>
@@ -79,8 +80,8 @@ export function ContextPanel({ chatId, refreshKey, onClose, onChanged, bare }: {
               </div>
               <div className="muted small">
                 {data.lastPromptTokens
-                  ? `Last request used ${data.lastPromptTokens.toLocaleString()} tokens (reported by the provider).`
-                  : 'Estimated: no request has been made with the current context yet.'}
+                  ? tr('Last request used {0} tokens (reported by the provider).', data.lastPromptTokens.toLocaleString())
+                  : tr('Estimated: no request has been made with the current context yet.')}
               </div>
             </div>
 
@@ -89,11 +90,11 @@ export function ContextPanel({ chatId, refreshKey, onClose, onChanged, bare }: {
                 {data.sections.map((s, i) => (
                   <div key={i} style={{ width: `${(s.tokens / Math.max(window, total)) * 100}%`, background: KIND_COLOR[s.kind] }} title={`${s.label}: ${s.tokens}`} />
                 ))}
-                {data.autoCompactAt && <div className="marker" style={{ left: `${Math.min(99, (data.autoCompactAt / window) * 100)}%` }} title="Auto-compaction threshold" />}
+                {data.autoCompactAt && <div className="marker" style={{ left: `${Math.min(99, (data.autoCompactAt / window) * 100)}%` }} title={tr('Auto-compaction threshold')} />}
               </div>
               {data.autoCompactAt && (
                 <div className="muted small" style={{ marginTop: 6 }}>
-                  Auto-compacts at {formatTokens(data.autoCompactAt)} (<a href={href({ page: 'settings', section: 'general' })}>change</a>)
+                  {tr('Auto-compacts at')}{' '}{formatTokens(data.autoCompactAt)} (<a href={href({ page: 'settings', section: 'general' })}>change</a>)
                 </div>
               )}
             </div>
@@ -110,19 +111,18 @@ export function ContextPanel({ chatId, refreshKey, onClose, onChanged, bare }: {
 
             <div className="card" style={{ padding: 14 }}>
               <div className="card-title">
-                <Scissors size={15} /> Compaction
+                <Scissors size={15} /> {tr('Compaction')}
               </div>
               <p className="muted small" style={{ margin: '4px 0 12px' }}>
-                Compacting asks the model to summarize older messages, so the conversation keeps going without hitting the limit. You still see the full history here; only
-                the model sees the summary.
+                {tr('Compacting asks the model to summarize older messages, so the conversation keeps going without hitting the limit. You still see the full history here; only the model sees the summary.')}
               </p>
               <div className="row" style={{ flexWrap: 'wrap' }}>
                 <button className="btn btn-sm" onClick={compact} disabled={!!busy}>
-                  {busy === 'compact' ? <Loader2 size={14} className="spin" /> : <Scissors size={14} />} Compact now
+                  {busy === 'compact' ? <Loader2 size={14} className="spin" /> : <Scissors size={14} />} {tr('Compact now')}
                 </button>
                 {data.compactedMessages > 0 && (
                   <button className="btn btn-sm btn-ghost" onClick={restore} disabled={!!busy}>
-                    {busy === 'restore' ? <Loader2 size={14} className="spin" /> : <Undo2 size={14} />} Restore full history
+                    {busy === 'restore' ? <Loader2 size={14} className="spin" /> : <Undo2 size={14} />} {tr('Restore full history')}
                   </button>
                 )}
               </div>
@@ -131,7 +131,7 @@ export function ContextPanel({ chatId, refreshKey, onClose, onChanged, bare }: {
             {data.summary && (
               <div>
                 <div className="card-title" style={{ marginBottom: 8 }}>
-                  <History size={15} /> Summary of {data.compactedMessages} earlier messages
+                  <History size={15} /> {tr('Summary of')}{' '}{data.compactedMessages} {tr('earlier messages')}
                 </div>
                 <div className="summary-box">{data.summary}</div>
               </div>
@@ -170,17 +170,17 @@ export function ContextButton({ chatId, used, total, refreshKey, onDetails }: { 
   // The biggest parts, merged by kind.
   const byKind = new Map<ContextSection['kind'], number>();
   for (const s of data?.sections ?? []) byKind.set(s.kind, (byKind.get(s.kind) ?? 0) + s.tokens);
-  const KIND_LABEL: Record<ContextSection['kind'], string> = { system: 'Instructions', project: 'Project & tasks', memory: 'Memory', summary: 'Summary', history: 'Conversation', tools: 'Tools' };
+  const KIND_LABEL: Record<ContextSection['kind'], string> = { system: tr('Instructions'), project: tr('Project & tasks'), memory: tr('Memory'), summary: tr('Summary'), history: tr('Conversation'), tools: tr('Tools') };
   return (
     <div className="ctx-pop-wrap" ref={wrap}>
       <ContextRing used={used} total={total} active={open} onClick={() => setOpen((o) => !o)} />
       {open && (
-        <div className="ctx-pop" role="dialog" aria-label="Context window">
+        <div className="ctx-pop" role="dialog" aria-label={tr('Context window')}>
           <div className="ctx-pop-title">
-            <strong>{pct}%</strong> of the context window
+            <strong>{pct}%</strong> {tr('of the context window')}
           </div>
           <div className="muted small">
-            {formatTokens(now)} of {formatTokens(window)} tokens{data?.autoCompactAt ? ` · compacts at ${formatTokens(data.autoCompactAt)}` : ''}
+            {formatTokens(now)} of {formatTokens(window)} tokens{data?.autoCompactAt ? tr(' · compacts at {0}', formatTokens(data.autoCompactAt)) : ''}
           </div>
           <div className="ctx-bar" aria-hidden style={{ margin: '10px 0 8px' }}>
             {[...byKind].map(([k, n]) => (
@@ -200,7 +200,7 @@ export function ContextButton({ chatId, used, total, refreshKey, onDetails }: { 
                 </div>
               ))}
           </div>
-          {!!data?.compactedMessages && <div className="muted small">{data.compactedMessages} earlier messages are summarized.</div>}
+          {!!data?.compactedMessages && <div className="muted small">{data.compactedMessages} {tr('earlier messages are summarized.')}</div>}
           <button
             className="btn btn-sm ctx-pop-more"
             onClick={() => {
@@ -208,7 +208,7 @@ export function ContextButton({ chatId, used, total, refreshKey, onDetails }: { 
               onDetails();
             }}
           >
-            <Maximize2 size={13} /> Show details
+            <Maximize2 size={13} /> {tr('Show details')}
           </button>
         </div>
       )}

@@ -3,8 +3,9 @@ import { memo, ReactNode, useEffect, useReducer, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
+import { tr } from '../i18n';
 
-export function CopyButton({ text, label = 'Copy' }: { text: () => string; label?: string }) {
+export function CopyButton({ text, label = tr('Copy') }: { text: () => string; label?: string }) {
   const [done, setDone] = useState(false);
   return (
     <button
@@ -35,8 +36,8 @@ function CodeBlock({ children, className }: { children?: ReactNode; className?: 
   return (
     <div className="code-block">
       <div className="code-block-head">
-        <span>{lang ?? 'text'}</span>
-        <CopyButton text={() => ref.current?.innerText ?? ''} label="Copy code" />
+        <span>{lang ?? tr('text')}</span>
+        <CopyButton text={() => ref.current?.innerText ?? ''} label={tr('Copy code')} />
       </div>
       <pre ref={ref}>{children}</pre>
     </div>

@@ -48,6 +48,7 @@ import { Diff, useAutoResize } from './ui';
 import { SubagentsCard, TeamCard, TeamProgress } from './Team';
 import { AutoMessage, LoopBadge, ReviewBox } from './Feedback';
 import { clock, PlanCard, StatsLine, useChatActions, useElapsed } from './Work';
+import { plural, tr } from '../i18n';
 
 // ---------- Content helpers ----------
 
@@ -153,7 +154,7 @@ export function AttachmentChips({ attachments, onRemove }: { attachments: Attach
           <Paperclip size={13} />
           <span>{a.name}</span>
           {onRemove && (
-            <button onClick={() => onRemove(i)} aria-label={`Remove ${a.name}`}>
+            <button onClick={() => onRemove(i)} aria-label={tr('Remove {0}', a.name)}>
               <X size={13} />
             </button>
           )}
@@ -190,7 +191,7 @@ function UserBubble({ message, onEdit, disabled }: { message: ChatMessage; onEdi
       {images.length > 0 && (
         <div className="bubble-images">
           {images.map((img, i) => (
-            <img key={i} src={img.content} alt="Attached" />
+            <img key={i} src={img.content} alt={tr('Attached')} />
           ))}
         </div>
       )}
@@ -213,7 +214,7 @@ function UserBubble({ message, onEdit, disabled }: { message: ChatMessage; onEdi
           />
           <div className="row">
             <button className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>
-              Cancel
+              {tr('Cancel')}
             </button>
             <button
               className="btn btn-primary btn-sm"
@@ -223,13 +224,13 @@ function UserBubble({ message, onEdit, disabled }: { message: ChatMessage; onEdi
                 onEdit?.(draft, attachments);
               }}
             >
-              Send
+              {tr('Send')}
             </button>
           </div>
         </div>
       ) : message.command ? (
         <>
-          <button className="command-chip" onClick={() => setShowPrompt((v) => !v)} title="Show the full prompt">
+          <button className="command-chip" onClick={() => setShowPrompt((v) => !v)} title={tr('Show the full prompt')}>
             {message.command} {showPrompt ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
           </button>
           {showPrompt && <div className="bubble small">{text}</div>}
@@ -247,8 +248,8 @@ function UserBubble({ message, onEdit, disabled }: { message: ChatMessage; onEdi
           {onEdit && !disabled && !message.command && (
             <button
               className="icon-btn sm"
-              title="Edit message"
-              aria-label="Edit message"
+              title={tr('Edit message')}
+              aria-label={tr('Edit message')}
               onClick={() => {
                 setDraft(text);
                 setEditing(true);
@@ -270,7 +271,7 @@ export function Avatar({ bot }: { bot?: Bot }) {
   return bot && !bot.builtIn ? <div className="avatar emoji">{bot.emoji}</div> : <div className="avatar">{LOGO}</div>;
 }
 
-const MEMORY_TYPE_LABEL: Record<RecalledMemory['type'], string> = { world: 'Fact', experience: 'Experience', observation: 'Belief' };
+const MEMORY_TYPE_LABEL: Record<RecalledMemory['type'], string> = { world: tr('Fact'), experience: tr('Experience'), observation: tr('Belief') };
 
 /** Shows which memories were recalled for a message, and why. */
 export function MemoryRecall({ memories, botId }: { memories: RecalledMemory[]; botId?: string }) {
@@ -280,7 +281,7 @@ export function MemoryRecall({ memories, botId }: { memories: RecalledMemory[]; 
       <button className="memory-chip" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <Brain size={14} />
         <span>
-          Recalled {memories.length} {memories.length === 1 ? 'memory' : 'memories'}
+          {plural(memories.length, 'Recalled 1 memory', 'Recalled {0} memories')}
         </span>
         {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
       </button>
@@ -295,7 +296,7 @@ export function MemoryRecall({ memories, botId }: { memories: RecalledMemory[]; 
           ))}
           {botId && (
             <a className="small" href={href({ page: 'memory', botId })}>
-              Open memory bank →
+              {tr('Open memory bank →')}
             </a>
           )}
         </div>
@@ -353,27 +354,27 @@ export function AssistantTurn({
         ))}
         <div className="msg-actions">
           <MessageTime ts={messages.at(-1)?.ts} />
-          {text && <CopyButton text={() => text} label="Copy response" />}
+          {text && <CopyButton text={() => text} label={tr('Copy response')} />}
           {text && <ReadAloudButton id={id} text={text} />}
           {onRate && <RateButtons rating={rating} onRate={onRate} />}
           {onBranch && (
-            <button className="icon-btn sm" title="Branch from here: a new chat with the conversation up to this answer" aria-label="Branch from here" onClick={onBranch}>
+            <button className="icon-btn sm" title={tr('Branch from here: a new chat with the conversation up to this answer')} aria-label={tr('Branch from here')} onClick={onBranch}>
               <GitBranch size={14} />
             </button>
           )}
           {onRegenerate && (
-            <button className="icon-btn sm" title="Regenerate" aria-label="Regenerate response" onClick={onRegenerate}>
+            <button className="icon-btn sm" title={tr('Regenerate')} aria-label={tr('Regenerate response')} onClick={onRegenerate}>
               <RefreshCw size={14} />
             </button>
           )}
           {reviewIndex !== undefined && actions && (
             <button
               className={`icon-btn sm review-btn${reviewing ? ' on' : ''}`}
-              title="Rate this result and, if it isn’t right, have it redone with your directions"
-              aria-label="Review this result"
+              title={tr('Rate this result and, if it isn’t right, have it redone with your directions')}
+              aria-label={tr('Review this result')}
               onClick={() => setReviewing((r) => !r)}
             >
-              <Star size={14} /> <span>Review</span>
+              <Star size={14} /> <span>{tr('Review')}</span>
             </button>
           )}
           {route ? <RouteBadge route={route} /> : model && <span className="meta">{modelLabel(model, models)}</span>}
@@ -382,8 +383,8 @@ export function AssistantTurn({
         {loop && reviewIndex !== undefined && <LoopBadge loop={loop} index={reviewIndex} />}
         {reviewing && reviewIndex !== undefined && <ReviewBox index={reviewIndex} loop={loop} onDone={() => setReviewing(false)} />}
         {rating?.lesson && (
-          <div className="lesson-note" title="Saved to this bot's lessons; you can remove it on the Bots page">
-            <Brain size={13} /> Learned: {rating.lesson}
+          <div className="lesson-note" title={tr('Saved to this bot\'s lessons; you can remove it on the Bots page')}>
+            <Brain size={13} /> {tr('Learned:')}{' '}{rating.lesson}
           </div>
         )}
       </div>
@@ -396,9 +397,9 @@ export function RouteBadge({ route }: { route: RouteChoice }) {
   const { models } = useApp();
   const name = modelLabel(route.model, models);
   return (
-    <span className={`route-badge ${route.tier}`} title={`Auto picked ${name} (${route.model}): ${route.reason.toLowerCase()}`}>
+    <span className={`route-badge ${route.tier}`} title={tr('Auto picked {0} ({1}): {2}', name, route.model, route.reason.toLowerCase())}>
       {route.tier === 'fast' ? <Zap size={11} /> : <Sparkles size={11} />}
-      Auto · {name}
+      {tr('Auto ·')}{' '}{name}
     </span>
   );
 }
@@ -409,8 +410,8 @@ export function ReadAloudButton({ id, text }: { id: string; text: string }) {
   return (
     <button
       className={`icon-btn sm${speaking ? ' on' : ''}`}
-      title={speaking ? 'Stop reading' : 'Read aloud'}
-      aria-label={speaking ? 'Stop reading' : 'Read aloud'}
+      title={speaking ? tr('Stop reading') : tr('Read aloud')}
+      aria-label={speaking ? tr('Stop reading') : tr('Read aloud')}
       onClick={() => (speaking ? speaker.stop() : void speaker.speak(id, text).catch((err) => toast(err.message)))}
     >
       {speaking ? <Square size={13} /> : <Volume2 size={14} />}
@@ -440,10 +441,10 @@ function RateButtons({ rating, onRate }: { rating?: Rating; onRate(value: 1 | -1
   };
   return (
     <span className="menu-wrap" ref={wrap}>
-      <button className={`icon-btn sm${rating?.value === 1 ? ' on' : ''}`} title="Good response" aria-label="Good response" aria-pressed={rating?.value === 1} onClick={() => click(1)}>
+      <button className={`icon-btn sm${rating?.value === 1 ? ' on' : ''}`} title={tr('Good response')} aria-label={tr('Good response')} aria-pressed={rating?.value === 1} onClick={() => click(1)}>
         <ThumbsUp size={14} />
       </button>
-      <button className={`icon-btn sm${rating?.value === -1 ? ' on' : ''}`} title="Bad response" aria-label="Bad response" aria-pressed={rating?.value === -1} onClick={() => click(-1)}>
+      <button className={`icon-btn sm${rating?.value === -1 ? ' on' : ''}`} title={tr('Bad response')} aria-label={tr('Bad response')} aria-pressed={rating?.value === -1} onClick={() => click(-1)}>
         <ThumbsDown size={14} />
       </button>
       {asking && (
@@ -454,13 +455,13 @@ function RateButtons({ rating, onRate }: { rating?: Rating; onRate(value: 1 | -1
             submit();
           }}
         >
-          <div className="small">{asking === 1 ? 'What did you like?' : 'What could be better?'} <span className="muted">(optional)</span></div>
+          <div className="small">{asking === 1 ? tr('What did you like?') : tr('What could be better?')} <span className="muted">{tr('(optional)')}</span></div>
           <textarea
             className="textarea"
             autoFocus
             rows={3}
             value={comment}
-            placeholder={asking === 1 ? 'e.g. Great examples, just the right length' : 'e.g. Too long; skip the intro and show code'}
+            placeholder={asking === 1 ? tr('e.g. Great examples, just the right length') : tr('e.g. Too long; skip the intro and show code')}
             onChange={(e) => setComment(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -471,10 +472,10 @@ function RateButtons({ rating, onRate }: { rating?: Rating; onRate(value: 1 | -1
           />
           <div className="row" style={{ justifyContent: 'flex-end' }}>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAsking(null)}>
-              Skip
+              {tr('Skip')}
             </button>
             <button className="btn btn-primary btn-sm" disabled={!comment.trim()}>
-              Send feedback
+              {tr('Send feedback')}
             </button>
           </div>
         </form>
@@ -494,7 +495,7 @@ export function MediaPreview({ url, mime, caption }: { url: string; mime: string
     <figure className="media-card">
       {mime.startsWith('image/') ? (
         <a href={url} target="_blank" rel="noreferrer">
-          <img src={url} alt={caption ?? 'Generated image'} loading="lazy" />
+          <img src={url} alt={caption ?? tr('Generated image')} loading="lazy" />
         </a>
       ) : mime.startsWith('video/') ? (
         <video src={url} controls playsInline preload="metadata" />
@@ -505,7 +506,7 @@ export function MediaPreview({ url, mime, caption }: { url: string; mime: string
         <figcaption>
           <span className="grow">{caption}</span>
           <a href={url} download className="small">
-            Download
+            {tr('Download')}
           </a>
         </figcaption>
       )}
@@ -559,7 +560,7 @@ export function Reasoning({ text, active }: { text: string; active?: boolean }) 
     <div className="tool reasoning">
       <button className="tool-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <span className="tool-icon">{active ? <Loader2 size={13} className="spin" /> : <Sparkles size={13} />}</span>
-        <span className="tool-name">{active ? <>Thinking… <span className="muted">{clock(seconds)}</span></> : 'Thought process'}</span>
+        <span className="tool-name">{active ? <>{tr('Thinking…')}{' '}<span className="muted">{clock(seconds)}</span></> : tr('Thought process')}</span>
         <span className="tool-summary">{!open && preview}</span>
         {open ? <ChevronDown size={14} className="muted" /> : <ChevronRight size={14} className="muted" />}
       </button>
@@ -623,7 +624,7 @@ function displayName(name: string): string {
 function toolSummary(name: string, args: any, fallback?: string): string {
   if (fallback) return fallback;
   if (name === 'ArtifactComment') return `${args.action ?? ''}${args.text ? `: ${args.text}` : ''}`;
-  if (name === 'Browser') return args.action === 'open' ? `open ${args.url ?? ''}` : args.ref !== undefined ? `${args.action} element ${args.ref}${args.text ? `: “${args.text}”` : ''}` : String(args.action ?? '');
+  if (name === 'Browser') return args.action === 'open' ? tr('open {0}', args.url ?? '') : args.ref !== undefined ? tr('{0} element {1}{2}', args.action, args.ref, args.text ? `: “${args.text}”` : '') : String(args.action ?? '');
   if (name === 'Workflow') return `${args.workflow ?? ''}${args.input ? `: ${args.input}` : ''}`;
   return args.file_path ?? args.command ?? args.pattern ?? args.url ?? args.path ?? args.prompt ?? args.text ?? '';
 }
@@ -685,7 +686,7 @@ export function ToolBlock({
           <span style={{ minWidth: 0, flex: 1 }}>
             <div className="t">{artifact.title}</div>
             <div className="s">
-              {TYPE_LABEL[artifact.type]} · {version === 0 ? 'Created' : `Updated to v${version + 1}`} · Click to open
+              {TYPE_LABEL[artifact.type]} · {version === 0 ? tr('Created') : tr('Updated to v{0}', version + 1)} {tr('· Click to open')}
             </div>
           </span>
         </button>
@@ -696,8 +697,8 @@ export function ToolBlock({
         <div className="artifact-card" style={{ cursor: 'default' }}>
           <span className="artifact-icon">{running ? <Loader2 size={18} className="spin" /> : <AlertTriangle size={18} />}</span>
           <span style={{ minWidth: 0, flex: 1 }}>
-            <div className="t">{args.title ?? 'Artifact'}</div>
-            <div className="s">{running ? 'Writing…' : result?.output ?? 'Interrupted'}</div>
+            <div className="t">{args.title ?? tr('Artifact')}</div>
+            <div className="s">{running ? tr('Writing…') : result?.output ?? tr('Interrupted')}</div>
           </span>
         </div>
       );
@@ -712,7 +713,7 @@ export function ToolBlock({
       <div className="memory-chip" style={{ background: 'var(--accent-soft)' }}>
         <WandSparkles size={14} color="var(--accent)" />
         <span>
-          <strong>{args.file ? 'Read skill file' : 'Using skill'}</strong>: {args.name}
+          <strong>{args.file ? tr('Read skill file') : tr('Using skill')}</strong>: {args.name}
           {args.file ? ` / ${args.file}` : ''}
         </span>
       </div>
@@ -724,7 +725,7 @@ export function ToolBlock({
       <div className="memory-chip">
         <Brain size={14} />
         <span>
-          <strong>{args.action === 'forget' ? 'Forgot a memory' : 'Saved to memory'}</strong>
+          <strong>{args.action === 'forget' ? tr('Forgot a memory') : tr('Saved to memory')}</strong>
           {args.content ? `: ${args.content}` : ''}
         </span>
       </div>
@@ -746,7 +747,7 @@ export function ToolBlock({
       <div className="media-card pending">
         <Loader2 size={18} className="spin" />
         <span>
-          {name === 'GenerateVideo' ? 'Generating video (this can take a few minutes)…' : `Generating ${name.slice(8).toLowerCase()}…`}
+          {name === 'GenerateVideo' ? tr('Generating video (this can take a few minutes)…') : tr('Generating {0}…', name.slice(8).toLowerCase())}
           <div className="muted small">{args.prompt ?? args.text}</div>
         </span>
       </div>
@@ -770,11 +771,11 @@ export function ToolBlock({
       </button>
       {open && (
         <div className="tool-body">
-          <div className="label">Input</div>
+          <div className="label">{tr('Input')}</div>
           <ToolInput name={name} args={args} />
           {result && (
             <>
-              <div className="label">Output</div>
+              <div className="label">{tr('Output')}</div>
               <pre style={result.isError ? { color: 'var(--danger)' } : undefined}>{result.output}</pre>
             </>
           )}
@@ -804,7 +805,7 @@ function TodoChip({ todos }: { todos: Todo[] }) {
       <button className="todo-chip" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <CircleCheck size={14} />
         <span>
-          Task list · {done} of {todos.length} done{current ? <> · now: <strong>{current.content}</strong></> : done === todos.length ? ' · all done' : ''}
+          {tr('Task list ·')}{' '}{done} of {todos.length} done{current ? <> {tr('· now:')}{' '}<strong>{current.content}</strong></> : done === todos.length ? tr(' · all done') : ''}
         </span>
         {open ? <ChevronDown size={14} className="muted" /> : <ChevronRight size={14} className="muted" />}
       </button>
@@ -852,12 +853,12 @@ export function PermissionCard({ req, onAnswer }: { req: PermissionRequest; onAn
     onAnswer(a, fb);
   };
   return (
-    <div className="permission" role="alertdialog" aria-label={`Allow ${req.tool}?`}>
+    <div className="permission" role="alertdialog" aria-label={tr('Allow {0}?', req.tool)}>
       <div className="permission-head">
         <ShieldCheck size={18} />
         <span>
-          <strong>Allow {req.tool}?</strong> <code>{req.summary}</code>
-          {req.why && <span className="permission-why">🐈 Asking because it {req.why}</span>}
+          <strong>{tr('Allow')}{' '}{req.tool}?</strong> <code>{req.summary}</code>
+          {req.why && <span className="permission-why">{tr('🐈 Asking because it')}{' '}{req.why}</span>}
         </span>
       </div>
       {req.preview && (
@@ -867,13 +868,13 @@ export function PermissionCard({ req, onAnswer }: { req: PermissionRequest; onAn
       )}
       <div className="permission-actions">
         <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => answer('yes')} autoFocus>
-          Allow once
+          {tr('Allow once')}
         </button>
-        <button className="btn btn-sm" disabled={busy} onClick={() => answer('always')} title="For the rest of this chat">
-          Always allow <code style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{req.alwaysRule}</code>
+        <button className="btn btn-sm" disabled={busy} onClick={() => answer('always')} title={tr('For the rest of this chat')}>
+          {tr('Always allow')}{' '}<code style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{req.alwaysRule}</code>
         </button>
         <button className="btn btn-ghost btn-sm btn-danger" disabled={busy} onClick={() => answer('no')}>
-          Deny
+          {tr('Deny')}
         </button>
         <form
           style={{ display: 'flex', gap: 6, flex: 1, minWidth: 200 }}
@@ -882,7 +883,7 @@ export function PermissionCard({ req, onAnswer }: { req: PermissionRequest; onAn
             if (feedback.trim()) answer('feedback', feedback.trim());
           }}
         >
-          <input className="input" placeholder="Or tell it what to do instead…" value={feedback} onChange={(e) => setFeedback(e.target.value)} disabled={busy} />
+          <input className="input" placeholder={tr('Or tell it what to do instead…')} value={feedback} onChange={(e) => setFeedback(e.target.value)} disabled={busy} />
         </form>
       </div>
     </div>
@@ -895,7 +896,7 @@ export function CompactDivider({ count, summary }: { count: number; summary?: st
     <>
       <div className="compact-divider">
         <button onClick={() => setOpen((o) => !o)}>
-          <History size={13} /> {count} earlier message{count === 1 ? '' : 's'} summarized for the model {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+          <History size={13} /> {plural(count, '1 earlier message summarized for the model', '{0} earlier messages summarized for the model')}{' '}{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         </button>
       </div>
       {open && summary && (

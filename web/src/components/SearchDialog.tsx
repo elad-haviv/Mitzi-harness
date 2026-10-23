@@ -4,15 +4,16 @@ import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { api, SearchHit, SearchKind } from '../api';
 import { navigate } from '../router';
 import { relativeTime, useApp } from '../state';
+import { tr } from '../i18n';
 
 const FILTERS: { id: SearchKind | 'all'; label: string; icon: ReactNode }[] = [
-  { id: 'all', label: 'All', icon: <Search size={13} /> },
-  { id: 'message', label: 'Chats', icon: <MessagesSquare size={13} /> },
-  { id: 'artifact', label: 'Artifacts', icon: <Layers size={13} /> },
-  { id: 'memory', label: 'Memories', icon: <Brain size={13} /> },
+  { id: 'all', label: tr('All'), icon: <Search size={13} /> },
+  { id: 'message', label: tr('Chats'), icon: <MessagesSquare size={13} /> },
+  { id: 'artifact', label: tr('Artifacts'), icon: <Layers size={13} /> },
+  { id: 'memory', label: tr('Memories'), icon: <Brain size={13} /> },
 ];
 
-const SECTION: Record<SearchKind, string> = { message: 'Chats', artifact: 'Artifacts', memory: 'Memories' };
+const SECTION: Record<SearchKind, string> = { message: tr('Chats'), artifact: tr('Artifacts'), memory: tr('Memories') };
 
 /** Text with its matches highlighted. */
 function Marked({ text, marks }: { text: string; marks: [number, number][] }) {
@@ -90,13 +91,13 @@ export function SearchDialog({ initial = '', onClose }: { initial?: string; onCl
   const recent = chats.filter((c) => c.messageCount > 0).slice(0, 6);
   return (
     <div className="modal-backdrop search-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="search-dialog" role="dialog" aria-label="Search everything">
+      <div className="search-dialog" role="dialog" aria-label={tr('Search everything')}>
         <div className="search-input-row">
           {busy ? <Loader2 size={18} className="spin muted" /> : <Search size={18} className="muted" />}
           <input
             autoFocus
             value={q}
-            placeholder="Search chats, artifacts and memories"
+            placeholder={tr('Search chats, artifacts and memories')}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'ArrowDown') (e.preventDefault(), setActive((a) => Math.min(flat.length - 1, a + 1)));
@@ -104,10 +105,10 @@ export function SearchDialog({ initial = '', onClose }: { initial?: string; onCl
               else if (e.key === 'Enter') choose(flat[active]);
               else if (e.key === 'Escape') onClose();
             }}
-            aria-label="Search"
+            aria-label={tr('Search')}
             dir="auto"
           />
-          <button className="icon-btn sm" onClick={onClose} aria-label="Close search">
+          <button className="icon-btn sm" onClick={onClose} aria-label={tr('Close search')}>
             <X size={16} />
           </button>
         </div>
@@ -118,15 +119,15 @@ export function SearchDialog({ initial = '', onClose }: { initial?: string; onCl
             </button>
           ))}
           {semantic && (
-            <span className="muted small search-semantic" title="Results also match by meaning, using your embedding model">
-              <Sparkles size={12} /> by meaning too
+            <span className="muted small search-semantic" title={tr('Results also match by meaning, using your embedding model')}>
+              <Sparkles size={12} /> {tr('by meaning too')}
             </span>
           )}
         </div>
         <div className="search-results" ref={list}>
           {!q.trim() && (
             <>
-              <div className="search-section">Recent chats</div>
+              <div className="search-section">{tr('Recent chats')}</div>
               {recent.map((c) => (
                 <button key={c.id} className="search-hit" onClick={() => (onClose(), navigate({ page: 'chat', id: c.id }))}>
                   <MessagesSquare size={15} className="muted" />
@@ -138,7 +139,7 @@ export function SearchDialog({ initial = '', onClose }: { initial?: string; onCl
               ))}
             </>
           )}
-          {q.trim() && !busy && !hits.length && <div className="search-empty muted">Nothing found for “{q.trim()}”.</div>}
+          {q.trim() && !busy && !hits.length && <div className="search-empty muted">{tr('Nothing found for “')}{q.trim()}”.</div>}
           {sections.map((s) => (
             <div key={s.kind}>
               <div className="search-section">{SECTION[s.kind]}</div>
@@ -175,16 +176,16 @@ export function SearchDialog({ initial = '', onClose }: { initial?: string; onCl
         <div className="search-foot muted small">
           <span>
             <kbd>↑</kbd>
-            <kbd>↓</kbd> to move
+            <kbd>↓</kbd> {tr('to move')}
           </span>
           <span>
             <kbd>
               <CornerDownLeft size={10} />
             </kbd>{' '}
-            to open
+            {tr('to open')}
           </span>
           <span>
-            <kbd>Esc</kbd> to close
+            <kbd>Esc</kbd> {tr('to close')}
           </span>
         </div>
       </div>

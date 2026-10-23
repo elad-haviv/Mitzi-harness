@@ -4,14 +4,15 @@ import { api, ChatListItem } from '../api';
 import { href, navigate, Route } from '../router';
 import { LOGO, useApp } from '../state';
 import { useConfirm } from './ui';
+import { tr } from '../i18n';
 
 type GroupBy = 'date' | 'project' | 'bot' | 'model' | 'none';
 const GROUP_OPTIONS: { id: GroupBy; label: string }[] = [
-  { id: 'date', label: 'Date' },
-  { id: 'project', label: 'Project' },
-  { id: 'bot', label: 'Bot' },
-  { id: 'model', label: 'Model' },
-  { id: 'none', label: 'Don’t group' },
+  { id: 'date', label: tr('Date') },
+  { id: 'project', label: tr('Project') },
+  { id: 'bot', label: tr('Bot') },
+  { id: 'model', label: tr('Model') },
+  { id: 'none', label: tr('Don’t group') },
 ];
 
 /** Sidebar preferences kept in this browser. */
@@ -40,10 +41,10 @@ function groupLabel(iso: string): string {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const diff = (today.getTime() - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86_400_000;
-  if (diff <= 0) return 'Today';
-  if (diff === 1) return 'Yesterday';
-  if (diff < 7) return 'Previous 7 days';
-  if (diff < 30) return 'Previous 30 days';
+  if (diff <= 0) return tr('Today');
+  if (diff === 1) return tr('Yesterday');
+  if (diff < 7) return tr('Previous 7 days');
+  if (diff < 30) return tr('Previous 30 days');
   return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
 
@@ -78,19 +79,19 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
     // By date, pinned chats get their own section; otherwise they lead their own group.
     const byDate = groupBy === 'date';
     const pinned = filtered.filter((c) => c.pinned);
-    if (byDate && pinned.length) out.push({ label: 'Pinned', chats: pinned });
+    if (byDate && pinned.length) out.push({ label: tr('Pinned'), chats: pinned });
     const keyOf = (c: ChatListItem): string => {
       switch (groupBy) {
         case 'project':
-          return projects.find((p) => p.id === c.projectId)?.name ?? 'No project';
+          return projects.find((p) => p.id === c.projectId)?.name ?? tr('No project');
         case 'bot': {
           const bot = bots.find((b) => b.id === c.botId) ?? bots.find((b) => b.builtIn);
-          return bot ? `${bot.emoji} ${bot.name}` : 'Mitzi';
+          return bot ? `${bot.emoji} ${bot.name}` : tr('Mitzi');
         }
         case 'model':
           return models.find((m) => m.id === c.model)?.name ?? c.model;
         case 'none':
-          return 'Chats';
+          return tr('Chats');
         default:
           return groupLabel(c.updatedAt);
       }
@@ -132,7 +133,7 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
     void refreshChats();
   };
   const deleteChat = async (chat: ChatListItem) => {
-    if (!(await confirm(`“${chat.title}” and its artifacts will be permanently deleted.`, { title: 'Delete chat?' }))) return;
+    if (!(await confirm(tr('“{0}” and its artifacts will be permanently deleted.', chat.title), { title: tr('Delete chat?') }))) return;
     try {
       await api.deleteChat(chat.id);
       if (route.page === 'chat' && route.id === chat.id) navigate(chat.projectId ? { page: 'project', id: chat.projectId } : { page: 'new' });
@@ -143,33 +144,33 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
   };
 
   const nav = [
-    { route: { page: 'projects' } as Route, icon: <FolderOpen size={17} />, label: 'Projects', count: projects.length, match: ['projects', 'project'] },
-    { route: { page: 'bots' } as Route, icon: <Bot size={17} />, label: 'Bots', count: bots.length, match: ['bots'] },
-    { route: { page: 'artifacts' } as Route, icon: <Layers size={17} />, label: 'Artifacts', match: ['artifacts', 'artifact'] },
-    { route: { page: 'tasks' } as Route, icon: <CalendarClock size={17} />, label: 'Scheduled', match: ['tasks'], badge: unseen },
-    { route: { page: 'workflows' } as Route, icon: <WorkflowIcon size={17} />, label: 'Workflows', match: ['workflows', 'workflow'], badge: approvals },
-    { route: { page: 'memory' } as Route, icon: <Brain size={17} />, label: 'Memory', match: ['memory'] },
-    { route: { page: 'insights' } as Route, icon: <BarChart3 size={17} />, label: 'Insights', match: ['insights'] },
+    { route: { page: 'projects' } as Route, icon: <FolderOpen size={17} />, label: tr('Projects'), count: projects.length, match: ['projects', 'project'] },
+    { route: { page: 'bots' } as Route, icon: <Bot size={17} />, label: tr('Bots'), count: bots.length, match: ['bots'] },
+    { route: { page: 'artifacts' } as Route, icon: <Layers size={17} />, label: tr('Artifacts'), match: ['artifacts', 'artifact'] },
+    { route: { page: 'tasks' } as Route, icon: <CalendarClock size={17} />, label: tr('Scheduled'), match: ['tasks'], badge: unseen },
+    { route: { page: 'workflows' } as Route, icon: <WorkflowIcon size={17} />, label: tr('Workflows'), match: ['workflows', 'workflow'], badge: approvals },
+    { route: { page: 'memory' } as Route, icon: <Brain size={17} />, label: tr('Memory'), match: ['memory'] },
+    { route: { page: 'insights' } as Route, icon: <BarChart3 size={17} />, label: tr('Insights'), match: ['insights'] },
   ];
   const extend = [
-    { route: { page: 'connectors' } as Route, icon: <Plug size={17} />, label: 'Connectors', match: ['connectors'] },
-    { route: { page: 'skills' } as Route, icon: <WandSparkles size={17} />, label: 'Skills', match: ['skills'] },
-    { route: { page: 'plugins' } as Route, icon: <Puzzle size={17} />, label: 'Plugins', match: ['plugins'] },
+    { route: { page: 'connectors' } as Route, icon: <Plug size={17} />, label: tr('Connectors'), match: ['connectors'] },
+    { route: { page: 'skills' } as Route, icon: <WandSparkles size={17} />, label: tr('Skills'), match: ['skills'] },
+    { route: { page: 'plugins' } as Route, icon: <Puzzle size={17} />, label: tr('Plugins'), match: ['plugins'] },
   ];
 
   return (
-    <nav className={`sidebar${collapsed ? ' collapsed' : ''}`} aria-label="Main">
+    <nav className={`sidebar${collapsed ? ' collapsed' : ''}`} aria-label={tr('Main')}>
       <div className="sidebar-top">
         <a className="brand" href={href({ page: 'new' })}>
-          <span className="brand-mark">{LOGO}</span> Mitzi
+          <span className="brand-mark">{LOGO}</span> {tr('Mitzi')}
         </a>
-        <button className="icon-btn" onClick={onCollapse} aria-label="Collapse sidebar" title="Collapse sidebar">
+        <button className="icon-btn" onClick={onCollapse} aria-label={tr('Collapse sidebar')} title={tr('Collapse sidebar')}>
           <PanelLeftClose size={18} />
         </button>
       </div>
       <div className="sidebar-section">
         <a className="btn new-chat-btn" href={href({ page: 'new' })}>
-          <SquarePen size={16} /> New chat
+          <SquarePen size={16} /> {tr('New chat')}
         </a>
         {nav.map((n) => (
           <a key={n.label} className={`nav-item${n.match.includes(route.page) ? ' active' : ''}`} href={href(n.route)}>
@@ -177,13 +178,13 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
             {n.label}
             {!!n.count && <span className="count">{n.count}</span>}
             {!!(n as { badge?: number }).badge && (
-              <span className="badge-dot" title={`${(n as { badge?: number }).badge} new result(s)`}>
+              <span className="badge-dot" title={tr('{0} new result(s)', (n as { badge?: number }).badge)}>
                 {(n as { badge?: number }).badge}
               </span>
             )}
           </a>
         ))}
-        <div className="nav-label">Extend</div>
+        <div className="nav-label">{tr('Extend')}</div>
         {extend.map((n) => (
           <a key={n.label} className={`nav-item${n.match.includes(route.page) ? ' active' : ''}`} href={href(n.route)}>
             {n.icon}
@@ -193,15 +194,15 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
         <div className="sidebar-search">
           <Search size={14} />
           <input
-            placeholder="Search chats"
+            placeholder={tr('Search chats')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               // Enter searches inside chats, artifacts and memories too.
               if (e.key === 'Enter') window.dispatchEvent(new CustomEvent('mitzi:search', { detail: query }));
             }}
-            aria-label="Search chats"
-            title="Filter chat titles; press Enter to search inside everything"
+            aria-label={tr('Search chats')}
+            title={tr('Filter chat titles; press Enter to search inside everything')}
           />
           <kbd title="Search everything" onClick={() => window.dispatchEvent(new CustomEvent('mitzi:search', { detail: query }))}>
             {/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K'}
@@ -209,13 +210,13 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
         </div>
       </div>
       <div className="chat-list-head">
-        <span>Chats</span>
-        <button className={`icon-btn sm${groupMenu ? ' on' : ''}`} onMouseDown={(e) => e.stopPropagation()} onClick={() => setGroupMenu((o) => !o)} title="Group chats" aria-label="Group chats" aria-expanded={groupMenu}>
+        <span>{tr('Chats')}</span>
+        <button className={`icon-btn sm${groupMenu ? ' on' : ''}`} onMouseDown={(e) => e.stopPropagation()} onClick={() => setGroupMenu((o) => !o)} title={tr('Group chats')} aria-label={tr('Group chats')} aria-expanded={groupMenu}>
           <ListTree size={14} />
         </button>
         {groupMenu && (
           <PopupMenu onClose={() => setGroupMenu(false)} className="group-menu">
-            <div className="menu-label">Group by</div>
+            <div className="menu-label">{tr('Group by')}</div>
             {GROUP_OPTIONS.map((o) => (
               <button key={o.id} role="menuitemradio" aria-checked={groupBy === o.id} onClick={() => (setGroupBy(o.id), setGroupMenu(false))}>
                 <span className="menu-check">{groupBy === o.id && <Check size={14} />}</span> {o.label}
@@ -237,7 +238,7 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
                     {collapsed && <span className="count">{g.chats.length}</span>}
                   </button>
                   {g.start && (
-                    <a className="icon-btn sm chat-group-new" href={href({ page: 'new', ...g.start })} title={`New chat in ${g.label}`} aria-label={`New chat in ${g.label}`}>
+                    <a className="icon-btn sm chat-group-new" href={href({ page: 'new', ...g.start })} title={tr('New chat in {0}', g.label)} aria-label={tr('New chat in {0}', g.label)}>
                       <Plus size={14} />
                     </a>
                   )}
@@ -264,7 +265,7 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
                             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                             if (e.key === 'Escape') setRenaming(undefined);
                           }}
-                          aria-label="Chat name"
+                          aria-label={tr('Chat name')}
                         />
                       </div>
                     );
@@ -282,13 +283,13 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
                     >
                       {bot && !bot.builtIn && groupBy !== 'bot' && <span className="emoji">{bot.emoji}</span>}
                       {c.pinned && g.label !== 'Pinned' && <Pin size={12} />}
-                      {c.branchedFrom && <GitBranch size={12} className="muted" aria-label="Branch" />}
-                      {c.taskId && <CalendarClock size={12} className="muted" aria-label="Scheduled task" />}
+                      {c.branchedFrom && <GitBranch size={12} className="muted" aria-label={tr('Branch')} />}
+                      {c.taskId && <CalendarClock size={12} className="muted" aria-label={tr('Scheduled task')} />}
                       <span className="title">{c.title}</span>
-                      {c.waiting ? <span className="tab-paw" title="Waiting for your approval" aria-label="Needs you">🐾</span> : c.running && <span className="live-dot" aria-label="Responding" />}
+                      {c.waiting ? <span className="tab-paw" title={tr('Waiting for your approval')} aria-label={tr('Needs you')}>🐾</span> : c.running && <span className="live-dot" aria-label={tr('Responding')} />}
                       <button
                         className="chat-more"
-                        aria-label={`Options for ${c.title}`}
+                        aria-label={tr('Options for {0}', c.title)}
                         onMouseDown={(e) => e.stopPropagation()}
                         onClick={(e) => {
                           e.preventDefault();
@@ -305,16 +306,16 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
             </div>
           );
         })}
-        {query && !filtered.length && <div className="muted small" style={{ padding: '12px 10px' }}>No chats match “{query}”.</div>}
-        {!query && !groups.length && <div className="muted small" style={{ padding: '12px 10px' }}>Your conversations will appear here.</div>}
+        {query && !filtered.length && <div className="muted small" style={{ padding: '12px 10px' }}>{tr('No chats match “')}{query}”.</div>}
+        {!query && !groups.length && <div className="muted small" style={{ padding: '12px 10px' }}>{tr('Your conversations will appear here.')}</div>}
       </div>
       {menu && (
         <PopupMenu onClose={() => setMenu(undefined)} at={{ x: menu.x, y: menu.y }}>
           <button onClick={() => (setMenu(undefined), setRenaming(menu.chat.id))}>
-            <Pencil size={15} /> Rename
+            <Pencil size={15} /> {tr('Rename')}
           </button>
           <button onClick={() => (setMenu(undefined), void updateChat(menu.chat.id, { pinned: !menu.chat.pinned }))}>
-            {menu.chat.pinned ? <PinOff size={15} /> : <Pin size={15} />} {menu.chat.pinned ? 'Unpin' : 'Pin'}
+            {menu.chat.pinned ? <PinOff size={15} /> : <Pin size={15} />} {menu.chat.pinned ? tr('Unpin') : tr('Pin')}
           </button>
           {projects.filter((p) => p.id !== menu.chat.projectId).length > 0 && <hr />}
           {projects
@@ -322,17 +323,17 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
             .slice(0, 6)
             .map((p) => (
               <button key={p.id} onClick={() => (setMenu(undefined), void updateChat(menu.chat.id, { projectId: p.id }))}>
-                <FolderOpen size={15} /> Move to {p.name}
+                <FolderOpen size={15} /> {tr('Move to')}{' '}{p.name}
               </button>
             ))}
           {menu.chat.projectId && (
             <button onClick={() => (setMenu(undefined), void updateChat(menu.chat.id, { projectId: null }))}>
-              <X size={15} /> Remove from project
+              <X size={15} /> {tr('Remove from project')}
             </button>
           )}
           <hr />
           <button className="danger" onClick={() => (setMenu(undefined), void deleteChat(menu.chat))}>
-            <Trash2 size={15} /> Delete
+            <Trash2 size={15} /> {tr('Delete')}
           </button>
         </PopupMenu>
       )}
@@ -341,24 +342,24 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
         {settings && !settings.hasApiKey && (
           <a className="key-warning" href={href({ page: 'settings', section: 'providers' })}>
             <KeyRound size={15} style={{ flexShrink: 0, marginTop: 1 }} />
-            <span>Add an API key for OpenRouter or another provider to start chatting</span>
+            <span>{tr('Add an API key for OpenRouter or another provider to start chatting')}</span>
           </a>
         )}
         {budget && budget.state !== 'ok' && (
           <a className={`budget-pill ${budget.state}`} href={href({ page: 'settings', section: 'budget' })}>
             <Wallet size={15} />
             {budget.state === 'over'
-              ? `${budget.limit === 'daily' ? 'Daily' : 'Monthly'} budget reached${budget.hardStop ? ': paused' : ''}`
-              : `${Math.round(((budget.limit === 'daily' ? budget.spentToday / budget.daily! : budget.spentMonth / budget.monthly!) || 0) * 100)}% of ${budget.limit === 'daily' ? 'today’s' : 'this month’s'} budget used`}
+              ? tr('{0} budget reached{1}', budget.limit === 'daily' ? 'Daily' : 'Monthly', budget.hardStop ? ': paused' : '')
+              : tr('{0}% of {1} budget used', Math.round(((budget.limit === 'daily' ? budget.spentToday / budget.daily! : budget.spentMonth / budget.monthly!) || 0) * 100), budget.limit === 'daily' ? 'today’s' : 'this month’s')}
           </a>
         )}
         {update?.supported && update.behind > 0 && (
-          <a className="update-pill" href={href({ page: 'settings', section: 'updates' })} title={`v${update.current.version} → v${update.latest?.version}`}>
-            <ArrowUpCircle size={15} /> Update available
+          <a className="update-pill" href={href({ page: 'settings', section: 'updates' })} title={tr('v{0} → v{1}', update.current.version, update.latest?.version)}>
+            <ArrowUpCircle size={15} /> {tr('Update available')}
           </a>
         )}
         <a className={`nav-item${route.page === 'settings' ? ' active' : ''}`} href={href({ page: 'settings' })}>
-          <Settings size={17} /> Settings
+          <Settings size={17} /> {tr('Settings')}
         </a>
       </div>
     </nav>

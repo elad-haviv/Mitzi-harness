@@ -6,13 +6,14 @@ import { Empty, Modal, Toggle, useConfirm } from '../components/ui';
 import { href } from '../router';
 import { stripMarkdown } from '../speech';
 import { relativeTime, useApp } from '../state';
+import { tr } from '../i18n';
 
-const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DAYS = [tr('Sun'), tr('Mon'), tr('Tue'), tr('Wed'), tr('Thu'), tr('Fri'), tr('Sat')];
 
 const EXAMPLES = [
-  { name: 'Morning briefing', prompt: 'Give me a short briefing to start my day: what I should focus on based on what you know about my current projects, plus one useful tip.', schedule: { kind: 'daily', time: '08:00' } },
-  { name: 'Weekly review', prompt: 'Help me review my week: summarize what we worked on together, what seems unfinished, and suggest three priorities for next week.', schedule: { kind: 'weekly', time: '17:00', days: [5] } },
-  { name: 'News digest', prompt: 'Search the web for the most important AI news from the last 24 hours and summarize the top 5 stories with links.', schedule: { kind: 'daily', time: '07:30' } },
+  { name: 'Morning briefing', prompt: tr('Give me a short briefing to start my day: what I should focus on based on what you know about my current projects, plus one useful tip.'), schedule: { kind: 'daily', time: '08:00' } },
+  { name: 'Weekly review', prompt: tr('Help me review my week: summarize what we worked on together, what seems unfinished, and suggest three priorities for next week.'), schedule: { kind: 'weekly', time: '17:00', days: [5] } },
+  { name: 'News digest', prompt: tr('Search the web for the most important AI news from the last 24 hours and summarize the top 5 stories with links.'), schedule: { kind: 'daily', time: '07:30' } },
 ] satisfies { name: string; prompt: string; schedule: TaskSchedule }[];
 
 function when(iso?: string): string {
@@ -21,9 +22,9 @@ function when(iso?: string): string {
   const diff = d.getTime() - Date.now();
   if (diff < 0) return 'now';
   const mins = Math.round(diff / 60_000);
-  if (mins < 60) return `in ${mins} min`;
+  if (mins < 60) return tr('in {0} min', mins);
   const hours = Math.round(mins / 60);
-  if (hours < 24) return `in ${hours} h`;
+  if (hours < 24) return tr('in {0} h', hours);
   return d.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
@@ -57,28 +58,28 @@ export function TasksPage() {
       <div className="page-inner">
         <div className="page-header">
           <div>
-            <h1 className="page-title">Scheduled tasks</h1>
-            <p className="page-subtitle">Prompts that run on their own: daily briefings, weekly reviews, reminders, monitoring. Each run is saved as a chat.</p>
+            <h1 className="page-title">{tr('Scheduled tasks')}</h1>
+            <p className="page-subtitle">{tr('Prompts that run on their own: daily briefings, weekly reviews, reminders, monitoring. Each run is saved as a chat.')}</p>
           </div>
           <button className="btn btn-primary" onClick={() => setEditing({})}>
-            <Plus size={16} /> New task
+            <Plus size={16} /> {tr('New task')}
           </button>
         </div>
         {!tasks.length ? (
           <>
             <Empty
               icon={<CalendarClock size={22} />}
-              title="No scheduled tasks yet"
+              title={tr('No scheduled tasks yet')}
               action={
                 <button className="btn btn-primary" onClick={() => setEditing({})}>
-                  <Plus size={16} /> Schedule a task
+                  <Plus size={16} /> {tr('Schedule a task')}
                 </button>
               }
             >
-              Tasks run while Mitzi is open (missed runs catch up when it starts).
+              {tr('Tasks run while Mitzi is open (missed runs catch up when it starts).')}
             </Empty>
             <div className="nav-label" style={{ marginTop: 24 }}>
-              Ideas
+              {tr('Ideas')}
             </div>
             <div className="grid">
               {EXAMPLES.map((e) => (
@@ -101,32 +102,32 @@ export function TasksPage() {
                       <span className="tile-title">{t.name}</span>
                       {t.workflowId ? (
                         <a className="badge" href={href({ page: 'workflow', id: t.workflowId })}>
-                          ⚡ Workflow
+                          {tr('⚡ Workflow')}
                         </a>
                       ) : (
                         bot && !bot.builtIn && <span className="badge">{bot.emoji} {bot.name}</span>
                       )}
-                      {t.autoApprove && <span className="badge warn">Auto-approves tools</span>}
+                      {t.autoApprove && <span className="badge warn">{tr('Auto-approves tools')}</span>}
                     </div>
                     <div className="muted small">
                       {t.description}
-                      {t.enabled ? ` · next ${when(t.nextRunAt)}` : ' · paused'}
+                      {t.enabled ? tr(' · next {0}', when(t.nextRunAt)) : tr(' · paused')}
                     </div>
                     <p className="task-prompt">{t.prompt}</p>
                     {last && (
                       <div className={`task-run ${last.status}`}>
                         {last.status === 'running' ? <Loader2 size={14} className="spin" /> : last.status === 'ok' ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
                         <span className="grow">
-                          {last.status === 'running' ? 'Running now…' : last.status === 'ok' ? stripMarkdown(last.preview ?? '') || 'Finished' : last.error}
+                          {last.status === 'running' ? tr('Running now…') : last.status === 'ok' ? stripMarkdown(last.preview ?? '') || tr('Finished') : last.error}
                         </span>
                         {last.workflowRunId && t.workflowId && last.status !== 'running' && (
                           <a href={href({ page: 'workflow', id: t.workflowId })} className="small">
-                            Open · {relativeTime(last.finishedAt ?? last.startedAt)}
+                            {tr('Open ·')}{' '}{relativeTime(last.finishedAt ?? last.startedAt)}
                           </a>
                         )}
                         {last.chatId && last.status !== 'running' && (
                           <a href={href({ page: 'chat', id: last.chatId })} className="small">
-                            Open · {relativeTime(last.finishedAt ?? last.startedAt)}
+                            {tr('Open ·')}{' '}{relativeTime(last.finishedAt ?? last.startedAt)}
                           </a>
                         )}
                       </div>
@@ -145,19 +146,19 @@ export function TasksPage() {
                     )}
                   </div>
                   <div className="task-actions">
-                    <Toggle on={t.enabled} label={t.enabled ? 'Pause task' : 'Resume task'} onChange={(on) => void act(api.updateTask(t.id, { enabled: on }))} />
-                    <button className="icon-btn sm" title="Run now" aria-label="Run now" disabled={t.running} onClick={() => void act(api.runTask(t.id))}>
+                    <Toggle on={t.enabled} label={t.enabled ? tr('Pause task') : tr('Resume task')} onChange={(on) => void act(api.updateTask(t.id, { enabled: on }))} />
+                    <button className="icon-btn sm" title={tr('Run now')} aria-label={tr('Run now')} disabled={t.running} onClick={() => void act(api.runTask(t.id))}>
                       {t.running ? <Pause size={14} /> : <Play size={14} />}
                     </button>
-                    <button className="icon-btn sm" title="Edit" aria-label="Edit task" onClick={() => setEditing(t)}>
+                    <button className="icon-btn sm" title={tr('Edit')} aria-label={tr('Edit task')} onClick={() => setEditing(t)}>
                       <Pencil size={14} />
                     </button>
                     <button
                       className="icon-btn sm"
-                      title="Delete"
-                      aria-label="Delete task"
+                      title={tr('Delete')}
+                      aria-label={tr('Delete task')}
                       onClick={async () => {
-                        if (await confirm(`Delete “${t.name}”? Chats from earlier runs are kept.`, { title: 'Delete task?' })) void act(api.deleteTask(t.id));
+                        if (await confirm(tr('Delete “{0}”? Chats from earlier runs are kept.', t.name), { title: tr('Delete task?') })) void act(api.deleteTask(t.id));
                       }}
                     >
                       <Trash2 size={14} />
@@ -236,39 +237,39 @@ function TaskEditor({
 
   return (
     <Modal
-      title={task.id ? 'Edit task' : 'New scheduled task'}
+      title={task.id ? tr('Edit task') : tr('New scheduled task')}
       onClose={onClose}
       footer={
         <>
           <button className="btn btn-ghost" onClick={onClose}>
-            Cancel
+            {tr('Cancel')}
           </button>
           <button className="btn btn-primary" disabled={busy || !name.trim() || (runsWorkflow ? !workflowId : !prompt.trim())} onClick={() => void save()}>
-            {task.id ? 'Save' : 'Schedule'}
+            {task.id ? tr('Save') : tr('Schedule')}
           </button>
         </>
       }
     >
       <label className="field">
-        <span className="field-label">Name</span>
-        <input className="input" autoFocus value={name} placeholder="Morning briefing" onChange={(e) => setName(e.target.value)} />
+        <span className="field-label">{tr('Name')}</span>
+        <input className="input" autoFocus value={name} placeholder={tr('Morning briefing')} onChange={(e) => setName(e.target.value)} />
       </label>
       <div className="field">
-        <span className="field-label">What runs</span>
+        <span className="field-label">{tr('What runs')}</span>
         <div className="segmented" style={{ alignSelf: 'flex-start' }}>
           <button type="button" className={!runsWorkflow ? 'active' : ''} onClick={() => setRunsWorkflow(false)}>
-            A prompt for a bot
+            {tr('A prompt for a bot')}
           </button>
           <button type="button" className={runsWorkflow ? 'active' : ''} onClick={() => setRunsWorkflow(true)}>
-            A workflow
+            {tr('A workflow')}
           </button>
         </div>
       </div>
       {runsWorkflow && (
         <label className="field">
-          <span className="field-label">Workflow</span>
+          <span className="field-label">{tr('Workflow')}</span>
           <select className="select" value={workflowId} onChange={(e) => setWorkflowId(e.target.value)}>
-            <option value="">Choose a workflow…</option>
+            <option value="">{tr('Choose a workflow…')}</option>
             {workflows.map((w) => (
               <option key={w.id} value={w.id}>
                 {w.emoji} {w.name}
@@ -277,17 +278,17 @@ function TaskEditor({
           </select>
           {!workflows.length && (
             <span className="field-hint">
-              No workflows yet. <a href={href({ page: 'workflows' })}>Make one</a>.
+              {tr('No workflows yet.')}{' '}<a href={href({ page: 'workflows' })}>{tr('Make one')}</a>.
             </span>
           )}
         </label>
       )}
       <label className="field">
-        <span className="field-label">{runsWorkflow ? 'Input for each run (optional)' : 'Prompt'}</span>
-        <textarea className="textarea" rows={runsWorkflow ? 2 : 4} value={prompt} placeholder={runsWorkflow ? 'Passed to the workflow as its input' : 'What should the bot do each time?'} onChange={(e) => setPrompt(e.target.value)} />
+        <span className="field-label">{runsWorkflow ? tr('Input for each run (optional)') : tr('Prompt')}</span>
+        <textarea className="textarea" rows={runsWorkflow ? 2 : 4} value={prompt} placeholder={runsWorkflow ? tr('Passed to the workflow as its input') : tr('What should the bot do each time?')} onChange={(e) => setPrompt(e.target.value)} />
       </label>
       <div className="field">
-        <span className="field-label">Schedule</span>
+        <span className="field-label">{tr('Schedule')}</span>
         <div className="segmented" role="tablist" style={{ alignSelf: 'flex-start', flexWrap: 'wrap' }}>
           {(['once', 'interval', 'daily', 'weekly', 'cron'] as const).map((k) => (
             <button
@@ -305,7 +306,7 @@ function TaskEditor({
                 }))
               }
             >
-              {k === 'once' ? 'Once' : k === 'interval' ? 'Every…' : k === 'daily' ? 'Daily' : k === 'weekly' ? 'Weekly' : 'Cron'}
+              {k === 'once' ? tr('Once') : k === 'interval' ? tr('Every…') : k === 'daily' ? tr('Daily') : k === 'weekly' ? tr('Weekly') : tr('Cron')}
             </button>
           ))}
         </div>
@@ -316,7 +317,7 @@ function TaskEditor({
           {schedule.kind === 'interval' && (
             <>
               <input type="number" min={5} className="input" style={{ width: 100 }} value={schedule.everyMinutes ?? 60} onChange={(e) => set({ everyMinutes: Number(e.target.value) })} />
-              <span className="muted small">minutes (at least 5)</span>
+              <span className="muted small">{tr('minutes (at least 5)')}</span>
             </>
           )}
           {(schedule.kind === 'daily' || schedule.kind === 'weekly') && (
@@ -336,7 +337,7 @@ function TaskEditor({
           {schedule.kind === 'cron' && (
             <>
               <input className="input mono" style={{ width: 180 }} value={schedule.cron ?? ''} onChange={(e) => set({ cron: e.target.value })} />
-              <span className="muted small">minute hour day month weekday, local time</span>
+              <span className="muted small">{tr('minute hour day month weekday, local time')}</span>
             </>
           )}
         </div>
@@ -345,7 +346,7 @@ function TaskEditor({
       <>
       <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
         <label className="field" style={{ flex: 1, minWidth: 160 }}>
-          <span className="field-label">Bot</span>
+          <span className="field-label">{tr('Bot')}</span>
           <select className="select" value={botId} onChange={(e) => setBotId(e.target.value)}>
             {bots.map((b) => (
               <option key={b.id} value={b.id}>
@@ -355,9 +356,9 @@ function TaskEditor({
           </select>
         </label>
         <label className="field" style={{ flex: 1, minWidth: 160 }}>
-          <span className="field-label">Project</span>
+          <span className="field-label">{tr('Project')}</span>
           <select className="select" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-            <option value="">None</option>
+            <option value="">{tr('None')}</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -367,22 +368,22 @@ function TaskEditor({
         </label>
       </div>
       <div className="field">
-        <span className="field-label">Model</span>
-        <ModelPicker value={model} onChange={setModel} variant="input" direction="down" allowEmpty="Bot's default model" auto />
+        <span className="field-label">{tr('Model')}</span>
+        <ModelPicker value={model} onChange={setModel} variant="input" direction="down" allowEmpty={tr('Bot\'s default model')} auto />
       </div>
       <div className="setting-row">
         <div>
-          <div>Start a new chat for each run</div>
-          <div className="muted small">Off: every run continues the same chat, so the bot sees earlier results.</div>
+          <div>{tr('Start a new chat for each run')}</div>
+          <div className="muted small">{tr('Off: every run continues the same chat, so the bot sees earlier results.')}</div>
         </div>
-        <Toggle on={!reuseChat} onChange={(on) => setReuseChat(!on)} label="New chat per run" />
+        <Toggle on={!reuseChat} onChange={(on) => setReuseChat(!on)} label={tr('New chat per run')} />
       </div>
       <div className="setting-row">
         <div>
-          <div>Allow tools that need approval</div>
-          <div className="muted small">Nobody is there to click “Allow”, so these tools are skipped unless you turn this on. Commands in a coding project would run unattended.</div>
+          <div>{tr('Allow tools that need approval')}</div>
+          <div className="muted small">{tr('Nobody is there to click “Allow”, so these tools are skipped unless you turn this on. Commands in a coding project would run unattended.')}</div>
         </div>
-        <Toggle on={autoApprove} onChange={setAutoApprove} label="Auto-approve tools" />
+        <Toggle on={autoApprove} onChange={setAutoApprove} label={tr('Auto-approve tools')} />
       </div>
       </>
       )}

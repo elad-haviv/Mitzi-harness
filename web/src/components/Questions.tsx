@@ -2,6 +2,7 @@
 import { Check, MessageCircleQuestion } from 'lucide-react';
 import { useState } from 'react';
 import type { AskQuestion } from '../api';
+import { tr } from '../i18n';
 
 export interface QuestionRequest {
   requestId: string;
@@ -32,7 +33,7 @@ export function QuestionCard({ req, onAnswer }: { req: QuestionRequest; onAnswer
   };
 
   return (
-    <div className="question-card" role="group" aria-label={req.questions.length === 1 ? req.questions[0].question : 'Questions for you'}>
+    <div className="question-card" role="group" aria-label={req.questions.length === 1 ? req.questions[0].question : tr('Questions for you')}>
       {req.questions.map((q, i) => (
         <div key={i} className="question">
           <div className="question-head">
@@ -42,7 +43,7 @@ export function QuestionCard({ req, onAnswer }: { req: QuestionRequest; onAnswer
               <div className="question-text" dir="auto">
                 {q.question}
               </div>
-              {q.multiSelect && <div className="muted small">Pick any that apply</div>}
+              {q.multiSelect && <div className="muted small">{tr('Pick any that apply')}</div>}
             </div>
           </div>
           {q.options && q.options.length > 0 && (
@@ -77,7 +78,7 @@ export function QuestionCard({ req, onAnswer }: { req: QuestionRequest; onAnswer
           <input
             className="input question-other"
             dir="auto"
-            placeholder={q.options?.length ? 'Or answer in your own words…' : 'Your answer…'}
+            placeholder={q.options?.length ? tr('Or answer in your own words…') : tr('Your answer…')}
             value={drafts[i].other}
             disabled={busy}
             autoFocus={i === 0 && !q.options?.length}
@@ -97,11 +98,11 @@ export function QuestionCard({ req, onAnswer }: { req: QuestionRequest; onAnswer
       <div className="question-actions">
         {!instant || drafts[0].other.trim() ? (
           <button className="btn btn-primary btn-sm" disabled={busy || !complete} onClick={() => send(answers)}>
-            Send answer{req.questions.length > 1 ? 's' : ''}
+            {tr('Send answer')}{req.questions.length > 1 ? 's' : ''}
           </button>
         ) : null}
-        <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => send(null)} title="Let it decide for itself">
-          Skip
+        <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => send(null)} title={tr('Let it decide for itself')}>
+          {tr('Skip')}
         </button>
       </div>
     </div>
@@ -123,7 +124,7 @@ export function AskedCard({ args, output, isError }: { args: any; output?: strin
             <MessageCircleQuestion size={13} /> {q.question}
           </span>
           <span className="asked-answer" dir="auto">
-            {isError ? 'Couldn’t ask' : skipped ? 'Skipped' : answers[i] || '—'}
+            {isError ? tr('Couldn’t ask') : skipped ? tr('Skipped') : answers[i] || '—'}
           </span>
         </div>
       ))}

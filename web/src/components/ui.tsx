@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useApp } from '../state';
+import { tr } from '../i18n';
 
 export function Modal({
   title,
@@ -25,7 +26,7 @@ export function Modal({
       <div className={`modal${wide ? ' wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
         <div className="modal-header">
           <h2>{title}</h2>
-          <button className="icon-btn" onClick={onClose} aria-label="Close">
+          <button className="icon-btn" onClick={onClose} aria-label={tr('Close')}>
             <X size={18} />
           </button>
         </div>
@@ -41,7 +42,7 @@ export function useConfirm(): [ReactNode, (message: string, opts?: { title?: str
   const [state, setState] = useState<{ message: string; title: string; action: string; resolve(v: boolean): void }>();
   const ask = useCallback(
     (message: string, opts: { title?: string; action?: string } = {}) =>
-      new Promise<boolean>((resolve) => setState({ message, title: opts.title ?? 'Are you sure?', action: opts.action ?? 'Delete', resolve })),
+      new Promise<boolean>((resolve) => setState({ message, title: opts.title ?? tr('Are you sure?'), action: opts.action ?? tr('Delete'), resolve })),
     [],
   );
   const close = (v: boolean) => {
@@ -55,7 +56,7 @@ export function useConfirm(): [ReactNode, (message: string, opts?: { title?: str
       footer={
         <>
           <button className="btn btn-ghost" onClick={() => close(false)}>
-            Cancel
+            {tr('Cancel')}
           </button>
           <button className="btn btn-primary" style={{ background: 'var(--danger)', borderColor: 'var(--danger)', color: '#fff' }} onClick={() => close(true)} autoFocus>
             {state.action}
@@ -131,7 +132,7 @@ export function Toasts() {
       {toasts.map((t) => (
         <div key={t.id} className={`toast ${t.tone}`}>
           <span>{t.message}</span>
-          <button onClick={() => dismissToast(t.id)} aria-label="Dismiss">
+          <button onClick={() => dismissToast(t.id)} aria-label={tr('Dismiss')}>
             <X size={16} />
           </button>
         </div>

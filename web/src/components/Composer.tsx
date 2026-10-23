@@ -6,6 +6,7 @@ import { AttachmentChips } from './Messages';
 import { ModelPicker } from './ModelPicker';
 import { readFileAsDataUrl, readFileAsText, useAutoResize } from './ui';
 import { extractText, isDocument } from '../documents';
+import { tr } from '../i18n';
 
 const MAX_TEXT_FILE = 1024 * 1024;
 const MAX_IMAGE = 5 * 1024 * 1024;
@@ -80,7 +81,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
     for (const file of Array.from(files)) {
       try {
         if (file.type.startsWith('image/')) {
-          if (file.size > MAX_IMAGE) throw new Error(`${file.name} is larger than 5 MB`);
+          if (file.size > MAX_IMAGE) throw new Error(tr('{0} is larger than 5 MB', file.name));
           const content = await readFileAsDataUrl(file);
           setAttachments((a) => [...a, { name: file.name || 'image.png', content, kind: 'image' }]);
         } else if (isDocument(file.name)) {
@@ -88,16 +89,16 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
           setReading((r) => [...r, file.name]);
           try {
             const doc = await extractText(file);
-            const header = `(Text extracted from ${file.name}: ${doc.summary}${doc.truncated ? '; the end was cut because the document is very long' : ''}.)`;
+            const header = tr('(Text extracted from {0}: {1}{2}.)', file.name, doc.summary, doc.truncated ? '; the end was cut because the document is very long' : '');
             setAttachments((a) => [...a, { name: file.name, content: `${header}\n\n${doc.text}`, kind: 'text' }]);
-            if (doc.truncated) toast(`${file.name} is very long, so only its first part was attached.`, 'info');
+            if (doc.truncated) toast(tr('{0} is very long, so only its first part was attached.', file.name), 'info');
           } finally {
             setReading((r) => r.filter((n) => n !== file.name));
           }
         } else {
-          if (file.size > MAX_TEXT_FILE) throw new Error(`${file.name} is larger than 1 MB`);
+          if (file.size > MAX_TEXT_FILE) throw new Error(tr('{0} is larger than 1 MB', file.name));
           const content = await readFileAsText(file);
-          if (content.includes('\u0000')) throw new Error(`${file.name} isn't a file Mitzi can read. Attach text, PDF, Word, Excel or PowerPoint files, or images.`);
+          if (content.includes('\u0000')) throw new Error(tr('{0} isn\'t a file Mitzi can read. Attach text, PDF, Word, Excel or PowerPoint files, or images.', file.name));
           setAttachments((a) => [...a, { name: file.name, content, kind: 'text' }]);
         }
       } catch (err) {
@@ -138,7 +139,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
         }}
       >
         {menuOpen && (
-          <div className="slash-menu" role="listbox" aria-label="Commands">
+          <div className="slash-menu" role="listbox" aria-label={tr('Commands')}>
             {matches.map((c, i) => (
               <button
                 key={c.name}
@@ -162,15 +163,15 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
         {(attachments.length > 0 || reading.length > 0) && (
           <div className="composer-attachments">
             {reading.map((name) => (
-              <span key={name} className="chip reading" title="Reading the document">
+              <span key={name} className="chip reading" title={tr('Reading the document')}>
                 <Loader2 size={13} className="spin" />
-                <span>Reading {name}…</span>
+                <span>{tr('Reading')}{' '}{name}…</span>
               </span>
             ))}
             {images.map(({ a, i }) => (
               <div className="thumb" key={i}>
                 <img src={a.content} alt={a.name} />
-                <button onClick={() => setAttachments((list) => list.filter((_, j) => j !== i))} aria-label={`Remove ${a.name}`}>
+                <button onClick={() => setAttachments((list) => list.filter((_, j) => j !== i))} aria-label={tr('Remove {0}', a.name)}>
                   <X size={12} />
                 </button>
               </div>
@@ -183,8 +184,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
           rows={1}
           value={text}
           autoFocus={props.autoFocus}
-          placeholder={queueing ? `Queue a message for when it’s done · ${/Mac/.test(navigator.platform) ? '⌘' : 'Ctrl'}+Enter sends it now` : (props.placeholder ?? 'Message Mitzi…')}
-          aria-label="Message"
+          placeholder={queueing ? tr('Queue a message for when it’s done · {0}+Enter sends it now', /Mac/.test(navigator.platform) ? '⌘' : 'Ctrl') : (props.placeholder ?? tr('Message Mitzi…'))}
+          aria-label={tr('Message')}
           dir="auto"
           onChange={(e) => setText(e.target.value)}
           onPaste={(e) => {
@@ -224,18 +225,18 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
         />
         <div className="composer-bar">
           <input ref={fileInput} type="file" multiple hidden onChange={(e) => e.target.files && void addFiles(e.target.files).then(() => (e.target.value = ''))} />
- <button className="icon-btn" title="Attach files, documents (PDF, Word, Excel, PowerPoint) or images" aria-label="Attach files" onClick={() => fileInput.current?.click()}>
+ <button className="icon-btn" title={tr('Attach files, documents (PDF, Word, Excel, PowerPoint) or images')} aria-label={tr('Attach files')} onClick={() => fileInput.current?.click()}>
             <Paperclip size={17} />
           </button>
           <button
             className={`pill-btn${props.webSearch && searchable ? ' on' : ''}`}
-            title={searchable ? 'Let the model search the web (OpenRouter :online, adds cost)' : 'Web search works with OpenRouter models'}
+            title={searchable ? tr('Let the model search the web (OpenRouter :online, adds cost)') : tr('Web search works with OpenRouter models')}
             aria-pressed={props.webSearch && searchable}
             disabled={!searchable}
             onClick={() => props.onWebSearchChange(!props.webSearch)}
           >
             <Globe size={15} />
-            <span className="search-label">Search</span>
+            <span className="search-label">{tr('Search')}</span>
           </button>
           <ModelPicker value={props.model} onChange={props.onModelChange} auto />
           {props.leading}
@@ -243,20 +244,20 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
           {props.extra}
           {queueing && canSend && (
             <>
-              <button className="pill-btn interrupt-btn" onClick={() => send(true)} title="Stop the current response and send this now">
-                <Zap size={14} /> Send now
+              <button className="pill-btn interrupt-btn" onClick={() => send(true)} title={tr('Stop the current response and send this now')}>
+                <Zap size={14} /> {tr('Send now')}
               </button>
-              <button className="send-btn" onClick={() => send()} title="Queue: sends when the current response is done" aria-label="Queue message">
+              <button className="send-btn" onClick={() => send()} title={tr('Queue: sends when the current response is done')} aria-label={tr('Queue message')}>
                 <ListPlus size={17} />
               </button>
             </>
           )}
           {props.running && !sideCommand ? (
-            <button className="send-btn stop" onClick={props.onStop} title="Stop" aria-label="Stop generating">
+            <button className="send-btn stop" onClick={props.onStop} title={tr('Stop')} aria-label={tr('Stop generating')}>
               <Square size={13} fill="currentColor" />
             </button>
           ) : (
-            <button className="send-btn" onClick={() => send()} disabled={!canSend} title="Send" aria-label="Send message">
+            <button className="send-btn" onClick={() => send()} disabled={!canSend} title={tr('Send')} aria-label={tr('Send message')}>
               <ArrowUp size={18} strokeWidth={2.4} />
             </button>
           )}
@@ -276,8 +277,8 @@ export function ContextRing({ used, total, onClick, active }: { used: number; to
     <button
       className="ring-btn"
       onClick={onClick}
-      title={`Context: ${used.toLocaleString()} of ${window.toLocaleString()} tokens`}
-      aria-label="Context usage"
+      title={tr('Context: {0} of {1} tokens', used.toLocaleString(), window.toLocaleString())}
+      aria-label={tr('Context usage')}
       style={active ? { color: 'var(--text)', background: 'var(--surface-2)' } : undefined}
     >
       <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden>

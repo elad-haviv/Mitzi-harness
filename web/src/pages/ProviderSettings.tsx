@@ -6,6 +6,7 @@ import { ModelPicker } from '../components/ModelPicker';
 import { Modal, Toggle } from '../components/ui';
 import { browserVoices, loadVoicePrefs, saveVoicePrefs, speaker } from '../speech';
 import { useApp } from '../state';
+import { plural, tr } from '../i18n';
 
 // ---------- Providers ----------
 
@@ -39,7 +40,7 @@ export function ProvidersSection() {
     setTesting((t) => ({ ...t, [p.id]: 'busy' }));
     try {
       const r = await api.testProvider(p.id);
-      setTesting((t) => ({ ...t, [p.id]: p.kind === 'elevenlabs' ? 'Key saved' : `${r.count} model${r.count === 1 ? '' : 's'}` }));
+      setTesting((t) => ({ ...t, [p.id]: p.kind === 'elevenlabs' ? tr('Key saved') : plural(r.count, '1 model', '{0} models') }));
       void refreshModels();
       void load();
     } catch (err) {
@@ -55,22 +56,21 @@ export function ProvidersSection() {
     <section className="settings-section card">
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 12 }}>
         <p className="muted small" style={{ margin: 0 }}>
-          Connect OpenRouter for hundreds of models with one key, and add providers directly to use their models with your own keys. Their models appear in
-          the model picker as <code>provider:model</code>.
+          {tr('Connect OpenRouter for hundreds of models with one key, and add providers directly to use their models with your own keys. Their models appear in the model picker as')}{' '}<code>provider:model</code>.
         </p>
         <button className="btn btn-sm" style={{ flexShrink: 0 }} onClick={() => setAdding('pick')}>
-          <Plus size={14} /> Add provider
+          <Plus size={14} /> {tr('Add provider')}
         </button>
       </div>
       {!providers ? (
-        <div className="muted small">Loading…</div>
+        <div className="muted small">{tr('Loading…')}</div>
       ) : (
         <div className="provider-list">
           {configured.length === 0 && (
             <div className="provider-row empty">
-              <span className="grow">No provider yet. Add OpenRouter (recommended) or another provider to start chatting.</span>
+              <span className="grow">{tr('No provider yet. Add OpenRouter (recommended) or another provider to start chatting.')}</span>
               <button className="btn btn-primary btn-sm" onClick={() => setAdding(preset('openrouter') ?? 'pick')}>
-                Add OpenRouter
+                {tr('Add OpenRouter')}
               </button>
             </div>
           )}
@@ -81,7 +81,7 @@ export function ProvidersSection() {
                 <div className="row" style={{ gap: 6 }}>
                   <strong>{p.name}</strong>
                   {p.kind !== 'openrouter' && <code className="muted small">{p.id}:</code>}
-                  {p.keySource === 'env' && <span className="badge">from environment</span>}
+                  {p.keySource === 'env' && <span className="badge">{tr('from environment')}</span>}
                 </div>
                 <div className="small muted">
                   {p.error ? (
@@ -89,9 +89,9 @@ export function ProvidersSection() {
                       <AlertTriangle size={12} /> {p.error}
                     </span>
                   ) : preset(p.kind)?.chat === false ? (
-                    'Voice, sound effects and music'
+                    tr('Voice, sound effects and music')
                   ) : p.modelCount !== undefined ? (
-                    `${p.modelCount} model${p.modelCount === 1 ? '' : 's'}`
+                    plural(p.modelCount, '1 model', '{0} models')
                   ) : (
                     p.baseUrl ?? preset(p.kind)?.baseUrl
                   )}
@@ -99,17 +99,17 @@ export function ProvidersSection() {
               </div>
               <button className="btn btn-sm btn-ghost" onClick={() => void test(p)} disabled={testing[p.id] === 'busy' || !p.enabled}>
                 {testing[p.id] === 'busy' ? <Loader2 size={13} className="spin" /> : testing[p.id] ? <Check size={13} /> : <RefreshCw size={13} />}
-                {testing[p.id] && testing[p.id] !== 'busy' ? testing[p.id] : 'Test'}
+                {testing[p.id] && testing[p.id] !== 'busy' ? testing[p.id] : tr('Test')}
               </button>
               <button className="btn btn-sm btn-ghost" onClick={() => setEditing(p)}>
-                Key
+                {tr('Key')}
               </button>
               {p.kind !== 'openrouter' && <Toggle on={p.enabled} label={`${p.enabled ? 'Disable' : 'Enable'} ${p.name}`} onChange={(on) => void api.updateProvider(p.id, { enabled: on }).then(changed, (e) => toast(e.message))} />}
               {p.keySource !== 'env' && (
                 <button
                   className="icon-btn sm"
-                  aria-label={`Remove ${p.name}`}
-                  title="Remove"
+                  aria-label={tr('Remove {0}', p.name)}
+                  title={tr('Remove')}
                   onClick={() => void api.removeProvider(p.id).then(changed, (e) => toast(e.message))}
                 >
                   <Trash2 size={14} />
@@ -120,14 +120,14 @@ export function ProvidersSection() {
         </div>
       )}
       {adding === 'pick' && (
-        <Modal title="Add a provider" onClose={() => setAdding(null)}>
+        <Modal title={tr('Add a provider')} onClose={() => setAdding(null)}>
           <div className="preset-grid">
             {presets.map((p) => (
               <button key={p.kind} className="preset-card" onClick={() => setAdding(p)}>
                 <div className="provider-logo">{p.name.slice(0, 1)}</div>
                 <div>
                   <div className="t">{p.name}</div>
-                  <div className="s">{p.kind === 'openrouter' ? 'Hundreds of models, one key' : p.chat ? (p.keyless ? 'Local models, no key' : 'Chat models') : 'Voice, sounds, music'}</div>
+                  <div className="s">{p.kind === 'openrouter' ? tr('Hundreds of models, one key') : p.chat ? (p.keyless ? tr('Local models, no key') : tr('Chat models')) : tr('Voice, sounds, music')}</div>
                 </div>
               </button>
             ))}
@@ -186,12 +186,12 @@ function KeyModal({
   const canSave = needsUrl ? !!baseUrl.trim() : preset.keyless || !!key.trim() || (!!existing && baseUrl !== (existing.baseUrl ?? ''));
   return (
     <Modal
-      title={existing ? `${preset.name} settings` : `Connect ${preset.name}`}
+      title={existing ? tr('{0} settings', preset.name) : tr('Connect {0}', preset.name)}
       onClose={onClose}
       footer={
         <>
           <button className="btn btn-ghost" onClick={onClose}>
-            Cancel
+            {tr('Cancel')}
           </button>
           <button
             className="btn btn-primary"
@@ -206,14 +206,14 @@ function KeyModal({
               }
             }}
           >
-            {existing ? 'Save' : 'Connect'}
+            {existing ? tr('Save') : tr('Connect')}
           </button>
         </>
       }
     >
       {preset.keyUrl && (
         <p className="small" style={{ marginTop: 0 }}>
-          Create a key at{' '}
+          {tr('Create a key at')}{' '}
           <a href={preset.keyUrl} target="_blank" rel="noreferrer">
             {new URL(preset.keyUrl).host} <ExternalLink size={11} />
           </a>
@@ -221,24 +221,24 @@ function KeyModal({
       )}
       {!preset.keyless && (
         <label className="field">
-          <span className="field-label">API key</span>
+          <span className="field-label">{tr('API key')}</span>
           <input
             className="input mono"
             type="password"
             autoFocus
             autoComplete="off"
-            placeholder={existing?.hasKey ? 'Saved; enter a new key to replace it' : 'Paste your key'}
+            placeholder={existing?.hasKey ? tr('Saved; enter a new key to replace it') : tr('Paste your key')}
             value={key}
             onChange={(e) => setKey(e.target.value)}
           />
-          <span className="field-hint">Stored in ~/.mitzi/config.json on this computer, readable only by you.</span>
+          <span className="field-hint">{tr('Stored in ~/.mitzi/config.json on this computer, readable only by you.')}</span>
         </label>
       )}
       {showUrl && (
         <label className="field">
-          <span className="field-label">Base URL</span>
+          <span className="field-label">{tr('Base URL')}</span>
           <input className="input mono" placeholder={preset.baseUrl || 'https://api.example.com/v1'} value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
-          <span className="field-hint">{needsUrl ? 'Any OpenAI-compatible API (vLLM, LiteLLM, Azure, …).' : `Leave empty for ${preset.baseUrl}.`}</span>
+          <span className="field-hint">{needsUrl ? tr('Any OpenAI-compatible API (vLLM, LiteLLM, Azure, …).') : tr('Leave empty for {0}.', preset.baseUrl)}</span>
         </label>
       )}
     </Modal>
@@ -248,20 +248,20 @@ function KeyModal({
 // ---------- Media & voice ----------
 
 const MEDIA_FIELDS: { key: keyof MediaModels; label: string; hint: string; empty: string }[] = [
-  { key: 'imageModel', label: 'Images', hint: 'Lets bots create images.', empty: 'Add OpenAI, Google, OpenRouter or another provider with image models.' },
-  { key: 'videoModel', label: 'Video', hint: 'Short clips; slow and costly, so the bot asks before each one.', empty: 'Add OpenAI (Sora) or Google (Veo) to generate video.' },
-  { key: 'speechModel', label: 'Speech (text to speech)', hint: 'Natural voices for read-aloud and live mode. Without it, your browser’s voices are used.', empty: 'Add OpenAI, ElevenLabs, Google or OpenRouter for natural voices.' },
-  { key: 'soundModel', label: 'Sound effects', hint: 'Sound design from a description.', empty: 'Add ElevenLabs to generate sound effects.' },
-  { key: 'musicModel', label: 'Music', hint: 'Original music from a description.', empty: 'Add ElevenLabs to generate music.' },
-  { key: 'realtimeModel', label: 'Realtime voice', hint: 'Natural spoken conversations: you can interrupt, and it answers as you finish speaking. Used by the voice button when set; otherwise live mode uses the speech and transcription models.', empty: 'Add OpenAI to talk with a realtime model.' },
-  { key: 'transcribeModel', label: 'Transcription (speech to text)', hint: 'For live mode in browsers without built-in speech recognition (Firefox, some Safari).', empty: 'Add OpenAI, Groq, Google or OpenRouter for transcription.' },
+  { key: 'imageModel', label: tr('Images'), hint: tr('Lets bots create images.'), empty: tr('Add OpenAI, Google, OpenRouter or another provider with image models.') },
+  { key: 'videoModel', label: tr('Video'), hint: tr('Short clips; slow and costly, so the bot asks before each one.'), empty: tr('Add OpenAI (Sora) or Google (Veo) to generate video.') },
+  { key: 'speechModel', label: tr('Speech (text to speech)'), hint: tr('Natural voices for read-aloud and live mode. Without it, your browser’s voices are used.'), empty: tr('Add OpenAI, ElevenLabs, Google or OpenRouter for natural voices.') },
+  { key: 'soundModel', label: tr('Sound effects'), hint: tr('Sound design from a description.'), empty: tr('Add ElevenLabs to generate sound effects.') },
+  { key: 'musicModel', label: tr('Music'), hint: tr('Original music from a description.'), empty: tr('Add ElevenLabs to generate music.') },
+  { key: 'realtimeModel', label: tr('Realtime voice'), hint: tr('Natural spoken conversations: you can interrupt, and it answers as you finish speaking. Used by the voice button when set; otherwise live mode uses the speech and transcription models.'), empty: tr('Add OpenAI to talk with a realtime model.') },
+  { key: 'transcribeModel', label: tr('Transcription (speech to text)'), hint: tr('For live mode in browsers without built-in speech recognition (Firefox, some Safari).'), empty: tr('Add OpenAI, Groq, Google or OpenRouter for transcription.') },
 ];
 
 function voicePlaceholder(model: string): string {
-  if (model.startsWith('elevenlabs:')) return 'ElevenLabs voice id (default: George)';
-  if (model.startsWith('google:')) return 'Kore, Puck, Charon, Zephyr, Aoede… (default: Kore)';
-  if (!/^[a-z0-9-]+:/.test(model)) return 'Voice name; depends on the model (empty: its default voice)';
-  return 'alloy, ash, coral, nova, sage, shimmer…';
+  if (model.startsWith('elevenlabs:')) return tr('ElevenLabs voice id (default: George)');
+  if (model.startsWith('google:')) return tr('Kore, Puck, Charon, Zephyr, Aoede… (default: Kore)');
+  if (!/^[a-z0-9-]+:/.test(model)) return tr('Voice name; depends on the model (empty: its default voice)');
+  return tr('alloy, ash, coral, nova, sage, shimmer…');
 }
 
 export function MediaSettingsSection() {
@@ -300,7 +300,7 @@ export function MediaSettingsSection() {
   return (
     <section className="settings-section card">
       <p className="muted small" style={{ marginTop: 0 }}>
-        Each kind of media can use a different provider: for example chat through OpenRouter and speech through Google. Any <code>provider:model</code> id works.
+        {tr('Each kind of media can use a different provider: for example chat through OpenRouter and speech through Google. Any')}{' '}<code>provider:model</code> {tr('id works.')}
       </p>
       {MEDIA_FIELDS.map((f) => (
         <div key={f.key} className="field">
@@ -310,17 +310,17 @@ export function MediaSettingsSection() {
             onChange={(v) => void save({ [f.key]: v })}
             variant="input"
             direction="down"
-            allowEmpty="Off"
+            allowEmpty={tr('Off')}
             options={catalog ? catalog[f.key].map((m): ModelInfo => ({ ...m, tools: true, vision: false })) : []}
-            emptyHint={catalog ? f.empty : 'Loading models…'}
+            emptyHint={catalog ? f.empty : tr('Loading models…')}
           />
           <span className="field-hint">{f.hint}</span>
         </div>
       ))}
       <div className="field">
-        <span className="field-label">Language you speak</span>
+        <span className="field-label">{tr('Language you speak')}</span>
         <select className="select" style={{ maxWidth: 320 }} value={prefs.language} onChange={(e) => setPref({ language: e.target.value })}>
-          <option value="">{settings.media.transcribeModel ? 'Detect automatically' : `Same as the browser (${languageName(navigator.language || 'en-US')})`}</option>
+          <option value="">{settings.media.transcribeModel ? tr('Detect automatically') : tr('Same as the browser ({0})', languageName(navigator.language || 'en-US'))}</option>
           {LANGUAGES.map((l) => (
             <option key={l.code} value={l.code}>
               {l.name}
@@ -328,7 +328,7 @@ export function MediaSettingsSection() {
           ))}
         </select>
         <span className="field-hint">
-          For live conversations. {settings.media.transcribeModel ? 'Your transcription model detects the language, so you can switch languages mid-conversation.' : 'The browser’s speech recognition understands one language at a time; choose a transcription model above to have the language detected for you.'} Answers are read in their own language, with a voice that speaks it.
+          {tr('For live conversations.')}{' '}{settings.media.transcribeModel ? tr('Your transcription model detects the language, so you can switch languages mid-conversation.') : tr('The browser’s speech recognition understands one language at a time; choose a transcription model above to have the language detected for you.')} {tr('Answers are read in their own language, with a voice that speaks it.')}
         </span>
       </div>
       {settings.media.speechModel && (
@@ -339,7 +339,7 @@ export function MediaSettingsSection() {
             void save({ voice: voiceId.trim() });
           }}
         >
-          <span className="field-label">Voice</span>
+          <span className="field-label">{tr('Voice')}</span>
           <div className="row">
             <input
               className="input mono"
@@ -348,34 +348,34 @@ export function MediaSettingsSection() {
               onChange={(e) => setVoiceId(e.target.value)}
             />
             <button className="btn" disabled={voiceId.trim() === settings.media.voice}>
-              Save
+              {tr('Save')}
             </button>
             <button
               type="button"
               className="btn btn-ghost"
               onClick={() => {
                 speaker.useServer = true;
-                void speaker.speak('settings-test', 'Hi! This is how I sound when I read answers aloud.').catch((err) => toast(err.message));
+                void speaker.speak('settings-test', tr('Hi! This is how I sound when I read answers aloud.')).catch((err) => toast(err.message));
               }}
             >
-              <Volume2 size={14} /> Try
+              <Volume2 size={14} /> {tr('Try')}
             </button>
           </div>
         </form>
       )}
       {!settings.media.speechModel && (
         <div className="field" style={{ marginBottom: 0 }}>
-          <span className="field-label">Browser voice</span>
+          <span className="field-label">{tr('Browser voice')}</span>
           <div className="row" style={{ flexWrap: 'wrap' }}>
             <select className="select" style={{ flex: 1, minWidth: 200 }} value={prefs.voice} onChange={(e) => setPref({ voice: e.target.value })}>
-              <option value="">System default</option>
+              <option value="">{tr('System default')}</option>
               {voices.map((v) => (
                 <option key={v.name} value={v.name}>
                   {v.name} ({v.lang})
                 </option>
               ))}
             </select>
-            <select className="select" style={{ width: 110 }} value={prefs.rate} onChange={(e) => setPref({ rate: Number(e.target.value) })} aria-label="Speed">
+            <select className="select" style={{ width: 110 }} value={prefs.rate} onChange={(e) => setPref({ rate: Number(e.target.value) })} aria-label={tr('Speed')}>
               {[0.8, 0.9, 1, 1.1, 1.25, 1.5].map((r) => (
                 <option key={r} value={r}>
                   {r}×
@@ -387,14 +387,14 @@ export function MediaSettingsSection() {
               className="btn btn-ghost"
               onClick={() => {
                 speaker.useServer = false;
-                void speaker.speak('settings-test', 'Hi! This is how I sound when I read answers aloud.').catch((err) => toast(err.message));
+                void speaker.speak('settings-test', tr('Hi! This is how I sound when I read answers aloud.')).catch((err) => toast(err.message));
               }}
             >
-              <Volume2 size={14} /> Try
+              <Volume2 size={14} /> {tr('Try')}
             </button>
           </div>
           <span className="field-hint">
-            <Mic size={11} /> Live mode uses your browser’s speech recognition when available.
+            <Mic size={11} /> {tr('Live mode uses your browser’s speech recognition when available.')}
           </span>
         </div>
       )}

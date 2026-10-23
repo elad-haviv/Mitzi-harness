@@ -5,6 +5,7 @@ import { href } from '../router';
 import { useApp } from '../state';
 import { CloneRepoModal, FolderPicker } from './Folders';
 import { Menu } from './ui';
+import { tr } from '../i18n';
 
 function ProjectIcon({ project, size = 14 }: { project?: ProjectView; size?: number }) {
   if (project?.repo) return <FolderGit2 size={size} />;
@@ -23,7 +24,7 @@ export function ProjectChip({ projectId, onChange }: { projectId?: string; onCha
     await refreshProjects();
     setDialog(null);
     onChange(p.id);
-    toast(p.folder ? `Working in ${p.folder.split(/[\\/]/).filter(Boolean).pop()}` : `Project: ${p.name}`, 'info');
+    toast(p.folder ? tr('Working in {0}', p.folder.split(/[\\/]/).filter(Boolean).pop()) : tr('Project: {0}', p.name), 'info');
   };
 
   return (
@@ -36,19 +37,19 @@ export function ProjectChip({ projectId, onChange }: { projectId?: string; onCha
             type="button"
             className={`pill-btn project-chip${project ? ' on' : ''}`}
             onClick={toggle}
-            title={project ? (project.folder ? `${project.name} · ${project.folder}` : project.name) : 'Work in a project, a folder on this computer, or a repository'}
+            title={project ? (project.folder ? `${project.name} · ${project.folder}` : project.name) : tr('Work in a project, a folder on this computer, or a repository')}
           >
             <ProjectIcon project={project} />
-            <span className="project-chip-label">{project ? project.name : 'Project'}</span>
+            <span className="project-chip-label">{project ? project.name : tr('Project')}</span>
             <ChevronDown size={13} />
           </button>
         )}
       >
         {(close) => (
           <div className="project-menu">
-            <div className="menu-label">Work in</div>
+            <div className="menu-label">{tr('Work in')}</div>
             <button onClick={() => (close(), onChange(null))}>
-              <X size={15} /> No project {!project && <Check size={14} className="menu-check" />}
+              <X size={15} /> {tr('No project')}{' '}{!project && <Check size={14} className="menu-check" />}
             </button>
             {sorted.map((p) => (
               <button key={p.id} onClick={() => (close(), onChange(p.id))} title={p.folder ?? p.description}>
@@ -62,20 +63,20 @@ export function ProjectChip({ projectId, onChange }: { projectId?: string; onCha
             ))}
             <hr />
             <button onClick={() => (close(), setDialog('folder'))}>
-              <FolderSearch size={15} /> Open a folder…
+              <FolderSearch size={15} /> {tr('Open a folder…')}
             </button>
             <button onClick={() => (close(), setDialog('repo'))}>
-              <GitBranch size={15} /> Connect a repository…
+              <GitBranch size={15} /> {tr('Connect a repository…')}
             </button>
             <a className="menu-link" href={href({ page: 'projects' })} onClick={close}>
-              <Settings2 size={15} /> Manage projects
+              <Settings2 size={15} /> {tr('Manage projects')}
             </a>
           </div>
         )}
       </Menu>
       {dialog === 'folder' && (
         <FolderPicker
-          title="Open a folder"
+          title={tr('Open a folder')}
           action="Work in this folder"
           start={project?.folder}
           onClose={() => setDialog(null)}

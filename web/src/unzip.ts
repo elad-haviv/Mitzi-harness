@@ -1,3 +1,4 @@
+import { tr } from './i18n';
 // Reads one file out of a .zip in the browser, without loading the whole archive: data exports can
 // be gigabytes of images, and we only need conversations.json.
 
@@ -27,7 +28,7 @@ async function centralDirectory(file: Blob): Promise<Entry[]> {
       break;
     }
   }
-  if (eocd < 0) throw new Error('This isn’t a zip file');
+  if (eocd < 0) throw new Error(tr('This isn’t a zip file'));
   let count = u16(tail, eocd + 10);
   let size = u32(tail, eocd + 12);
   let offset = u32(tail, eocd + 16);
@@ -79,7 +80,7 @@ export async function readZipText(file: Blob, suffix: string): Promise<string | 
   const start = entry.localOffset + 30 + u16(local, 26) + u16(local, 28);
   const data = file.slice(start, start + entry.compressedSize);
   if (entry.method === 0) return data.text();
-  if (entry.method !== 8) throw new Error('This zip uses a compression method Mitzi can’t read');
+  if (entry.method !== 8) throw new Error(tr('This zip uses a compression method Mitzi can’t read'));
   const stream = data.stream().pipeThrough(new DecompressionStream('deflate-raw'));
   return new Response(stream).text();
 }

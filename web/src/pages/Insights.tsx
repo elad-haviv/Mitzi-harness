@@ -8,17 +8,18 @@ import { Stars } from '../components/Feedback';
 import { Kpi, money } from '../components/Work';
 import { href } from '../router';
 import { formatTokens, relativeTime, useApp } from '../state';
+import { plural, tr } from '../i18n';
 
 const KIND_LABEL: Record<string, string> = {
-  chat: 'Answers in chats',
-  task: 'Scheduled tasks',
-  workflow: 'Workflows',
-  title: 'Chat titles',
-  memory: 'Memory',
-  goal: 'Goal checks',
-  btw: 'Side questions (/btw)',
-  learning: 'Learning from feedback',
-  other: 'Other',
+  chat: tr('Answers in chats'),
+  task: tr('Scheduled tasks'),
+  workflow: tr('Workflows'),
+  title: tr('Chat titles'),
+  memory: tr('Memory'),
+  goal: tr('Goal checks'),
+  btw: tr('Side questions (/btw)'),
+  learning: tr('Learning from feedback'),
+  other: tr('Other'),
 };
 
 export function InsightsPage({ tab }: { tab?: string }) {
@@ -27,19 +28,19 @@ export function InsightsPage({ tab }: { tab?: string }) {
     <div className="page insights">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Insights</h1>
-          <p className="page-subtitle">What Mitzi costs, and how your bots are learning from your feedback</p>
+          <h1 className="page-title">{tr('Insights')}</h1>
+          <p className="page-subtitle">{tr('What Mitzi costs, and how your bots are learning from your feedback')}</p>
         </div>
       </div>
       <div className="tabs-row" role="tablist">
         <a role="tab" aria-selected={current === 'usage'} className={`tab${current === 'usage' ? ' on' : ''}`} href={href({ page: 'insights' })}>
-          <BarChart3 size={15} /> Usage
+          <BarChart3 size={15} /> {tr('Usage')}
         </a>
         <a role="tab" aria-selected={current === 'learning'} className={`tab${current === 'learning' ? ' on' : ''}`} href={href({ page: 'insights', tab: 'learning' })}>
-          <GraduationCap size={15} /> Learning
+          <GraduationCap size={15} /> {tr('Learning')}
         </a>
         <a role="tab" aria-selected={current === 'compare'} className={`tab${current === 'compare' ? ' on' : ''}`} href={href({ page: 'insights', tab: 'compare' })}>
-          <Columns2 size={15} /> Compare
+          <Columns2 size={15} /> {tr('Compare')}
         </a>
       </div>
       {current === 'usage' ? <UsageView /> : current === 'compare' ? <CompareInsightsView /> : <LearningView />}
@@ -68,7 +69,7 @@ export function UsageView({ projectId: fixedProject, compact }: { projectId?: st
       key: g.key || 'none',
       name: name(g),
       value: metric(g.totals),
-      detail: `${money(g.totals.cost)} · ${g.totals.prompt.toLocaleString()} tokens in, ${g.totals.completion.toLocaleString()} out · ${g.totals.requests} requests`,
+      detail: tr('{0} · {1} tokens in, {2} out · {3} requests', money(g.totals.cost), g.totals.prompt.toLocaleString(), g.totals.completion.toLocaleString(), g.totals.requests),
     }));
   const label = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   return (
@@ -82,8 +83,8 @@ export function UsageView({ projectId: fixedProject, compact }: { projectId?: st
           ))}
         </div>
         {!fixedProject && (
-          <select className="select" value={projectId} onChange={(e) => setProjectId(e.target.value)} aria-label="Project">
-            <option value="">All projects</option>
+          <select className="select" value={projectId} onChange={(e) => setProjectId(e.target.value)} aria-label={tr('Project')}>
+            <option value="">{tr('All projects')}</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -91,8 +92,8 @@ export function UsageView({ projectId: fixedProject, compact }: { projectId?: st
             ))}
           </select>
         )}
-        <select className="select" value={botId} onChange={(e) => setBotId(e.target.value)} aria-label="Bot">
-          <option value="">All bots</option>
+        <select className="select" value={botId} onChange={(e) => setBotId(e.target.value)} aria-label={tr('Bot')}>
+          <option value="">{tr('All bots')}</option>
           {bots.map((b) => (
             <option key={b.id} value={b.id}>
               {b.emoji} {b.name}
@@ -103,36 +104,36 @@ export function UsageView({ projectId: fixedProject, compact }: { projectId?: st
       {budget && !fixedProject && (budget.daily || budget.monthly) ? (
         <section className="card chart-card">
           <h2>
-            Budget <a className="small" href={href({ page: 'settings', section: 'budget' })} style={{ fontWeight: 400, marginLeft: 6 }}>Change</a>
+            {tr('Budget')}{' '}<a className="small" href={href({ page: 'settings', section: 'budget' })} style={{ fontWeight: 400, marginLeft: 6 }}>{tr('Change')}</a>
           </h2>
           <BudgetMeters budget={budget} />
         </section>
       ) : null}
       <div className="kpis">
-        <Kpi label={`Cost, last ${days} days`} value={money(t.cost)} hint={`All time: ${money(data.allTime.cost)}`} />
-        <Kpi label="Tokens" value={formatTokens(t.prompt + t.completion)} hint={`${t.prompt.toLocaleString()} in · ${t.completion.toLocaleString()} out`} />
-        <Kpi label="Requests" value={t.requests.toLocaleString()} />
-        <Kpi label="Average per day" value={priced ? money(t.cost / days) : formatTokens((t.prompt + t.completion) / days)} />
+        <Kpi label={tr('Cost, last {0} days', days)} value={money(t.cost)} hint={tr('All time: {0}', money(data.allTime.cost))} />
+        <Kpi label={tr('Tokens')} value={formatTokens(t.prompt + t.completion)} hint={tr('{0} in · {1} out', t.prompt.toLocaleString(), t.completion.toLocaleString())} />
+        <Kpi label={tr('Requests')} value={t.requests.toLocaleString()} />
+        <Kpi label={tr('Average per day')} value={priced ? money(t.cost / days) : formatTokens((t.prompt + t.completion) / days)} />
       </div>
       {data.auto && <AutoCard auto={data.auto} />}
       <section className="card chart-card">
-        <h2>{priced ? 'Cost per day' : 'Tokens per day'}</h2>
-        {!priced && t.requests > 0 && <p className="muted small">Your providers didn’t report prices, so this shows tokens.</p>}
+        <h2>{priced ? tr('Cost per day') : tr('Tokens per day')}</h2>
+        {!priced && t.requests > 0 && <p className="muted small">{tr('Your providers didn’t report prices, so this shows tokens.')}</p>}
         <Chart
-          title={`${priced ? 'Cost' : 'Tokens'} per day over the last ${days} days`}
-          points={data.daily.map((d) => ({ label: label(d.day), value: metric(d), tip: `${money(d.cost)} · ${formatTokens(d.prompt + d.completion)} tokens · ${d.requests} requests` }))}
+          title={tr('{0} per day over the last {1} days', priced ? 'Cost' : 'Tokens', days)}
+          points={data.daily.map((d) => ({ label: label(d.day), value: metric(d), tip: tr('{0} · {1} tokens · {2} requests', money(d.cost), formatTokens(d.prompt + d.completion), d.requests) }))}
           format={fmt}
         />
         <details className="table-view">
-          <summary>Show as table</summary>
+          <summary>{tr('Show as table')}</summary>
           <table className="data-table">
             <thead>
               <tr>
-                <th>Day</th>
-                <th>Cost</th>
-                <th>Tokens in</th>
-                <th>Tokens out</th>
-                <th>Requests</th>
+                <th>{tr('Day')}</th>
+                <th>{tr('Cost')}</th>
+                <th>{tr('Tokens in')}</th>
+                <th>{tr('Tokens out')}</th>
+                <th>{tr('Requests')}</th>
               </tr>
             </thead>
             <tbody>
@@ -154,26 +155,26 @@ export function UsageView({ projectId: fixedProject, compact }: { projectId?: st
       </section>
       <div className={`breakdowns${compact ? ' compact' : ''}`}>
         <section className="card">
-          <h2>By model</h2>
-          <Breakdown rows={rows(data.byModel)} format={fmt} empty="No requests in this period." />
+          <h2>{tr('By model')}</h2>
+          <Breakdown rows={rows(data.byModel)} format={fmt} empty={tr('No requests in this period.')} />
         </section>
         {!fixedProject && (
           <section className="card">
-            <h2>By project</h2>
-            <Breakdown rows={rows(data.byProject, (g) => (g.key ? <a href={href({ page: 'project', id: g.key })}>{g.name}</a> : g.name))} format={fmt} empty="No requests in this period." />
+            <h2>{tr('By project')}</h2>
+            <Breakdown rows={rows(data.byProject, (g) => (g.key ? <a href={href({ page: 'project', id: g.key })}>{g.name}</a> : g.name))} format={fmt} empty={tr('No requests in this period.')} />
           </section>
         )}
         <section className="card">
-          <h2>By bot</h2>
-          <Breakdown rows={rows(data.byBot)} format={fmt} empty="No requests in this period." />
+          <h2>{tr('By bot')}</h2>
+          <Breakdown rows={rows(data.byBot)} format={fmt} empty={tr('No requests in this period.')} />
         </section>
         <section className="card">
-          <h2>By activity</h2>
-          <Breakdown rows={rows(data.byKind, (g) => KIND_LABEL[g.key] ?? g.key)} format={fmt} empty="No requests in this period." />
+          <h2>{tr('By activity')}</h2>
+          <Breakdown rows={rows(data.byKind, (g) => KIND_LABEL[g.key] ?? g.key)} format={fmt} empty={tr('No requests in this period.')} />
         </section>
         <section className="card">
-          <h2>Most expensive chats</h2>
-          <Breakdown rows={rows(data.topChats, (g) => <a href={href({ page: 'chat', id: g.key })}>{g.name}</a>)} format={fmt} empty="No chats in this period." />
+          <h2>{tr('Most expensive chats')}</h2>
+          <Breakdown rows={rows(data.topChats, (g) => <a href={href({ page: 'chat', id: g.key })}>{g.name}</a>)} format={fmt} empty={tr('No chats in this period.')} />
         </section>
       </div>
     </div>
@@ -201,8 +202,8 @@ function LearningView() {
   return (
     <div className="insights-body">
       <div className="filters">
-        <select className="select" value={botId} onChange={(e) => setBotId(e.target.value)} aria-label="Bot">
-          <option value="">All bots</option>
+        <select className="select" value={botId} onChange={(e) => setBotId(e.target.value)} aria-label={tr('Bot')}>
+          <option value="">{tr('All bots')}</option>
           {bots.map((b) => (
             <option key={b.id} value={b.id}>
               {b.emoji} {b.name}
@@ -214,73 +215,71 @@ function LearningView() {
         <div className="card empty-learning">
           <GraduationCap size={28} className="muted" />
           <p>
-            <strong>No feedback loops yet.</strong> Under any answer, choose <strong>Review</strong> to rate how well it did the task. If it missed, tell Mitzi what you meant and what it
-            did, and it redoes the task with your directions, as many times as you like. When you accept a result, Mitzi turns your directions into a lesson, and this page
-            charts whether it gets things right sooner over time.
+            <strong>{tr('No feedback loops yet.')}</strong> {tr('Under any answer, choose')}{' '}<strong>{tr('Review')}</strong> {tr('to rate how well it did the task. If it missed, tell Mitzi what you meant and what it did, and it redoes the task with your directions, as many times as you like. When you accept a result, Mitzi turns your directions into a lesson, and this page charts whether it gets things right sooner over time.')}
           </p>
         </div>
       ) : (
         <>
           <div className="kpis">
-            <Kpi label="Tasks reviewed" value={String(s.loops)} />
-            <Kpi label="Accepted" value={`${s.accepted}`} hint={`${s.loops ? Math.round((s.accepted / s.loops) * 100) : 0}% of reviewed tasks`} />
-            <Kpi label="Attempts to get it right" value={s.avgAttempts ? s.avgAttempts.toFixed(1) : '–'} hint="Average over accepted tasks" />
+            <Kpi label={tr('Tasks reviewed')} value={String(s.loops)} />
+            <Kpi label={tr('Accepted')} value={`${s.accepted}`} hint={tr('{0}% of reviewed tasks', s.loops ? Math.round((s.accepted / s.loops) * 100) : 0)} />
+            <Kpi label={tr('Attempts to get it right')} value={s.avgAttempts ? s.avgAttempts.toFixed(1) : '–'} hint={tr('Average over accepted tasks')} />
             <Kpi
-              label="First-try rating"
+              label={tr('First-try rating')}
               value={s.avgFirstRating ? `${s.avgFirstRating.toFixed(1)} / 5` : '–'}
-              hint={pts.length >= 4 ? `Earlier tasks ${s.earlyFirstRating.toFixed(1)}, recent tasks ${s.lateFirstRating.toFixed(1)}` : undefined}
+              hint={pts.length >= 4 ? tr('Earlier tasks {0}, recent tasks {1}', s.earlyFirstRating.toFixed(1), s.lateFirstRating.toFixed(1)) : undefined}
             />
-            <Kpi label="Lessons learned" value={String(s.lessons)} />
+            <Kpi label={tr('Lessons learned')} value={String(s.lessons)} />
           </div>
           {pts.length >= 4 && (
             <p className={`trend-note ${trend >= 0 ? 'up' : 'down'}`}>
               {trend > 0.05
-                ? `First tries are getting better: recent tasks average ${s.lateFirstRating.toFixed(1)}/5, up from ${s.earlyFirstRating.toFixed(1)}.`
+                ? tr('First tries are getting better: recent tasks average {0}/5, up from {1}.', s.lateFirstRating.toFixed(1), s.earlyFirstRating.toFixed(1))
                 : trend < -0.05
-                  ? `First tries have slipped: recent tasks average ${s.lateFirstRating.toFixed(1)}/5, down from ${s.earlyFirstRating.toFixed(1)}.`
-                  : `First tries are holding steady at about ${s.lateFirstRating.toFixed(1)}/5.`}
+                  ? tr('First tries have slipped: recent tasks average {0}/5, down from {1}.', s.lateFirstRating.toFixed(1), s.earlyFirstRating.toFixed(1))
+                  : tr('First tries are holding steady at about {0}/5.', s.lateFirstRating.toFixed(1))}
             </p>
           )}
           <div className="breakdowns two">
             <section className="card chart-card">
-              <h2>Attempts needed per task</h2>
+              <h2>{tr('Attempts needed per task')}</h2>
               <div className="chart-legend">
                 <span>
-                  <i className="key bar" /> Attempts
+                  <i className="key bar" /> {tr('Attempts')}
                 </span>
                 <span>
-                  <i className="key line" /> Average of the last {window}
+                  <i className="key line" /> {tr('Average of the last')}{' '}{window}
                 </span>
               </div>
               <Chart
-                title="Attempts needed per task, oldest to newest, with a moving average"
-                points={pts.map((p) => ({ label: `#${p.n}`, value: p.attempts, tip: `${p.attempts} attempt${p.attempts === 1 ? '' : 's'} · ${date(p.at)} · ${p.task}` }))}
-                line={{ values: movingAverage(pts.map((p) => p.attempts), window), label: `Average of the last ${window}` }}
+                title={tr('Attempts needed per task, oldest to newest, with a moving average')}
+                points={pts.map((p) => ({ label: `#${p.n}`, value: p.attempts, tip: `${plural(p.attempts, '1 attempt', '{0} attempts')} · ${date(p.at)} · ${p.task}` }))}
+                line={{ values: movingAverage(pts.map((p) => p.attempts), window), label: tr('Average of the last {0}', window) }}
                 format={(v) => (Number.isInteger(v) ? String(v) : v.toFixed(1))}
               />
             </section>
             <section className="card chart-card">
-              <h2>First-try rating</h2>
+              <h2>{tr('First-try rating')}</h2>
               <div className="chart-legend">
                 <span>
-                  <i className="key dot" /> Rating of the first attempt
+                  <i className="key dot" /> {tr('Rating of the first attempt')}
                 </span>
                 <span>
-                  <i className="key line" /> Average of the last {window}
+                  <i className="key line" /> {tr('Average of the last')}{' '}{window}
                 </span>
               </div>
               <Chart
                 dots
                 domain={[1, 5]}
-                title="Rating of each task's first attempt, oldest to newest, with a moving average"
+                title={tr('Rating of each task\'s first attempt, oldest to newest, with a moving average')}
                 points={pts.map((p) => ({ label: `#${p.n}`, value: p.firstRating, tip: `${p.firstRating}/5 · ${date(p.at)} · ${p.task}` }))}
-                line={{ values: movingAverage(pts.map((p) => p.firstRating), window), label: `Average of the last ${window}` }}
+                line={{ values: movingAverage(pts.map((p) => p.firstRating), window), label: tr('Average of the last {0}', window) }}
                 format={(v) => (Number.isInteger(v) ? String(v) : v.toFixed(1))}
               />
             </section>
           </div>
           <section className="card">
-            <h2>Reviewed tasks</h2>
+            <h2>{tr('Reviewed tasks')}</h2>
             <div className="loop-list">
               {loops.map((l) => {
                 const bot = bots.find((b) => b.id === l.botId);
@@ -291,8 +290,8 @@ function LearningView() {
                         {l.task}
                       </a>
                       <div className="muted small">
-                        {bot ? `${bot.emoji} ${bot.name}` : 'Deleted bot'} · {relativeTime(l.createdAt)} · {l.iterations.length} attempt{l.iterations.length === 1 ? '' : 's'} ·{' '}
-                        {l.status === 'accepted' ? 'accepted' : l.status === 'open' ? 'in progress' : 'abandoned'}
+                        {bot ? `${bot.emoji} ${bot.name}` : tr('Deleted bot')} · {relativeTime(l.createdAt)} · {plural(l.iterations.length, '1 attempt', '{0} attempts')} ·{' '}
+                        {l.status === 'accepted' ? tr('accepted') : l.status === 'open' ? tr('in progress') : tr('abandoned')}
                       </div>
                       <div className="loop-ratings">
                         {l.iterations.map((it, i) => (
@@ -301,12 +300,12 @@ function LearningView() {
                           </span>
                         ))}
                       </div>
-                      {l.lesson && <div className="loop-lesson">Learned: {l.lesson}</div>}
+                      {l.lesson && <div className="loop-lesson">{tr('Learned:')}{' '}{l.lesson}</div>}
                     </div>
                     <button
                       className="icon-btn sm"
-                      aria-label="Remove from the learning history"
-                      title="Remove from the learning history"
+                      aria-label={tr('Remove from the learning history')}
+                      title={tr('Remove from the learning history')}
                       onClick={() => void api.deleteLoop(l.id).then(load, (err) => toast(err.message))}
                     >
                       <Trash2 size={14} />
@@ -333,7 +332,7 @@ export function ProjectUsage({ projectId }: { projectId: string }) {
   return (
     <div className="card project-usage">
       <div className="card-title">
-        <BarChart3 size={15} /> Usage, last 30 days
+        <BarChart3 size={15} /> {tr('Usage, last 30 days')}
       </div>
       <div className="project-usage-row">
         <div>
@@ -350,7 +349,7 @@ export function ProjectUsage({ projectId }: { projectId: string }) {
         </div>
       </div>
       <p className="muted small" style={{ margin: '6px 0 0' }}>
-        All time: {money(data.allTime.cost)} · {formatTokens(data.allTime.prompt + data.allTime.completion)} tokens. <a href={href({ page: 'insights' })}>Details</a>
+        {tr('All time:')}{' '}{money(data.allTime.cost)} · {formatTokens(data.allTime.prompt + data.allTime.completion)} tokens. <a href={href({ page: 'insights' })}>{tr('Details')}</a>
       </p>
     </div>
   );
@@ -359,8 +358,8 @@ export function ProjectUsage({ projectId }: { projectId: string }) {
 /** Spending against the daily and monthly limits. */
 export function BudgetMeters({ budget }: { budget: BudgetStatus }) {
   const rows = [
-    { label: 'Today', spent: budget.spentToday, max: budget.daily },
-    { label: 'This month', spent: budget.spentMonth, max: budget.monthly },
+    { label: tr('Today'), spent: budget.spentToday, max: budget.daily },
+    { label: tr('This month'), spent: budget.spentMonth, max: budget.monthly },
   ].filter((r) => r.max);
   if (!rows.length) return null;
   return (
@@ -376,9 +375,9 @@ export function BudgetMeters({ budget }: { budget: BudgetStatus }) {
                 {money(r.spent)} of {money(r.max!)}
               </span>
             </div>
-            <div className="budget-bar" role="meter" aria-valuemin={0} aria-valuemax={r.max} aria-valuenow={r.spent} aria-label={`${r.label}: ${money(r.spent)} of ${money(r.max!)}`}>
+            <div className="budget-bar" role="meter" aria-valuemin={0} aria-valuemax={r.max} aria-valuenow={r.spent} aria-label={tr('{0}: {1} of {2}', r.label, money(r.spent), money(r.max!))}>
               <div className={tone} style={{ width: `${pct}%` }} />
-              <i style={{ left: `${budget.alertPercent}%` }} title={`Alert at ${budget.alertPercent}%`} />
+              <i style={{ left: `${budget.alertPercent}%` }} title={tr('Alert at {0}%', budget.alertPercent)} />
             </div>
           </div>
         );
@@ -395,29 +394,29 @@ function AutoCard({ auto }: { auto: NonNullable<UsageReport['auto']> }) {
     <section className="card chart-card">
       <h2>
         <Sparkles size={15} className="accent" style={{ verticalAlign: -2, marginRight: 6 }} />
-        Auto model
+        {tr('Auto model')}
       </h2>
       <div className="route-split">
         <div>
           <div className="v">{share(auto.fast.requests)}</div>
           <div className="muted small">
-            to the quick model · {money(auto.fast.cost)}
+            {tr('to the quick model ·')}{' '}{money(auto.fast.cost)}
           </div>
         </div>
         <div>
           <div className="v">{share(auto.strong.requests)}</div>
           <div className="muted small">
-            to the in-depth model · {money(auto.strong.cost)}
+            {tr('to the in-depth model ·')}{' '}{money(auto.strong.cost)}
           </div>
         </div>
         <div>
           <div className="v">{money(auto.saved)}</div>
-          <div className="muted small" title="What the quick model's requests would have cost on the in-depth model, at listed prices">
-            saved, estimated
+          <div className="muted small" title={tr('What the quick model\'s requests would have cost on the in-depth model, at listed prices')}>
+            {tr('saved, estimated')}
           </div>
         </div>
       </div>
-      <div className="route-bar" role="img" aria-label={`${share(auto.fast.requests)} quick, ${share(auto.strong.requests)} in-depth`}>
+      <div className="route-bar" role="img" aria-label={tr('{0} quick, {1} in-depth', share(auto.fast.requests), share(auto.strong.requests))}>
         <span className="fast" style={{ width: share(auto.fast.requests) }} />
         <span className="strong" style={{ width: share(auto.strong.requests) }} />
       </div>
@@ -441,22 +440,22 @@ function CompareInsightsView() {
   return (
     <div className="insights-body">
       <div className="kpis">
-        <Kpi label="Comparisons" value={String(data.comparisons)} hint={`${data.skipped} skipped`} />
-        <Kpi label="Models raced" value={String(models.length)} />
+        <Kpi label={tr('Comparisons')} value={String(data.comparisons)} hint={tr('{0} skipped', data.skipped)} />
+        <Kpi label={tr('Models raced')} value={String(models.length)} />
       </div>
       <section className="card chart-card">
-        <h2>Leaderboard</h2>
+        <h2>{tr('Leaderboard')}</h2>
         {!models.length ? (
-          <p className="muted">No picks yet. Race two models with /compare [modelA] [modelB] &lt;prompt&gt; in any chat, then pick the winner.</p>
+          <p className="muted">{tr('No picks yet. Race two models with /compare [modelA] [modelB] &lt;prompt&gt; in any chat, then pick the winner.')}</p>
         ) : (
           <table className="data-table">
             <thead>
               <tr>
                 <th></th>
-                <th>Model</th>
-                <th>Wins</th>
-                <th>Losses</th>
-                <th>Win rate</th>
+                <th>{tr('Model')}</th>
+                <th>{tr('Wins')}</th>
+                <th>{tr('Losses')}</th>
+                <th>{tr('Win rate')}</th>
               </tr>
             </thead>
             <tbody>
@@ -466,7 +465,7 @@ function CompareInsightsView() {
                 const rate = Math.round((w / (w + l)) * 100);
                 return (
                   <tr key={id}>
-                    <td>{i === 0 ? <Trophy size={14} aria-label="Leader" /> : i + 1}</td>
+                    <td>{i === 0 ? <Trophy size={14} aria-label={tr('Leader')} /> : i + 1}</td>
                     <td><code>{id}</code></td>
                     <td>{w}</td>
                     <td>{l}</td>

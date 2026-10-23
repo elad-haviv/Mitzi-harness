@@ -8,6 +8,7 @@ import { ArtifactIcon, TYPE_LABEL } from '../components/Artifacts';
 import { Empty, Menu, Modal, readFileAsText, useConfirm } from '../components/ui';
 import { href, navigate } from '../router';
 import { formatTokens, relativeTime, useApp } from '../state';
+import { plural, tr } from '../i18n';
 
 export function ProjectsPage() {
   const { projects, refreshProjects, toast } = useApp();
@@ -26,24 +27,24 @@ export function ProjectsPage() {
       <div className="page-inner">
         <div className="page-header">
           <div>
-            <h1 className="page-title">Projects</h1>
-            <p className="page-subtitle">Group chats with shared instructions and knowledge, or point Mitzi at a folder to work on code.</p>
+            <h1 className="page-title">{tr('Projects')}</h1>
+            <p className="page-subtitle">{tr('Group chats with shared instructions and knowledge, or point Mitzi at a folder to work on code.')}</p>
           </div>
           <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
             <button className="btn" onClick={() => setDialog('folder')}>
-              <FolderSearch size={16} /> Open folder
+              <FolderSearch size={16} /> {tr('Open folder')}
             </button>
             <button className="btn" onClick={() => setDialog('repo')}>
-              <GitBranch size={16} /> Connect repository
+              <GitBranch size={16} /> {tr('Connect repository')}
             </button>
             <button className="btn btn-primary" onClick={() => setCreating(true)}>
-              <Plus size={16} /> New project
+              <Plus size={16} /> {tr('New project')}
             </button>
           </div>
         </div>
         {dialog === 'folder' && (
           <FolderPicker
-            title="Open a folder"
+            title={tr('Open a folder')}
             action="Work in this folder"
             onClose={() => setDialog(null)}
             onPick={async (path) => {
@@ -60,14 +61,14 @@ export function ProjectsPage() {
         {projects.length === 0 ? (
           <Empty
             icon={<FolderOpen size={22} />}
-            title="No projects yet"
+            title={tr('No projects yet')}
             action={
               <button className="btn btn-primary" onClick={() => setCreating(true)}>
-                <Plus size={16} /> Create a project
+                <Plus size={16} /> {tr('Create a project')}
               </button>
             }
           >
-            Projects keep related chats together. Every chat in a project shares its instructions and knowledge files.
+            {tr('Projects keep related chats together. Every chat in a project shares its instructions and knowledge files.')}
           </Empty>
         ) : (
           <div className="grid">
@@ -76,8 +77,8 @@ export function ProjectsPage() {
                 <div className="tile-actions">
                   <button
                     className="icon-btn sm"
-                    aria-label={`Delete ${p.name}`}
-                    title="Delete project"
+                    aria-label={tr('Delete {0}', p.name)}
+                    title={tr('Delete project')}
                     onClick={(e) => {
                       e.preventDefault();
                       setDeleting(p);
@@ -92,17 +93,17 @@ export function ProjectsPage() {
                   </div>
                   <div className="tile-title">{p.name}</div>
                 </div>
-                <div className="tile-desc">{p.description || <span className="muted">No description</span>}</div>
+                <div className="tile-desc">{p.description || <span className="muted">{tr('No description')}</span>}</div>
                 <div className="tile-foot">
                   <span>
-                    <MessageSquare size={12} /> {p.chatCount} chat{p.chatCount === 1 ? '' : 's'}
+                    <MessageSquare size={12} /> {plural(p.chatCount, '1 chat', '{0} chats')}
                   </span>
                   {p.files.length > 0 && (
                     <span>
-                      · <BookOpen size={12} /> {p.files.length} file{p.files.length === 1 ? '' : 's'}
+                      · <BookOpen size={12} /> {plural(p.files.length, '1 file', '{0} files')}
                     </span>
                   )}
-                  {p.folder && <span className="badge ok">Coding</span>}
+                  {p.folder && <span className="badge ok">{tr('Coding')}</span>}
                   <span style={{ marginLeft: 'auto' }}>{relativeTime(p.updatedAt)}</span>
                 </div>
               </a>
@@ -141,15 +142,15 @@ function ProjectForm({ project, onClose, onSaved }: { project?: ProjectView; onC
   };
   return (
     <Modal
-      title={project ? 'Edit project' : 'New project'}
+      title={project ? tr('Edit project') : tr('New project')}
       onClose={onClose}
       footer={
         <>
           <button className="btn btn-ghost" onClick={onClose}>
-            Cancel
+            {tr('Cancel')}
           </button>
           <button className="btn btn-primary" disabled={!name.trim() || busy} onClick={save}>
-            {project ? 'Save' : 'Create project'}
+            {project ? tr('Save') : tr('Create project')}
           </button>
         </>
       }
@@ -161,12 +162,12 @@ function ProjectForm({ project, onClose, onSaved }: { project?: ProjectView; onC
         }}
       >
         <label className="field">
-          <span className="field-label">Name</span>
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Thesis research" autoFocus />
+          <span className="field-label">{tr('Name')}</span>
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={tr('e.g. Thesis research')} autoFocus />
         </label>
         <label className="field">
-          <span className="field-label">Description</span>
-          <textarea className="textarea" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What is this project about?" rows={3} />
+          <span className="field-label">{tr('Description')}</span>
+          <textarea className="textarea" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={tr('What is this project about?')} rows={3} />
         </label>
       </form>
     </Modal>
@@ -174,11 +175,11 @@ function ProjectForm({ project, onClose, onSaved }: { project?: ProjectView; onC
 }
 
 const MODE_INFO: Record<PermissionMode, string> = {
-  default: 'Ask before editing files, running commands or fetching URLs',
-  acceptEdits: 'Edit files freely, ask before commands and network',
-  sensitive: 'Work freely, ask only before risky actions',
-  plan: 'Read-only: research and propose a plan',
-  yolo: 'Never ask (use with care)',
+  default: tr('Ask before editing files, running commands or fetching URLs'),
+  acceptEdits: tr('Edit files freely, ask before commands and network'),
+  sensitive: tr('Work freely, ask only before risky actions'),
+  plan: tr('Read-only: research and propose a plan'),
+  yolo: tr('Never ask (use with care)'),
 };
 
 export function ProjectPage({ id }: { id: string }) {
@@ -204,7 +205,7 @@ export function ProjectPage({ id }: { id: string }) {
   if (!project) {
     return (
       <div className="page">
-        <div className="page-inner muted">Loading project…</div>
+        <div className="page-inner muted">{tr('Loading project…')}</div>
       </div>
     );
   }
@@ -223,7 +224,7 @@ export function ProjectPage({ id }: { id: string }) {
       try {
         // Documents (PDF, Word, Excel, PowerPoint) become text; other files must be text already.
         const text = isDocument(f.name) ? (await extractText(f)).text : await readFileAsText(f);
-        if (text.includes('\u0000')) throw new Error(`${f.name} isn't a file Mitzi can read. Add text, PDF, Word, Excel or PowerPoint files.`);
+        if (text.includes('\u0000')) throw new Error(tr('{0} isn\'t a file Mitzi can read. Add text, PDF, Word, Excel or PowerPoint files.', f.name));
         await api.addProjectFile(project.id, f.name, text);
       } catch (err) {
         toast((err as Error).message);
@@ -241,7 +242,7 @@ export function ProjectPage({ id }: { id: string }) {
         <div className="page-header">
           <div style={{ minWidth: 0 }}>
             <a className="small muted" href={href({ page: 'projects' })}>
-              ← All projects
+              {tr('← All projects')}
             </a>
             <h1 className="page-title" style={{ marginTop: 6 }}>
               {project.name}
@@ -250,7 +251,7 @@ export function ProjectPage({ id }: { id: string }) {
           </div>
           <Menu
             trigger={(_o, toggle) => (
-              <button className="icon-btn" onClick={toggle} aria-label="Project options">
+              <button className="icon-btn" onClick={toggle} aria-label={tr('Project options')}>
                 <MoreHorizontal size={18} />
               </button>
             )}
@@ -258,11 +259,11 @@ export function ProjectPage({ id }: { id: string }) {
             {(close) => (
               <>
                 <button onClick={() => (close(), setEditing(true))}>
-                  <Pencil size={15} /> Edit details
+                  <Pencil size={15} /> {tr('Edit details')}
                 </button>
                 <hr />
                 <button className="danger" onClick={() => (close(), setDeleting(true))}>
-                  <Trash2 size={15} /> Delete project
+                  <Trash2 size={15} /> {tr('Delete project')}
                 </button>
               </>
             )}
@@ -272,14 +273,14 @@ export function ProjectPage({ id }: { id: string }) {
         <div className="project-layout">
           <div>
             <a className="big-composer-link" href={href({ page: 'new', projectId: project.id })}>
-              <SquarePen size={18} /> Start a new chat in {project.name}
+              <SquarePen size={18} /> {tr('Start a new chat in')}{' '}{project.name}
             </a>
             <h2 className="card-title" style={{ marginBottom: 10 }}>
-              Chats
+              {tr('Chats')}
             </h2>
             {chats.filter((c) => c.messageCount > 0).length === 0 ? (
               <div className="empty" style={{ padding: 32 }}>
-                No chats in this project yet.
+                {tr('No chats in this project yet.')}
               </div>
             ) : (
               <div className="list">
@@ -291,7 +292,7 @@ export function ProjectPage({ id }: { id: string }) {
                       <div className="grow">
                         <div className="t">{c.title}</div>
                         <div className="s">
-                          {c.messageCount} messages · {relativeTime(c.updatedAt)}
+                          {c.messageCount} {tr('messages ·')}{' '}{relativeTime(c.updatedAt)}
                         </div>
                       </div>
                     </a>
@@ -301,7 +302,7 @@ export function ProjectPage({ id }: { id: string }) {
             {artifacts.length > 0 && (
               <>
                 <h2 className="card-title" style={{ margin: '28px 0 10px' }}>
-                  <Layers size={16} /> Artifacts
+                  <Layers size={16} /> {tr('Artifacts')}
                 </h2>
                 <div className="list">
                   {artifacts.slice(0, 8).map((a) => (
@@ -327,10 +328,10 @@ export function ProjectPage({ id }: { id: string }) {
             <div className="card">
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <div className="card-title">
-                  <Pencil size={15} /> Instructions
+                  <Pencil size={15} /> {tr('Instructions')}
                 </div>
                 <button className="btn btn-sm" onClick={() => setInstructionsOpen(true)}>
-                  {project.instructions ? 'Edit' : 'Add'}
+                  {project.instructions ? tr('Edit') : tr('Add')}
                 </button>
               </div>
               {project.instructions ? (
@@ -339,7 +340,7 @@ export function ProjectPage({ id }: { id: string }) {
                 </div>
               ) : (
                 <p className="muted small" style={{ margin: '6px 0 0' }}>
-                  Tell Mitzi how to behave in this project: tone, format, background, rules.
+                  {tr('Tell Mitzi how to behave in this project: tone, format, background, rules.')}
                 </p>
               )}
             </div>
@@ -347,14 +348,14 @@ export function ProjectPage({ id }: { id: string }) {
             <div className="card">
               <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                 <div className="card-title">
-                  <BookOpen size={15} /> Knowledge
+                  <BookOpen size={15} /> {tr('Knowledge')}
                 </div>
                 <span className="row" style={{ gap: 6 }}>
-                  <button className="btn btn-sm" onClick={() => setLinking(true)} title="Use the text files in a folder on this computer, kept up to date">
-                    <FolderSearch size={14} /> Folder
+                  <button className="btn btn-sm" onClick={() => setLinking(true)} title={tr('Use the text files in a folder on this computer, kept up to date')}>
+                    <FolderSearch size={14} /> {tr('Folder')}
                   </button>
                   <button className="btn btn-sm" onClick={() => fileInput.current?.click()}>
-                    <Upload size={14} /> Files
+                    <Upload size={14} /> {tr('Files')}
                   </button>
                 </span>
                 <input ref={fileInput} type="file" multiple hidden onChange={(e) => e.target.files && void upload(e.target.files).then(() => (e.target.value = ''))} />
@@ -362,13 +363,12 @@ export function ProjectPage({ id }: { id: string }) {
               <p className="muted small" style={{ margin: '6px 0 8px' }}>
                 {project.knowledge?.searched ? (
                   <>
-                    <b>{project.knowledge.docs.toLocaleString()} documents, ~{formatTokens(knowledgeTokens)} tokens</b>: too much to send whole, so each message gets the passages
-                    most relevant to it, and Mitzi can search for more.
+                    <b>{project.knowledge.docs.toLocaleString()} {tr('documents, ~')}{formatTokens(knowledgeTokens)} tokens</b>{tr(': too much to send whole, so each message gets the passages most relevant to it, and Mitzi can search for more.')}
                   </>
                 ) : (
                   <>
-                    Documents included in every chat’s context
-                    {knowledgeTokens > 0 && ` · ~${formatTokens(knowledgeTokens)} tokens`}. Larger knowledge is searched per message instead.
+                    {tr('Documents included in every chat’s context')}
+                    {knowledgeTokens > 0 && tr(' · ~{0} tokens', formatTokens(knowledgeTokens))}{tr('. Larger knowledge is searched per message instead.')}
                   </>
                 )}
               </p>
@@ -378,15 +378,15 @@ export function ProjectPage({ id }: { id: string }) {
                   <span className="name" title={path}>
                     {path.split(/[\\/]/).filter(Boolean).pop()}
                   </span>
-                  <span className="muted small">linked folder</span>
-                  <button className="icon-btn sm" aria-label={`Unlink ${path}`} title="Unlink (the folder itself isn’t touched)" onClick={() => void update({ knowledgeFolders: linked.filter((p) => p !== path) })}>
+                  <span className="muted small">{tr('linked folder')}</span>
+                  <button className="icon-btn sm" aria-label={tr('Unlink {0}', path)} title={tr('Unlink (the folder itself isn’t touched)')} onClick={() => void update({ knowledgeFolders: linked.filter((p) => p !== path) })}>
                     <Trash2 size={13} />
                   </button>
                 </div>
               ))}
               {linking && (
                 <FolderPicker
-                  title="Link a folder as knowledge"
+                  title={tr('Link a folder as knowledge')}
                   action="Link this folder"
                   start={linked[0] ?? project.folder}
                   onClose={() => setLinking(false)}
@@ -405,7 +405,7 @@ export function ProjectPage({ id }: { id: string }) {
                   <span className="muted small">{formatTokens(Math.ceil(f.size / 4))}</span>
                   <button
                     className="icon-btn sm"
-                    aria-label={`Remove ${f.name}`}
+                    aria-label={tr('Remove {0}', f.name)}
                     onClick={() =>
                       api
                         .removeProjectFile(project.id, f.id)
@@ -421,10 +421,10 @@ export function ProjectPage({ id }: { id: string }) {
 
             <div className="card">
               <div className="card-title">
-                <Terminal size={15} /> Coding workspace
+                <Terminal size={15} /> {tr('Coding workspace')}
               </div>
               <p className="muted small" style={{ margin: '6px 0 10px' }}>
-                Link a local folder to give chats the coding tools: read, edit, search and run commands there.
+                {tr('Link a local folder to give chats the coding tools: read, edit, search and run commands there.')}
               </p>
               <form
                 className="row"
@@ -433,12 +433,12 @@ export function ProjectPage({ id }: { id: string }) {
                   void update({ folder: folder.trim() || null });
                 }}
               >
-                <input className="input mono" placeholder="~/code/my-app" value={folder} onChange={(e) => setFolder(e.target.value)} />
+                <input className="input mono" placeholder={tr('~/code/my-app')} value={folder} onChange={(e) => setFolder(e.target.value)} />
                 <button className="btn btn-sm" type="button" onClick={() => setBrowsing(true)}>
-                  <FolderSearch size={14} /> Browse…
+                  <FolderSearch size={14} /> {tr('Browse…')}
                 </button>
                 <button className="btn btn-sm" type="submit" disabled={folder === (project.folder ?? '')}>
-                  Save
+                  {tr('Save')}
                 </button>
               </form>
               {browsing && (
@@ -456,12 +456,12 @@ export function ProjectPage({ id }: { id: string }) {
               {project.folder && (
                 <div className="field" style={{ marginTop: 14, marginBottom: 0 }}>
                   <span className="field-label row" style={{ gap: 6 }}>
-                    <ShieldCheck size={14} /> Permissions
+                    <ShieldCheck size={14} /> {tr('Permissions')}
                   </span>
                   <select className="select" value={project.permissionMode} onChange={(e) => void update({ permissionMode: e.target.value })}>
                     {(Object.keys(MODE_INFO) as PermissionMode[]).map((m) => (
                       <option key={m} value={m}>
-                        {m === 'acceptEdits' ? 'Accept edits' : m[0].toUpperCase() + m.slice(1)}: {MODE_INFO[m]}
+                        {m === 'acceptEdits' ? tr('Accept edits') : m[0].toUpperCase() + m.slice(1)}: {MODE_INFO[m]}
                       </option>
                     ))}
                   </select>
@@ -483,13 +483,13 @@ function InstructionsModal({ initial, onClose, onSave }: { initial: string; onCl
   const [text, setText] = useState(initial);
   return (
     <Modal
-      title="Project instructions"
+      title={tr('Project instructions')}
       wide
       onClose={onClose}
       footer={
         <>
           <button className="btn btn-ghost" onClick={onClose}>
-            Cancel
+            {tr('Cancel')}
           </button>
           <button
             className="btn btn-primary"
@@ -498,13 +498,13 @@ function InstructionsModal({ initial, onClose, onSave }: { initial: string; onCl
               onClose();
             }}
           >
-            Save instructions
+            {tr('Save instructions')}
           </button>
         </>
       }
     >
       <p className="muted small" style={{ marginTop: 0 }}>
-        These are added to the system prompt of every chat in this project.
+        {tr('These are added to the system prompt of every chat in this project.')}
       </p>
       <textarea
         className="textarea"
@@ -512,7 +512,7 @@ function InstructionsModal({ initial, onClose, onSave }: { initial: string; onCl
         value={text}
         onChange={(e) => setText(e.target.value)}
         autoFocus
-        placeholder={'e.g.\nYou are helping me write my thesis on urban heat islands.\nUse British English and cite sources in APA style.\nKeep answers under 300 words unless I ask for more.'}
+        placeholder={tr('e.g.\nYou are helping me write my thesis on urban heat islands.\nUse British English and cite sources in APA style.\nKeep answers under 300 words unless I ask for more.')}
       />
     </Modal>
   );
@@ -530,18 +530,18 @@ function RepoPanel({ project }: { project: ProjectView }) {
     <div className="repo-panel">
       <div className="row" style={{ gap: 8 }}>
         <GitBranch size={14} />
-        <strong>{status.branch ?? 'detached'}</strong>
+        <strong>{status.branch ?? tr('detached')}</strong>
         <span className="muted small grow" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {status.remote ?? 'No remote'}
+          {status.remote ?? tr('No remote')}
         </span>
-        <button className="icon-btn sm" aria-label="Refresh" title="Refresh" onClick={() => void load()}>
+        <button className="icon-btn sm" aria-label={tr('Refresh')} title={tr('Refresh')} onClick={() => void load()}>
           <RefreshCw size={13} />
         </button>
       </div>
       <div className="repo-stats small">
-        <span>{status.changed ? `${status.changed} changed file${status.changed === 1 ? '' : 's'}` : 'No local changes'}</span>
-        {status.ahead > 0 && <span>{status.ahead} to push</span>}
-        {status.behind > 0 && <span>{status.behind} to pull</span>}
+        <span>{status.changed ? plural(status.changed, '1 changed file', '{0} changed files') : tr('No local changes')}</span>
+        {status.ahead > 0 && <span>{status.ahead} {tr('to push')}</span>}
+        {status.behind > 0 && <span>{status.behind} {tr('to pull')}</span>}
       </div>
       {status.remote && (
         <button
@@ -551,7 +551,7 @@ function RepoPanel({ project }: { project: ProjectView }) {
             setPulling(true);
             try {
               const r = await api.pull(project.id);
-              toast(r.output.split('\n').slice(-1)[0] || 'Pulled', 'info');
+              toast(r.output.split('\n').slice(-1)[0] || tr('Pulled'), 'info');
               if (r.status) setStatus(r.status);
             } catch (err) {
               toast((err as Error).message);
@@ -560,7 +560,7 @@ function RepoPanel({ project }: { project: ProjectView }) {
             }
           }}
         >
-          {pulling ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />} Pull latest
+          {pulling ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />} {tr('Pull latest')}
         </button>
       )}
     </div>
@@ -581,7 +581,7 @@ function DeleteProjectModal({ project: initial, onClose, onDeleted }: { project:
     try {
       await api.deleteProject(project.id, withChats);
       await Promise.all([refreshProjects(), refreshChats()]);
-      toast(`Deleted “${project.name}”`, 'info');
+      toast(tr('Deleted “{0}”', project.name), 'info');
       onClose();
       onDeleted?.();
     } catch (err) {
@@ -591,25 +591,25 @@ function DeleteProjectModal({ project: initial, onClose, onDeleted }: { project:
   };
   return (
     <Modal
-      title={`Delete “${project.name}”?`}
+      title={tr('Delete “{0}”?', project.name)}
       onClose={onClose}
       footer={
         <>
           <button className="btn btn-ghost" onClick={onClose}>
-            Cancel
+            {tr('Cancel')}
           </button>
           <button className="btn btn-primary btn-danger-fill" disabled={busy} onClick={() => void del()} autoFocus>
-            {busy ? <Loader2 size={14} className="spin" /> : <Trash2 size={14} />} Delete project
+            {busy ? <Loader2 size={14} className="spin" /> : <Trash2 size={14} />} {tr('Delete project')}
           </button>
         </>
       }
     >
       <p style={{ marginTop: 0 }}>
-        The project’s instructions and knowledge files will be deleted.
+        {tr('The project’s instructions and knowledge files will be deleted.')}
         {project.folder && (
           <>
             {' '}
-            Files in <code>{project.folder}</code> stay on your computer.
+            {tr('Files in')}{' '}<code>{project.folder}</code> {tr('stay on your computer.')}
           </>
         )}
       </p>
@@ -618,15 +618,15 @@ function DeleteProjectModal({ project: initial, onClose, onDeleted }: { project:
           <label className="choice">
             <input type="radio" name="chats" checked={!withChats} onChange={() => setWithChats(false)} />
             <span>
-              <strong>Keep its {project.chatCount} chat{project.chatCount === 1 ? '' : 's'}</strong>
-              <span className="muted small">They move out of the project, into your chat list.</span>
+              <strong>{plural(project.chatCount, 'Keep its chat', 'Keep its {0} chats')}</strong>
+              <span className="muted small">{tr('They move out of the project, into your chat list.')}</span>
             </span>
           </label>
           <label className="choice">
             <input type="radio" name="chats" checked={withChats} onChange={() => setWithChats(true)} />
             <span>
-              <strong>Delete the chats too</strong>
-              <span className="muted small">Including their artifacts. This can’t be undone.</span>
+              <strong>{tr('Delete the chats too')}</strong>
+              <span className="muted small">{tr('Including their artifacts. This can’t be undone.')}</span>
             </span>
           </label>
         </div>

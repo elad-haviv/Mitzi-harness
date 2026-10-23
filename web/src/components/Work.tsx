@@ -27,6 +27,7 @@ import type { Chat, ChatMode, FeedbackLoop, Goal, Plan, ResponseStats, Todo } fr
 import { href, navigate } from '../router';
 import { formatTokens, useApp } from '../state';
 import { Markdown } from './Markdown';
+import { plural, tr } from '../i18n';
 
 // ---------- Time ----------
 
@@ -55,8 +56,8 @@ export function duration(ms: number): string {
   const s = ms / 1000;
   if (s < 60) return `${s < 10 ? s.toFixed(1) : Math.round(s)}s`;
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ${String(Math.round(s % 60)).padStart(2, '0')}s`;
-  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
+  if (m < 60) return tr('{0}m {1}s', m, String(Math.round(s % 60)).padStart(2, '0'));
+  return tr('{0}h {1}m', Math.floor(m / 60), String(m % 60).padStart(2, '0'));
 }
 
 export function money(cost: number): string {
@@ -70,7 +71,7 @@ export function money(cost: number): string {
 export function Stopwatch({ since, label }: { since: number; label?: string }) {
   const s = useElapsed(since);
   return (
-    <span className="stopwatch" aria-live="off" title="Time spent on this response">
+    <span className="stopwatch" aria-live="off" title={tr('Time spent on this response')}>
       <Timer size={13} />
       <span className="stopwatch-time">{clock(s)}</span>
       {label && <span className="stopwatch-label">{label}</span>}
@@ -84,7 +85,7 @@ export function StatsLine({ stats }: { stats: ResponseStats }) {
   return (
     <span
       className="meta response-stats"
-      title={`${duration(stats.durationMs)} · ${stats.promptTokens.toLocaleString()} tokens in, ${stats.completionTokens.toLocaleString()} out · ${stats.requests} request${stats.requests === 1 ? '' : 's'} · ${money(stats.cost)}`}
+      title={tr('{0} · {1} tokens in, {2} out · {3} · {4}', duration(stats.durationMs), stats.promptTokens.toLocaleString(), stats.completionTokens.toLocaleString(), plural(stats.requests, '{0} request', '{0} requests'), money(stats.cost))}
     >
       <Timer size={12} /> {duration(stats.durationMs)}
       {tokens > 0 && <> · {formatTokens(tokens)} tokens</>}
@@ -98,14 +99,14 @@ export function StatsLine({ stats }: { stats: ResponseStats }) {
 export type UiMode = ChatMode | 'workflow';
 
 const MODES: { id: UiMode; label: string; icon: ReactNode; hint: string }[] = [
-  { id: 'chat', label: 'Chat', icon: <MessagesSquare size={15} />, hint: 'Talk things through' },
-  { id: 'work', label: 'Work', icon: <ListChecks size={15} />, hint: 'Hand over a task: Mitzi plans, keeps a task list and works until it’s done' },
-  { id: 'workflow', label: 'Workflow', icon: <WorkflowIcon size={15} />, hint: 'Build automations that run on their own or from a chat' },
+  { id: 'chat', label: tr('Chat'), icon: <MessagesSquare size={15} />, hint: tr('Talk things through') },
+  { id: 'work', label: tr('Work'), icon: <ListChecks size={15} />, hint: tr('Hand over a task: Mitzi plans, keeps a task list and works until it’s done') },
+  { id: 'workflow', label: tr('Workflow'), icon: <WorkflowIcon size={15} />, hint: tr('Build automations that run on their own or from a chat') },
 ];
 
 export function ModeSwitch({ mode, onChange, compact }: { mode: ChatMode; onChange(m: ChatMode): void; compact?: boolean }) {
   return (
-    <div className={`mode-switch${compact ? ' compact' : ''}`} role="radiogroup" aria-label="Mode">
+    <div className={`mode-switch${compact ? ' compact' : ''}`} role="radiogroup" aria-label={tr('Mode')}>
       {MODES.map((m) => (
         <button
           key={m.id}
@@ -146,11 +147,11 @@ export type SideTab = 'tasks' | 'artifacts' | 'browser' | 'context' | 'usage';
 
 export function SideTabs({ tab, onTab, onClose, counts }: { tab: SideTab; onTab(t: SideTab): void; onClose(): void; counts: Partial<Record<SideTab, number>> }) {
   const tabs: { id: SideTab; label: string; icon: ReactNode }[] = [
-    { id: 'tasks', label: 'Tasks', icon: <ClipboardList size={15} /> },
-    { id: 'artifacts', label: 'Artifacts', icon: <Layers size={15} /> },
-    { id: 'browser', label: 'Browser', icon: <Globe size={15} /> },
-    { id: 'context', label: 'Context', icon: <Gauge size={15} /> },
-    { id: 'usage', label: 'Usage', icon: <BarChart3 size={15} /> },
+    { id: 'tasks', label: tr('Tasks'), icon: <ClipboardList size={15} /> },
+    { id: 'artifacts', label: tr('Artifacts'), icon: <Layers size={15} /> },
+    { id: 'browser', label: tr('Browser'), icon: <Globe size={15} /> },
+    { id: 'context', label: tr('Context'), icon: <Gauge size={15} /> },
+    { id: 'usage', label: tr('Usage'), icon: <BarChart3 size={15} /> },
   ];
   return (
     <div className="side-tabs" role="tablist">
@@ -161,7 +162,7 @@ export function SideTabs({ tab, onTab, onClose, counts }: { tab: SideTab; onTab(
           {!!counts[t.id] && <span className="count">{counts[t.id]}</span>}
         </button>
       ))}
-      <button className="icon-btn sm side-tabs-close" onClick={onClose} aria-label="Close panel">
+      <button className="icon-btn sm side-tabs-close" onClick={onClose} aria-label={tr('Close panel')}>
         <X size={15} />
       </button>
     </div>
@@ -170,7 +171,7 @@ export function SideTabs({ tab, onTab, onClose, counts }: { tab: SideTab; onTab(
 
 // ---------- Tasks: goal, plan and task list ----------
 
-const GOAL_STATUS: Record<Goal['status'], string> = { active: 'Working', paused: 'Paused', complete: 'Achieved', budget: 'Out of turns' };
+const GOAL_STATUS: Record<Goal['status'], string> = { active: tr('Working'), paused: tr('Paused'), complete: tr('Achieved'), budget: tr('Out of turns') };
 
 export function TasksPanel({ chat, running, onCommand, onApprove, onRevise }: { chat?: Chat; running: boolean; onCommand(text: string): void; onApprove(): void; onRevise(): void }) {
   const goal = chat?.goal;
@@ -182,20 +183,20 @@ export function TasksPanel({ chat, running, onCommand, onApprove, onRevise }: { 
       <div className="panel-body tasks-empty">
         <ClipboardList size={28} className="muted" />
         <p>
-          <strong>No tasks yet.</strong> In Work mode, Mitzi keeps its task list here while it works.
+          <strong>{tr('No tasks yet.')}</strong> {tr('In Work mode, Mitzi keeps its task list here while it works.')}
         </p>
         <ul className="muted small">
           <li>
-            <code>/plan</code> to get a plan to approve before any work starts
+            <code>/plan</code> {tr('to get a plan to approve before any work starts')}
           </li>
           <li>
-            <code>/goal</code> to keep Mitzi working until something is achieved
+            <code>/goal</code> {tr('to keep Mitzi working until something is achieved')}
           </li>
           <li>
-            <code>/subgoal</code> to add milestones to the goal
+            <code>/subgoal</code> {tr('to add milestones to the goal')}
           </li>
           <li>
-            <code>/btw</code> for a quick side question
+            <code>/btw</code> {tr('for a quick side question')}
           </li>
         </ul>
       </div>
@@ -208,19 +209,19 @@ export function TasksPanel({ chat, running, onCommand, onApprove, onRevise }: { 
         <section className="task-section">
           <div className="task-section-head">
             <Target size={15} />
-            <span>Goal</span>
+            <span>{tr('Goal')}</span>
             <span className={`status-pill ${goal.status}`}>{GOAL_STATUS[goal.status]}</span>
           </div>
           <p className="goal-text">{goal.text}</p>
           <div className="muted small">
-            Turn {goal.turns} of {goal.maxTurns}
-            {goal.subgoals.length > 0 && ` · ${goal.subgoals.filter((s) => s.done).length}/${goal.subgoals.length} milestones`}
+            {tr('Turn')}{' '}{goal.turns} of {goal.maxTurns}
+            {goal.subgoals.length > 0 && tr(' · {0}/{1} milestones', goal.subgoals.filter((s) => s.done).length, goal.subgoals.length)}
           </div>
           {goal.subgoals.length > 0 && (
             <ul className="todo-list">
               {goal.subgoals.map((s) => (
                 <li key={s.id} className={s.done ? 'completed' : ''}>
-                  <button className="todo-check" disabled={s.done} onClick={() => onCommand(`/subgoal done ${s.id}`)} aria-label={s.done ? 'Done' : `Mark "${s.text}" done`}>
+                  <button className="todo-check" disabled={s.done} onClick={() => onCommand(`/subgoal done ${s.id}`)} aria-label={s.done ? tr('Done') : tr('Mark "{0}" done', s.text)}>
                     {s.done ? <CheckCircle2 size={16} /> : <Circle size={16} />}
                   </button>
                   <span>{s.text}</span>
@@ -236,26 +237,26 @@ export function TasksPanel({ chat, running, onCommand, onApprove, onRevise }: { 
               setMilestone('');
             }}
           >
-            <input className="input" value={milestone} onChange={(e) => setMilestone(e.target.value)} placeholder="Add a milestone" />
-            <button className="icon-btn" aria-label="Add milestone" disabled={!milestone.trim()}>
+            <input className="input" value={milestone} onChange={(e) => setMilestone(e.target.value)} placeholder={tr('Add a milestone')} />
+            <button className="icon-btn" aria-label={tr('Add milestone')} disabled={!milestone.trim()}>
               <Plus size={15} />
             </button>
           </form>
-          {goal.lastCheck && <div className="goal-check">Last check: {goal.lastCheck}</div>}
+          {goal.lastCheck && <div className="goal-check">{tr('Last check:')}{' '}{goal.lastCheck}</div>}
           <div className="row" style={{ gap: 6, marginTop: 8 }}>
             {goal.status === 'active' ? (
               <button className="btn btn-sm" onClick={() => onCommand('/goal pause')}>
-                <Pause size={13} /> Pause
+                <Pause size={13} /> {tr('Pause')}
               </button>
             ) : (
               goal.status !== 'complete' && (
                 <button className="btn btn-sm" onClick={() => onCommand('/goal resume')} disabled={running}>
-                  <Play size={13} /> Resume
+                  <Play size={13} /> {tr('Resume')}
                 </button>
               )
             )}
             <button className="btn btn-sm btn-ghost" onClick={() => onCommand('/goal clear')}>
-              Clear goal
+              {tr('Clear goal')}
             </button>
           </div>
         </section>
@@ -264,8 +265,8 @@ export function TasksPanel({ chat, running, onCommand, onApprove, onRevise }: { 
         <section className="task-section">
           <div className="task-section-head">
             <ListChecks size={15} />
-            <span>Plan</span>
-            <span className={`status-pill ${plan.status}`}>{plan.status === 'proposed' ? 'Waiting for you' : plan.status === 'approved' ? 'Approved' : 'Being revised'}</span>
+            <span>{tr('Plan')}</span>
+            <span className={`status-pill ${plan.status}`}>{plan.status === 'proposed' ? tr('Waiting for you') : plan.status === 'approved' ? tr('Approved') : tr('Being revised')}</span>
           </div>
           <div className="plan-body">
             <Markdown text={plan.text} />
@@ -273,10 +274,10 @@ export function TasksPanel({ chat, running, onCommand, onApprove, onRevise }: { 
           {plan.status === 'proposed' && (
             <div className="row" style={{ gap: 6 }}>
               <button className="btn btn-primary btn-sm" onClick={onApprove} disabled={running}>
-                <Check size={13} /> Approve and start
+                <Check size={13} /> {tr('Approve and start')}
               </button>
               <button className="btn btn-sm" onClick={onRevise}>
-                Change it
+                {tr('Change it')}
               </button>
             </div>
           )}
@@ -286,7 +287,7 @@ export function TasksPanel({ chat, running, onCommand, onApprove, onRevise }: { 
         <section className="task-section">
           <div className="task-section-head">
             <ClipboardList size={15} />
-            <span>Task list</span>
+            <span>{tr('Task list')}</span>
             <span className="muted small">
               {done}/{todos.length}
             </span>
@@ -319,7 +320,7 @@ export function TodoItems({ todos, running }: { todos: Todo[]; running?: boolean
 // ---------- Usage of this chat ----------
 
 export function UsagePanel({ chat }: { chat?: Chat }) {
-  if (!chat) return <div className="panel-body muted small">Send a message to see usage.</div>;
+  if (!chat) return <div className="panel-body muted small">{tr('Send a message to see usage.')}</div>;
   const responses = chat.messages
     .map((m, i) => ({ m, i }))
     .filter(({ m }) => m.role === 'assistant' && m.stats)
@@ -334,33 +335,33 @@ export function UsagePanel({ chat }: { chat?: Chat }) {
   return (
     <div className="panel-body usage-panel">
       <div className="kpis">
-        <Kpi label="Cost" value={money(u.cost)} />
-        <Kpi label="Tokens" value={formatTokens(u.promptTokens + u.completionTokens)} hint={`${formatTokens(u.promptTokens)} in · ${formatTokens(u.completionTokens)} out`} />
-        <Kpi label="Requests" value={String(u.requests)} />
-        <Kpi label="Time working" value={totalTime ? duration(totalTime) : '–'} />
+        <Kpi label={tr('Cost')} value={money(u.cost)} />
+        <Kpi label={tr('Tokens')} value={formatTokens(u.promptTokens + u.completionTokens)} hint={tr('{0} in · {1} out', formatTokens(u.promptTokens), formatTokens(u.completionTokens))} />
+        <Kpi label={tr('Requests')} value={String(u.requests)} />
+        <Kpi label={tr('Time working')} value={totalTime ? duration(totalTime) : '–'} />
       </div>
-      <h3 className="panel-subhead">Responses</h3>
-      {!responses.length && <p className="muted small">Responses from now on show their time, tokens and cost here.</p>}
+      <h3 className="panel-subhead">{tr('Responses')}</h3>
+      {!responses.length && <p className="muted small">{tr('Responses from now on show their time, tokens and cost here.')}</p>}
       <ol className="response-usage">
         {responses.map((r) => {
           const value = r.stats.cost || r.stats.promptTokens + r.stats.completionTokens;
           return (
             <li key={r.i}>
               <div className="response-usage-q" title={r.question}>
-                {r.question || '(regenerated)'}
+                {r.question || tr('(regenerated)')}
               </div>
               <div className="response-usage-bar">
                 <div style={{ width: `${Math.max(2, (value / max) * 100)}%` }} />
               </div>
               <div className="response-usage-meta">
-                {duration(r.stats.durationMs)} · {formatTokens(r.stats.promptTokens + r.stats.completionTokens)} tokens · {money(r.stats.cost)}
+                {duration(r.stats.durationMs)} · {formatTokens(r.stats.promptTokens + r.stats.completionTokens)} {tr('tokens ·')}{' '}{money(r.stats.cost)}
               </div>
             </li>
           );
         })}
       </ol>
       <a className="link-btn small" href={href({ page: 'insights' })}>
-        All usage in Insights →
+        {tr('All usage in Insights →')}
       </a>
     </div>
   );
@@ -390,11 +391,10 @@ export function BrowserPanel({ view, history }: { view?: BrowserView; history: B
       <div className="panel-body tasks-empty">
         <Globe size={28} className="muted" />
         <p>
-          <strong>No browsing yet.</strong> Ask Mitzi to do something on a website, like “find the opening hours on the library’s site”, and you’ll see
-          the pages here as it works.
+          <strong>{tr('No browsing yet.')}</strong> {tr('Ask Mitzi to do something on a website, like “find the opening hours on the library’s site”, and you’ll see the pages here as it works.')}
         </p>
         <p className="muted small">
-          It asks before each step unless you allow it for the chat. {settings?.browserHeaded ? 'The browser window opens on your screen.' : 'It works out of sight; you can show the window in Settings → General.'}
+          {tr('It asks before each step unless you allow it for the chat.')}{' '}{settings?.browserHeaded ? tr('The browser window opens on your screen.') : tr('It works out of sight; you can show the window in Settings → General.')}
         </p>
       </div>
     );
@@ -407,10 +407,10 @@ export function BrowserPanel({ view, history }: { view?: BrowserView; history: B
           {view.url}
         </a>
       </div>
-      {view.screenshot ? <img className="browser-shot" src={view.screenshot} alt={`Screenshot of ${view.title || view.url}`} /> : <div className="muted small">No screenshot</div>}
+      {view.screenshot ? <img className="browser-shot" src={view.screenshot} alt={tr('Screenshot of {0}', view.title || view.url)} /> : <div className="muted small">{tr('No screenshot')}</div>}
       {history.length > 1 && (
         <>
-          <h3 className="panel-subhead">Pages visited</h3>
+          <h3 className="panel-subhead">{tr('Pages visited')}</h3>
           <ol className="browser-history">
             {[...new Map(history.map((h) => [h.url, h])).values()].reverse().map((h) => (
               <li key={h.url}>
@@ -433,24 +433,24 @@ export function GoalBar({ goal, onCommand, onOpen }: { goal: Goal; onCommand(tex
   return (
     <div className={`goal-bar ${goal.status}`}>
       <Target size={15} />
-      <button className="goal-bar-text" onClick={onOpen} title="Show the goal in the side panel">
+      <button className="goal-bar-text" onClick={onOpen} title={tr('Show the goal in the side panel')}>
         {goal.text}
       </button>
       <span className="goal-bar-meta">
         {GOAL_STATUS[goal.status]}
         {goal.subgoals.length > 0 && ` · ${done}/${goal.subgoals.length}`}
-        {goal.status === 'active' && ` · turn ${goal.turns}/${goal.maxTurns}`}
+        {goal.status === 'active' && tr(' · turn {0}/{1}', goal.turns, goal.maxTurns)}
       </span>
       {goal.status === 'active' ? (
-        <button className="icon-btn sm" onClick={() => onCommand('/goal pause')} title="Pause the goal" aria-label="Pause the goal">
+        <button className="icon-btn sm" onClick={() => onCommand('/goal pause')} title={tr('Pause the goal')} aria-label={tr('Pause the goal')}>
           <Pause size={14} />
         </button>
       ) : goal.status !== 'complete' ? (
-        <button className="icon-btn sm" onClick={() => onCommand('/goal resume')} title="Resume the goal" aria-label="Resume the goal">
+        <button className="icon-btn sm" onClick={() => onCommand('/goal resume')} title={tr('Resume the goal')} aria-label={tr('Resume the goal')}>
           <Play size={14} />
         </button>
       ) : null}
-      <button className="icon-btn sm" onClick={() => onCommand('/goal clear')} title="Clear the goal" aria-label="Clear the goal">
+      <button className="icon-btn sm" onClick={() => onCommand('/goal clear')} title={tr('Clear the goal')} aria-label={tr('Clear the goal')}>
         <X size={14} />
       </button>
     </div>
@@ -467,18 +467,18 @@ export interface BtwState {
 
 export function BtwCard({ state, onClose }: { state: BtwState; onClose(): void }) {
   return (
-    <div className="btw-card" role="dialog" aria-label="Side question">
+    <div className="btw-card" role="dialog" aria-label={tr('Side question')}>
       <div className="btw-head">
         <MessageCircleQuestion size={15} />
         <span className="btw-q">{state.question}</span>
-        <button className="icon-btn sm" onClick={onClose} aria-label="Dismiss">
+        <button className="icon-btn sm" onClick={onClose} aria-label={tr('Dismiss')}>
           <X size={14} />
         </button>
       </div>
       <div className="btw-answer">
         {state.answer ? <Markdown text={state.answer} streaming={state.status === 'asking'} /> : state.status === 'asking' ? <Loader2 size={15} className="spin" /> : null}
       </div>
-      <div className="btw-foot muted">Side question · not added to the chat</div>
+      <div className="btw-foot muted">{tr('Side question · not added to the chat')}</div>
     </div>
   );
 }
@@ -495,8 +495,8 @@ export function PlanCard({ args, result, running }: { args: any; result?: { outp
     <div className="plan-card">
       <div className="plan-card-head">
         <ListChecks size={15} />
-        <span>Plan</span>
-        {result && !result.isError && latest && <span className={`status-pill ${status}`}>{status === 'proposed' ? 'Waiting for you' : status === 'approved' ? 'Approved' : 'Replaced'}</span>}
+        <span>{tr('Plan')}</span>
+        {result && !result.isError && latest && <span className={`status-pill ${status}`}>{status === 'proposed' ? tr('Waiting for you') : status === 'approved' ? tr('Approved') : tr('Replaced')}</span>}
         {running && !result && <Loader2 size={14} className="spin" />}
       </div>
       <div className="plan-card-body">
@@ -505,10 +505,10 @@ export function PlanCard({ args, result, running }: { args: any; result?: { outp
       {latest && status === 'proposed' && actions && (
         <div className="plan-card-actions">
           <button className="btn btn-primary btn-sm" onClick={actions.approvePlan} disabled={actions.running}>
-            <Check size={13} /> Approve and start
+            <Check size={13} /> {tr('Approve and start')}
           </button>
           <button className="btn btn-sm" onClick={actions.revisePlan}>
-            Change it
+            {tr('Change it')}
           </button>
         </div>
       )}

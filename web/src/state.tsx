@@ -1,6 +1,7 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { speaker } from './speech';
 import { api, ApiError, AUTO_MODEL, BudgetStatus, Bot, ChatListItem, ModelInfo, ProjectView, PublicSettings, TaskView, UpdateStatus } from './api';
+import { tr } from './i18n';
 
 export type Theme = 'system' | 'light' | 'dark';
 
@@ -46,7 +47,7 @@ const Ctx = createContext<AppState | null>(null);
 
 export function useApp(): AppState {
   const ctx = useContext(Ctx);
-  if (!ctx) throw new Error('useApp outside provider');
+  if (!ctx) throw new Error(tr('useApp outside provider'));
   return ctx;
 }
 
@@ -89,7 +90,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     speaker.onServerError = (message) => {
       if (message === last) return;
       last = message;
-      toast(`The speech model failed, so your browser’s voice was used. ${message}`);
+      toast(tr('The speech model failed, so your browser’s voice was used. {0}', message));
     };
     return () => void (speaker.onServerError = undefined);
   }, [toast]);
@@ -186,8 +187,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             n.onclick = () => (window.focus(), (location.hash = `#/chat/${c.id}`));
           }
         };
-        if (was.running && !c.running) say(`✓ “${c.title}” is done`);
-        else if (!was.waiting && c.waiting) say(`🐾 “${c.title}” needs your approval`);
+        if (was.running && !c.running) say(tr('✓ “{0}” is done', c.title));
+        else if (!was.waiting && c.waiting) say(tr('🐾 “{0}” needs your approval', c.title));
       }
     }
     previous.current = new Map(chats.map((c) => [c.id, { running: c.running, waiting: c.waiting }]));
@@ -238,7 +239,7 @@ export function autoModels(settings: PublicSettings | undefined): { fast: string
 }
 
 export function modelLabel(id: string, models: ModelInfo[]): string {
-  if (id === AUTO_MODEL) return 'Auto';
+  if (id === AUTO_MODEL) return tr('Auto');
   const found = models.find((m) => m.id === id);
   if (found) return found.name.replace(/^[^:]+:\s*/, '');
   const base = id.split(/[/:]/).pop() ?? id;
@@ -255,11 +256,11 @@ export function formatTokens(n: number): string {
 export function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.round(diff / 60_000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
+  if (m < 1) return tr('just now');
+  if (m < 60) return tr('{0}m ago', m);
   const h = Math.round(m / 60);
-  if (h < 24) return `${h}h ago`;
+  if (h < 24) return tr('{0}h ago', h);
   const d = Math.round(h / 24);
-  if (d < 7) return `${d}d ago`;
+  if (d < 7) return tr('{0}d ago', d);
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }

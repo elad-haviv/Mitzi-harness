@@ -4,12 +4,13 @@ import { useEffect, useState } from 'react';
 import { api, ShareView } from '../api';
 import { relativeTime, useApp } from '../state';
 import { Modal } from './ui';
+import { locale, plural, tr } from '../i18n';
 
 const EXPIRY = [
-  { days: 1, label: '1 day' },
-  { days: 7, label: '7 days' },
-  { days: 30, label: '30 days' },
-  { days: 0, label: 'Never' },
+  { days: 1, label: tr('1 day') },
+  { days: 7, label: tr('7 days') },
+  { days: 30, label: tr('30 days') },
+  { days: 0, label: tr('Never') },
 ];
 
 /** Saves a page as an .html file. */
@@ -42,7 +43,7 @@ export function ShareDialog({ kind, targetId, title, page, onClose }: { kind: 'c
       const s = await api.createShare({ kind, targetId, title, html: await page(), expiresInDays: days });
       setShares((list) => [s, ...(list ?? [])]);
       copy(s);
-      toast('Link created and copied', 'info');
+      toast(tr('Link created and copied'), 'info');
     } catch (err) {
       toast((err as Error).message);
     } finally {
@@ -60,14 +61,13 @@ export function ShareDialog({ kind, targetId, title, page, onClose }: { kind: 'c
     }
   };
   return (
-    <Modal title={`Share “${title}”`} onClose={onClose}>
+    <Modal title={tr('Share “{0}”', title)} onClose={onClose}>
       <p className="muted small" style={{ marginTop: 0 }}>
-        A read-only page of the {kind} as it is now (later changes aren’t included). Anyone with the link can open it, as long as they can reach this computer: on your network
-        (<code>mitzi web --lan</code>) or through a tunnel.
+        {tr('A read-only page of the')}{' '}{kind} {tr('as it is now (later changes aren’t included). Anyone with the link can open it, as long as they can reach this computer: on your network (')}<code>mitzi web --lan</code>{tr(') or through a tunnel.')}
       </p>
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
         <label className="row small" style={{ gap: 6 }}>
-          Expires after
+          {tr('Expires after')}
           <select className="select" style={{ width: 'auto' }} value={days} onChange={(e) => setDays(Number(e.target.value))}>
             {EXPIRY.map((x) => (
               <option key={x.days} value={x.days}>
@@ -77,16 +77,16 @@ export function ShareDialog({ kind, targetId, title, page, onClose }: { kind: 'c
           </select>
         </label>
         <button className="btn btn-primary btn-sm" onClick={() => void create()} disabled={!!busy}>
-          {busy === 'link' ? <Loader2 size={14} className="spin" /> : <Link2 size={14} />} Create link
+          {busy === 'link' ? <Loader2 size={14} className="spin" /> : <Link2 size={14} />} {tr('Create link')}
         </button>
-        <button className="btn btn-sm" onClick={() => void download()} disabled={!!busy} title="One HTML file you can keep, email or open anywhere">
-          {busy === 'download' ? <Loader2 size={14} className="spin" /> : <Download size={14} />} Download as web page
+        <button className="btn btn-sm" onClick={() => void download()} disabled={!!busy} title={tr('One HTML file you can keep, email or open anywhere')}>
+          {busy === 'download' ? <Loader2 size={14} className="spin" /> : <Download size={14} />} {tr('Download as web page')}
         </button>
       </div>
       {shares && shares.length > 0 && (
         <>
           <div className="panel-subhead" style={{ marginTop: 18 }}>
-            Links
+            {tr('Links')}
           </div>
           {shares.map((s) => {
             const expired = s.expiresAt && Date.parse(s.expiresAt) < Date.now();
@@ -96,15 +96,15 @@ export function ShareDialog({ kind, targetId, title, page, onClose }: { kind: 'c
                   {full(s)}
                 </a>
                 <span className="muted small">
-                  {relativeTime(s.createdAt)} · {expired ? 'expired' : s.expiresAt ? `until ${new Date(s.expiresAt).toLocaleDateString()}` : 'no expiry'} · {s.views} view{s.views === 1 ? '' : 's'}
+                  {relativeTime(s.createdAt)} · {expired ? tr('expired') : s.expiresAt ? tr('until {0}', new Date(s.expiresAt).toLocaleDateString(locale)) : tr('no expiry')} · {plural(s.views, '1 view', '{0} views')}
                 </span>
-                <button className="icon-btn sm" title="Copy link" aria-label="Copy link" onClick={() => copy(s)}>
+                <button className="icon-btn sm" title={tr('Copy link')} aria-label={tr('Copy link')} onClick={() => copy(s)}>
                   {copied === s.id ? <Check size={14} /> : <Copy size={14} />}
                 </button>
                 <button
                   className="icon-btn sm"
-                  title="Turn off this link"
-                  aria-label="Turn off this link"
+                  title={tr('Turn off this link')}
+                  aria-label={tr('Turn off this link')}
                   onClick={() => void api.deleteShare(s.id).then(() => setShares((list) => list?.filter((x) => x.id !== s.id)), (err) => toast(err.message))}
                 >
                   <Trash2 size={14} />

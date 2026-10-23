@@ -4,16 +4,17 @@ import { Mic, MicOff, PhoneOff } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { VoiceCat } from './VoiceCat';
+import { tr } from '../i18n';
 
 type Phase = 'connecting' | 'listening' | 'hearing' | 'speaking' | 'muted' | 'error';
 
 const LABEL: Record<Phase, string> = {
-  connecting: 'Connecting…',
-  listening: 'Listening',
-  hearing: 'Hearing you',
-  speaking: 'Speaking',
-  muted: 'Muted',
-  error: 'Something went wrong',
+  connecting: tr('Connecting…'),
+  listening: tr('Listening'),
+  hearing: tr('Hearing you'),
+  speaking: tr('Speaking'),
+  muted: tr('Muted'),
+  error: tr('Something went wrong'),
 };
 
 interface Line {
@@ -125,19 +126,19 @@ export function RealtimeMode({ chatId, title, emoji, onClose, onSaved }: { chatI
               setPhase(muted.current ? 'muted' : 'listening');
               break;
             case 'error':
-              setError(e.error?.message ?? 'The voice service reported an error');
+              setError(e.error?.message ?? tr('The voice service reported an error'));
               break;
           }
         };
         const offer = await peer.createOffer();
         await peer.setLocalDescription(offer);
         const res = await fetch(session.callUrl, { method: 'POST', body: offer.sdp, headers: { authorization: `Bearer ${session.key}`, 'content-type': 'application/sdp' } });
-        if (!res.ok) throw new Error(`The voice service refused the call (${res.status}): ${(await res.text()).slice(0, 200)}`);
+        if (!res.ok) throw new Error(tr('The voice service refused the call ({0}): {1}', res.status, (await res.text()).slice(0, 200)));
         await peer.setRemoteDescription({ type: 'answer', sdp: await res.text() });
         if (alive) setPhase('listening');
       } catch (err) {
         if (!alive) return;
-        setError((err as Error).name === 'NotAllowedError' ? 'Mitzi needs your microphone. Allow it in the browser and try again.' : (err as Error).message);
+        setError((err as Error).name === 'NotAllowedError' ? tr('Mitzi needs your microphone. Allow it in the browser and try again.') : (err as Error).message);
         setPhase('error');
       }
     })();
@@ -164,12 +165,12 @@ export function RealtimeMode({ chatId, title, emoji, onClose, onSaved }: { chatI
 
   const recent = lines.filter((l) => l.text.trim()).slice(-4);
   return (
-    <div className="live-overlay" role="dialog" aria-label="Voice conversation">
+    <div className="live-overlay" role="dialog" aria-label={tr('Voice conversation')}>
       <div className="live-top">
         <span className="live-title">
           {emoji && <span>{emoji}</span>} {title}
         </span>
-        <span className="muted small">Realtime voice · Esc to end</span>
+        <span className="muted small">{tr('Realtime voice · Esc to end')}</span>
       </div>
       <div className="live-center">
         <VoiceCat state={phase === 'muted' ? 'paused' : phase === 'connecting' ? 'starting' : phase} level={level} voice={voice} />
@@ -185,15 +186,15 @@ export function RealtimeMode({ chatId, title, emoji, onClose, onSaved }: { chatI
                 {l.role === 'user' ? `“${l.text}”` : l.text}
               </p>
             ))}
-            {!recent.length && phase === 'listening' && <p className="muted small">Just start talking. You can interrupt any time.</p>}
+            {!recent.length && phase === 'listening' && <p className="muted small">{tr('Just start talking. You can interrupt any time.')}</p>}
           </div>
         )}
       </div>
       <div className="live-controls">
-        <button className="live-btn" onClick={toggleMute} disabled={phase === 'connecting' || phase === 'error'} aria-label={muted.current ? 'Unmute' : 'Mute'} title={muted.current ? 'Unmute' : 'Mute'}>
+        <button className="live-btn" onClick={toggleMute} disabled={phase === 'connecting' || phase === 'error'} aria-label={muted.current ? tr('Unmute') : tr('Mute')} title={muted.current ? tr('Unmute') : tr('Mute')}>
           {muted.current ? <Mic size={22} /> : <MicOff size={22} />}
         </button>
-        <button className="live-btn end" onClick={onClose} aria-label="End voice conversation" title="End">
+        <button className="live-btn end" onClick={onClose} aria-label={tr('End voice conversation')} title={tr('End')}>
           <PhoneOff size={22} />
         </button>
       </div>

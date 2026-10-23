@@ -4,6 +4,7 @@ import { Loader2, Plus, X } from 'lucide-react';
 import { ReactNode, useEffect, useState } from 'react';
 import { href, navigate } from '../router';
 import { useApp } from '../state';
+import { tr } from '../i18n';
 
 const KEY = 'mitzi.tabs';
 const MAX_TABS = 10;
@@ -63,7 +64,7 @@ export function ChatTabs({ activeId: active, fallback, onRename }: { activeId?: 
 
   if (open.length < 2) return <>{fallback}</>;
   return (
-    <div className="chat-tabs" role="tablist" aria-label="Open chats">
+    <div className="chat-tabs" role="tablist" aria-label={tr('Open chats')}>
       {open.map((id) => {
         const c = chats.find((x) => x.id === id)!;
         const state = c.waiting ? 'waiting' : c.running ? 'running' : '';
@@ -78,11 +79,11 @@ export function ChatTabs({ activeId: active, fallback, onRename }: { activeId?: 
             onAuxClick={(e) => e.button === 1 && (e.preventDefault(), close(id))}
             onDoubleClick={(e) => id === active && onRename && (e.preventDefault(), onRename())}
           >
-            {c.waiting ? <span className="tab-paw" aria-label="Needs you">🐾</span> : c.running ? <Loader2 size={12} className="spin" aria-label="Working" /> : null}
+            {c.waiting ? <span className="tab-paw" aria-label={tr('Needs you')}>🐾</span> : c.running ? <Loader2 size={12} className="spin" aria-label={tr('Working')} /> : null}
             <span className="chat-tab-title">{c.title}</span>
             <button
               className="chat-tab-close"
-              aria-label={`Close ${c.title}`}
+              aria-label={tr('Close {0}', c.title)}
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -94,7 +95,7 @@ export function ChatTabs({ activeId: active, fallback, onRename }: { activeId?: 
           </a>
         );
       })}
-      <a className="chat-tab-new" href={href({ page: 'new' })} title="New chat" aria-label="New chat">
+      <a className="chat-tab-new" href={href({ page: 'new' })} title={tr('New chat')} aria-label={tr('New chat')}>
         <Plus size={14} />
       </a>
     </div>

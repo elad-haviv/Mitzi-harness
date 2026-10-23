@@ -3,6 +3,7 @@
 import { GripVertical, X, Zap } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { QueuedMessage } from '../api';
+import { tr } from '../i18n';
 
 interface Drag {
   id: string;
@@ -74,7 +75,7 @@ export function QueueList({ queue, onReorder, onSendNow, onRemove }: { queue: Qu
   const rowHeight = (list.current?.querySelector<HTMLElement>('.queue-item')?.offsetHeight ?? 34) + 4;
 
   return (
-    <div className={`queue-list${drag ? ' dragging' : ''}`} aria-label="Queued messages" ref={list}>
+    <div className={`queue-list${drag ? ' dragging' : ''}`} aria-label={tr('Queued messages')} ref={list}>
       {queue.map((q, i) => (
         <div
           key={q.id}
@@ -85,8 +86,8 @@ export function QueueList({ queue, onReorder, onSendNow, onRemove }: { queue: Qu
             <button
               className="queue-grip"
               data-qid={q.id}
-              aria-label={`Move “${q.content.slice(0, 40)}” (position ${i + 1} of ${queue.length}); drag, or use the arrow keys`}
-              title="Drag to reorder"
+              aria-label={tr('Move “{0}” (position {1} of {2}); drag, or use the arrow keys', q.content.slice(0, 40), i + 1, queue.length)}
+              title={tr('Drag to reorder')}
               onPointerDown={(e) => start(e, q.id)}
               onPointerMove={moveTo}
               onPointerUp={end}
@@ -107,12 +108,12 @@ export function QueueList({ queue, onReorder, onSendNow, onRemove }: { queue: Qu
             </span>
           )}
           <span className="queue-text" dir="auto" title={q.content}>
-            <span className="muted small">{i === 0 ? 'Next' : `${i + 1}.`}</span> {q.content || q.attachments?.map((a) => a.name).join(', ')}
+            <span className="muted small">{i === 0 ? tr('Next') : `${i + 1}.`}</span> {q.content || q.attachments?.map((a) => a.name).join(', ')}
           </span>
           <button className="link-btn small" onClick={() => onSendNow(q.id)}>
-            <Zap size={12} /> Send now
+            <Zap size={12} /> {tr('Send now')}
           </button>
-          <button className="icon-btn sm" aria-label="Remove from the queue" title="Remove" onClick={() => onRemove(q.id)}>
+          <button className="icon-btn sm" aria-label={tr('Remove from the queue')} title={tr('Remove')} onClick={() => onRemove(q.id)}>
             <X size={13} />
           </button>
         </div>

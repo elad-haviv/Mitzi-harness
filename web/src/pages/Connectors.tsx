@@ -3,21 +3,22 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, ConnectorPreset, McpServerView, McpTransport, McpTrust } from '../api';
 import { Empty, Menu, Modal, Toggle, useConfirm } from '../components/ui';
 import { useApp } from '../state';
+import { tr } from '../i18n';
 
 type Preset = ConnectorPreset & { installed: number };
 
 const STATUS_LABEL: Record<McpServerView['status'], string> = {
-  connected: 'Connected',
-  connecting: 'Connecting…',
-  error: 'Error',
-  'needs-auth': 'Sign-in needed',
-  disabled: 'Off',
+  connected: tr('Connected'),
+  connecting: tr('Connecting…'),
+  error: tr('Error'),
+  'needs-auth': tr('Sign-in needed'),
+  disabled: tr('Off'),
 };
 
 const TRUST_LABEL: Record<McpTrust, string> = {
-  ask: 'Ask before every tool call',
-  readonly: 'Allow read-only tools, ask for the rest',
-  allow: 'Always allow',
+  ask: tr('Ask before every tool call'),
+  readonly: tr('Allow read-only tools, ask for the rest'),
+  allow: tr('Always allow'),
 };
 
 /** Opens the provider's sign-in page and waits for the connector to come online. */
@@ -38,7 +39,7 @@ async function signIn(id: string, toast: (m: string, t?: 'error' | 'info') => vo
     const server = (await api.mcpServers().catch(() => [])).find((s) => s.id === id);
     if (server?.status === 'connected' || Date.now() - started > 180_000) {
       clearInterval(timer);
-      if (server?.status === 'connected') toast(`Connected to ${server.name}`, 'info');
+      if (server?.status === 'connected') toast(tr('Connected to {0}', server.name), 'info');
       onDone();
     }
   }, 1500);
@@ -89,20 +90,20 @@ export function ConnectorsPage() {
       <div className="page-inner">
         <div className="page-header">
           <div>
-            <h1 className="page-title">Connectors</h1>
-            <p className="page-subtitle">Give Mitzi tools from your apps and services through MCP servers. Bots can use them in any chat.</p>
+            <h1 className="page-title">{tr('Connectors')}</h1>
+            <p className="page-subtitle">{tr('Give Mitzi tools from your apps and services through MCP servers. Bots can use them in any chat.')}</p>
           </div>
           <button className="btn" onClick={() => setEditing('new')}>
-            <Plus size={16} /> Add custom MCP server
+            <Plus size={16} /> {tr('Add custom MCP server')}
           </button>
         </div>
 
         <h2 className="section-title" style={{ marginTop: 0 }}>
-          Your connectors
+          {tr('Your connectors')}
         </h2>
         {servers && servers.length === 0 ? (
-          <Empty icon={<Plug size={22} />} title="No connectors yet">
-            Add one from the directory below, or connect any MCP server by its command or URL.
+          <Empty icon={<Plug size={22} />} title={tr('No connectors yet')}>
+            {tr('Add one from the directory below, or connect any MCP server by its command or URL.')}
           </Empty>
         ) : (
           <div className="list">
@@ -113,7 +114,7 @@ export function ConnectorsPage() {
               return (
                 <div key={s.id} className="ext-row">
                   <div className="ext-head">
-                    <button className="icon-btn sm" onClick={() => setOpen(expanded ? undefined : s.id)} aria-label={expanded ? 'Collapse' : 'Expand'} aria-expanded={expanded}>
+                    <button className="icon-btn sm" onClick={() => setOpen(expanded ? undefined : s.id)} aria-label={expanded ? tr('Collapse') : tr('Expand')} aria-expanded={expanded}>
                       {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
                     </button>
                     <span className="ext-icon">{preset?.emoji ?? (s.source === 'plugin' ? '🧩' : '🔌')}</span>
@@ -124,23 +125,23 @@ export function ConnectorsPage() {
                           <span className={`status-dot ${s.status}`} />
                           <span className="muted">{STATUS_LABEL[s.status]}</span>
                         </span>
-                        {s.source === 'plugin' && <span className="badge">Plugin: {s.pluginId}</span>}
+                        {s.source === 'plugin' && <span className="badge">{tr('Plugin:')}{' '}{s.pluginId}</span>}
                       </div>
                       <div className="s" title={s.error}>
                         {s.status === 'connected'
-                          ? `${enabledTools} of ${s.tools.length} tools on · ${TRUST_LABEL[s.trust].toLowerCase()}`
+                          ? tr('{0} of {1} tools on · {2}', enabledTools, s.tools.length, TRUST_LABEL[s.trust].toLowerCase())
                           : s.error ?? (s.transport === 'stdio' ? `${s.command} ${(s.args ?? []).join(' ')}` : s.url)}
                       </div>
                     </div>
                     {s.status === 'needs-auth' && (
                       <button className="btn btn-primary btn-sm" onClick={() => void signIn(s.id, toast, load)}>
-                        <LogIn size={14} /> Connect
+                        <LogIn size={14} /> {tr('Connect')}
                       </button>
                     )}
-                    <Toggle label={`Enable ${s.name}`} on={s.enabled} onChange={(v) => void update(s.id, { enabled: v })} />
+                    <Toggle label={tr('Enable {0}', s.name)} on={s.enabled} onChange={(v) => void update(s.id, { enabled: v })} />
                     <Menu
                       trigger={(_o, toggle) => (
-                        <button className="icon-btn" onClick={toggle} aria-label={`${s.name} options`}>
+                        <button className="icon-btn" onClick={toggle} aria-label={tr('{0} options', s.name)}>
                           <MoreHorizontal size={17} />
                         </button>
                       )}
@@ -155,11 +156,11 @@ export function ConnectorsPage() {
                               void load();
                             }}
                           >
-                            <RefreshCw size={15} /> Reconnect
+                            <RefreshCw size={15} /> {tr('Reconnect')}
                           </button>
                           {s.transport !== 'stdio' && (
                             <button onClick={() => (close(), void signIn(s.id, toast, load))}>
-                              <LogIn size={15} /> {s.oauthConnected ? 'Sign in again' : 'Sign in with OAuth'}
+                              <LogIn size={15} /> {s.oauthConnected ? tr('Sign in again') : tr('Sign in with OAuth')}
                             </button>
                           )}
                           {s.oauthConnected && (
@@ -170,17 +171,17 @@ export function ConnectorsPage() {
                                 void load();
                               }}
                             >
-                              <X size={15} /> Sign out
+                              <X size={15} /> {tr('Sign out')}
                             </button>
                           )}
                           {s.source !== 'plugin' && (
                             <button onClick={() => (close(), setEditing(s))}>
-                              <Pencil size={15} /> Edit
+                              <Pencil size={15} /> {tr('Edit')}
                             </button>
                           )}
                           {preset?.docsUrl && (
                             <button onClick={() => (close(), window.open(preset.docsUrl, '_blank', 'noopener'))}>
-                              <ExternalLink size={15} /> Documentation
+                              <ExternalLink size={15} /> {tr('Documentation')}
                             </button>
                           )}
                           {s.source !== 'plugin' && (
@@ -190,12 +191,12 @@ export function ConnectorsPage() {
                                 className="danger"
                                 onClick={async () => {
                                   close();
-                                  if (!(await confirm(`Remove “${s.name}”? Bots will no longer be able to use its tools.`, { title: 'Remove connector?', action: 'Remove' }))) return;
+                                  if (!(await confirm(tr('Remove “{0}”? Bots will no longer be able to use its tools.', s.name), { title: tr('Remove connector?'), action: tr('Remove') }))) return;
                                   await api.deleteMcpServer(s.id).catch((err) => toast(err.message));
                                   void load();
                                 }}
                               >
-                                <Trash2 size={15} /> Remove
+                                <Trash2 size={15} /> {tr('Remove')}
                               </button>
                             </>
                           )}
@@ -218,7 +219,7 @@ export function ConnectorsPage() {
                       </label>
                       {s.tools.length > 0 ? (
                         <>
-                          <div className="muted small">Tools: click one to turn it off or on.</div>
+                          <div className="muted small">{tr('Tools: click one to turn it off or on.')}</div>
                           <div className="tool-chip-list">
                             {s.tools.map((t) => (
                               <button
@@ -238,7 +239,7 @@ export function ConnectorsPage() {
                           </div>
                         </>
                       ) : (
-                        <div className="muted small">{s.status === 'connected' ? 'This server has no tools.' : 'Tools appear once it connects.'}</div>
+                        <div className="muted small">{s.status === 'connected' ? tr('This server has no tools.') : tr('Tools appear once it connects.')}</div>
                       )}
                     </div>
                   )}
@@ -248,7 +249,7 @@ export function ConnectorsPage() {
           </div>
         )}
 
-        <h2 className="section-title">Directory</h2>
+        <h2 className="section-title">{tr('Directory')}</h2>
         {categories.map((cat) => (
           <div key={cat} style={{ marginBottom: 18 }}>
             <div className="muted small" style={{ marginBottom: 8, fontWeight: 600 }}>
@@ -262,13 +263,13 @@ export function ConnectorsPage() {
                     <span className="ext-icon">{p.emoji}</span>
                     <span style={{ minWidth: 0 }}>
                       <span className="t">
-                        {p.name} {p.installed > 0 && <span className="badge ok">Added</span>}
+                        {p.name} {p.installed > 0 && <span className="badge ok">{tr('Added')}</span>}
                       </span>
                       <span className="s" style={{ display: 'block' }}>
                         {p.description}
                       </span>
                       <span className="s" style={{ display: 'block', marginTop: 4 }}>
-                        {p.oauth ? 'Sign in with your account' : p.requires ? `Runs locally · needs ${p.requires}` : p.fields.some((f) => f.required) ? 'Needs an API key' : 'No account needed'}
+                        {p.oauth ? tr('Sign in with your account') : p.requires ? tr('Runs locally · needs {0}', p.requires) : p.fields.some((f) => f.required) ? tr('Needs an API key') : tr('No account needed')}
                       </span>
                     </span>
                   </button>
@@ -310,25 +311,25 @@ function PresetModal({ preset, onClose, onAdded }: { preset: Preset; onClose(): 
   };
   return (
     <Modal
-      title={`Add ${preset.name}`}
+      title={tr('Add {0}', preset.name)}
       onClose={onClose}
       footer={
         <>
           {preset.docsUrl && (
             <a className="btn btn-ghost" href={preset.docsUrl} target="_blank" rel="noreferrer" style={{ marginRight: 'auto' }}>
-              <ExternalLink size={14} /> Docs
+              <ExternalLink size={14} /> {tr('Docs')}
             </a>
           )}
           <button className="btn btn-ghost" onClick={onClose}>
-            Cancel
+            {tr('Cancel')}
           </button>
           <button className="btn btn-primary" disabled={busy || preset.fields.some((f) => f.required && !values[f.key]?.trim())} onClick={add}>
             {preset.oauth ? (
               <>
-                <LogIn size={15} /> Add and sign in
+                <LogIn size={15} /> {tr('Add and sign in')}
               </>
             ) : (
-              'Add connector'
+              tr('Add connector')
             )}
           </button>
         </>
@@ -342,15 +343,15 @@ function PresetModal({ preset, onClose, onAdded }: { preset: Preset; onClose(): 
       </div>
       {preset.requires && (
         <div className="warning-note" style={{ marginBottom: 14 }}>
-          This connector runs on your computer and needs {preset.requires} installed.
+          {tr('This connector runs on your computer and needs')}{' '}{preset.requires} installed.
         </div>
       )}
-      {preset.oauth && <p className="small muted">You’ll be sent to {preset.name} to sign in and approve access. Mitzi stores the sign-in on this computer only.</p>}
+      {preset.oauth && <p className="small muted">{tr('You’ll be sent to')}{' '}{preset.name} {tr('to sign in and approve access. Mitzi stores the sign-in on this computer only.')}</p>}
       {preset.fields.map((f) => (
         <label key={f.key} className="field">
           <span className="field-label">
             {f.label}
-            {f.required ? '' : ' (optional)'}
+            {f.required ? '' : tr(' (optional)')}
           </span>
           {f.kind === 'args' && !f.key.startsWith('-') ? (
             <textarea className="textarea mono" rows={3} style={{ minHeight: 0 }} placeholder={f.placeholder} value={values[f.key] ?? ''} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })} />
@@ -378,13 +379,13 @@ function KeyValueEditor({ value, onChange, keyPlaceholder, valuePlaceholder }: {
         <div key={i} className="kv-row">
           <input className="input mono" placeholder={keyPlaceholder} value={k} onChange={(e) => onChange(value.map((p, j) => (j === i ? [e.target.value, p[1]] : p)))} />
           <input className="input mono" placeholder={valuePlaceholder} value={v} onChange={(e) => onChange(value.map((p, j) => (j === i ? [p[0], e.target.value] : p)))} />
-          <button type="button" className="icon-btn" aria-label="Remove" onClick={() => onChange(value.filter((_, j) => j !== i))}>
+          <button type="button" className="icon-btn" aria-label={tr('Remove')} onClick={() => onChange(value.filter((_, j) => j !== i))}>
             <X size={15} />
           </button>
         </div>
       ))}
       <button type="button" className="btn btn-ghost btn-sm" onClick={() => onChange([...value, ['', '']])}>
-        <Plus size={14} /> Add
+        <Plus size={14} /> {tr('Add')}
       </button>
     </div>
   );
@@ -428,34 +429,34 @@ function ServerEditor({ server, onClose, onSaved }: { server?: McpServerView; on
 
   return (
     <Modal
-      title={server ? `Edit ${server.name}` : 'Add an MCP server'}
+      title={server ? tr('Edit {0}', server.name) : tr('Add an MCP server')}
       wide
       onClose={onClose}
       footer={
         <>
           <button className="btn btn-ghost" onClick={onClose}>
-            Cancel
+            {tr('Cancel')}
           </button>
           <button className="btn btn-primary" disabled={busy || !name.trim()} onClick={save}>
-            {server ? 'Save' : 'Add server'}
+            {server ? tr('Save') : tr('Add server')}
           </button>
         </>
       }
     >
       <label className="field">
-        <span className="field-label">Name</span>
-        <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Company wiki" autoFocus />
-        <span className="field-hint">Used in tool names, e.g. mcp__company_wiki__search.</span>
+        <span className="field-label">{tr('Name')}</span>
+        <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={tr('e.g. Company wiki')} autoFocus />
+        <span className="field-hint">{tr('Used in tool names, e.g. mcp__company_wiki__search.')}</span>
       </label>
       {!server && (
         <div className="field">
-          <span className="field-label">Connection</span>
+          <span className="field-label">{tr('Connection')}</span>
           <div className="segmented" style={{ alignSelf: 'flex-start' }}>
             {(
               [
                 ['stdio', 'Local command'],
-                ['http', 'Remote (HTTP)'],
-                ['sse', 'Remote (SSE, legacy)'],
+                ['http', tr('Remote (HTTP)')],
+                ['sse', tr('Remote (SSE, legacy)')],
               ] as [McpTransport, string][]
             ).map(([t, label]) => (
               <button key={t} type="button" className={transport === t ? 'active' : ''} onClick={() => setTransport(t)}>
@@ -468,34 +469,34 @@ function ServerEditor({ server, onClose, onSaved }: { server?: McpServerView; on
       {transport === 'stdio' ? (
         <>
           <label className="field">
-            <span className="field-label">Command</span>
+            <span className="field-label">{tr('Command')}</span>
             <input className="input mono" value={command} onChange={(e) => setCommand(e.target.value)} placeholder="npx" />
           </label>
           <label className="field">
-            <span className="field-label">Arguments</span>
-            <input className="input mono" value={args} onChange={(e) => setArgs(e.target.value)} placeholder="-y @modelcontextprotocol/server-filesystem ~/Documents" />
+            <span className="field-label">{tr('Arguments')}</span>
+            <input className="input mono" value={args} onChange={(e) => setArgs(e.target.value)} placeholder={tr('-y @modelcontextprotocol/server-filesystem ~/Documents')} />
           </label>
           <div className="field">
-            <span className="field-label">Environment variables</span>
+            <span className="field-label">{tr('Environment variables')}</span>
             <KeyValueEditor value={env} onChange={setEnv} keyPlaceholder="API_KEY" valuePlaceholder="value" />
           </div>
-          <div className="warning-note">This runs a program on your computer with your permissions. Only add servers you trust.</div>
+          <div className="warning-note">{tr('This runs a program on your computer with your permissions. Only add servers you trust.')}</div>
         </>
       ) : (
         <>
           <label className="field">
-            <span className="field-label">Server URL</span>
+            <span className="field-label">{tr('Server URL')}</span>
             <input className="input mono" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/mcp" />
-            <span className="field-hint">If the server uses OAuth, you’ll be able to sign in after adding it.</span>
+            <span className="field-hint">{tr('If the server uses OAuth, you’ll be able to sign in after adding it.')}</span>
           </label>
           <div className="field">
-            <span className="field-label">Headers</span>
+            <span className="field-label">{tr('Headers')}</span>
             <KeyValueEditor value={headers} onChange={setHeaders} keyPlaceholder="Authorization" valuePlaceholder="Bearer …" />
           </div>
         </>
       )}
       <label className="field" style={{ marginTop: 14, marginBottom: 0 }}>
-        <span className="field-label">Tool permissions</span>
+        <span className="field-label">{tr('Tool permissions')}</span>
         <select className="select" value={trust} onChange={(e) => setTrust(e.target.value as McpTrust)}>
           {(Object.keys(TRUST_LABEL) as McpTrust[]).map((t) => (
             <option key={t} value={t}>

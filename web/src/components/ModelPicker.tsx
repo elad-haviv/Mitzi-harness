@@ -2,6 +2,7 @@ import { ChevronDown, Eye, Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AUTO_MODEL, type ModelInfo } from '../api';
 import { autoModels, formatTokens, modelLabel, useApp } from '../state';
+import { tr } from '../i18n';
 
 const FEATURED = [
   'anthropic/claude-sonnet-4.5',
@@ -19,7 +20,7 @@ const FEATURED = [
 function price(m: ModelInfo): string | undefined {
   if (m.promptPrice === undefined) return undefined;
   if (m.promptPrice === 0 && m.completionPrice === 0) return 'free';
-  return `$${fmt(m.promptPrice)} / $${fmt(m.completionPrice ?? 0)} per M`;
+  return tr('${0} / ${1} per M', fmt(m.promptPrice), fmt(m.completionPrice ?? 0));
 }
 
 function fmt(n: number): string {
@@ -97,7 +98,7 @@ export function ModelPicker({
     const order = [...groups.keys()].sort((a, b) => Number(a === 'OpenRouter') - Number(b === 'OpenRouter') || a.localeCompare(b));
     for (const p of order) {
       const list = groups.get(p)!;
-      out.push({ section: order.length > 1 ? `${p} · ${list.length}` : q ? 'Matches' : 'All models' }, ...list.slice(0, 300).map((model) => ({ model })));
+      out.push({ section: order.length > 1 ? `${p} · ${list.length}` : q ? tr('Matches') : 'All models' }, ...list.slice(0, 300).map((model) => ({ model })));
     }
     return out;
   }, [models, query, allowEmpty, options, auto]);
@@ -115,7 +116,7 @@ export function ModelPicker({
     listRef.current?.querySelector('.focused')?.scrollIntoView({ block: 'nearest' });
   }, [focus]);
 
-  const label = value ? modelLabel(value, models) : (allowEmpty ?? 'Choose a model');
+  const label = value ? modelLabel(value, models) : (allowEmpty ?? tr('Choose a model'));
   return (
     <div className="menu-wrap" ref={wrap}>
       {variant === 'pill' ? (
@@ -136,7 +137,7 @@ export function ModelPicker({
           <div className="picker-search">
             <input
               autoFocus
-              placeholder="Search models, or type an id (vendor/model or provider:model)"
+              placeholder={tr('Search models, or type an id (vendor/model or provider:model)')}
               value={query}
               onChange={(e) => {
                 setQuery(e.target.value);
@@ -157,7 +158,7 @@ export function ModelPicker({
             />
           </div>
           <div className="picker-list" ref={listRef}>
-            {modelsError && !models.length && <div className="picker-section" style={{ textTransform: 'none' }}>{modelsError} You can also type a model id.</div>}
+            {modelsError && !models.length && <div className="picker-section" style={{ textTransform: 'none' }}>{modelsError} {tr('You can also type a model id.')}</div>}
             {items.map((item, idx) => {
               if (item.section) return <div key={`s${idx}`} className="picker-section">{item.section}</div>;
               const index = selectable.indexOf(item);
@@ -173,11 +174,11 @@ export function ModelPicker({
                 return (
                   <button key="auto" className={`${cls}${value === AUTO_MODEL ? ' selected' : ''}`} onMouseEnter={() => setFocus(index)} onClick={() => choose(item)}>
                     <span className="picker-name">
-                      <Sparkles size={13} className="accent" /> Auto
+                      <Sparkles size={13} className="accent" /> {tr('Auto')}
                     </span>
                     <span className="picker-meta">
                       <span>
-                        Picks for each message: {modelLabel(pair.fast, models)} for quick ones, {modelLabel(pair.strong, models)} for in-depth work
+                        {tr('Picks for each message:')}{' '}{modelLabel(pair.fast, models)} {tr('for quick ones,')}{' '}{modelLabel(pair.strong, models)} {tr('for in-depth work')}
                       </span>
                     </span>
                   </button>
@@ -186,8 +187,8 @@ export function ModelPicker({
               if (item.custom)
                 return (
                   <button key="custom" className={cls} onMouseEnter={() => setFocus(index)} onClick={() => choose(item)}>
-                    <span className="picker-name">Use “{item.custom}”</span>
-                    <span className="picker-meta">{item.custom.includes(':') && !item.custom.includes('/') ? 'Model id for a connected provider' : 'Custom OpenRouter model id'}</span>
+                    <span className="picker-name">{tr('Use “')}{item.custom}”</span>
+                    <span className="picker-meta">{item.custom.includes(':') && !item.custom.includes('/') ? tr('Model id for a connected provider') : tr('Custom OpenRouter model id')}</span>
                   </button>
                 );
               const m = item.model!;
@@ -195,8 +196,8 @@ export function ModelPicker({
                 <button key={`${idx}-${m.id}`} className={`${cls}${m.id === value ? ' selected' : ''}`} onMouseEnter={() => setFocus(index)} onClick={() => choose(item)}>
                   <span className="picker-name">
                     {m.name.replace(/^[^:]+:\s*/, '')}
-                    {m.vision && <Eye size={12} className="muted" aria-label="Vision" />}
-                    {!m.tools && <span className="badge warn" style={{ padding: '0 6px', fontSize: 10.5 }}>no tools</span>}
+                    {m.vision && <Eye size={12} className="muted" aria-label={tr('Vision')} />}
+                    {!m.tools && <span className="badge warn" style={{ padding: '0 6px', fontSize: 10.5 }}>{tr('no tools')}</span>}
                   </span>
                   <span className="picker-meta">
                     <span>{m.id}</span>
@@ -206,7 +207,7 @@ export function ModelPicker({
                 </button>
               );
             })}
-            {!items.length && <div className="picker-section" style={{ textTransform: 'none' }}>No models match.</div>}
+            {!items.length && <div className="picker-section" style={{ textTransform: 'none' }}>{tr('No models match.')}</div>}
           </div>
         </div>
       )}

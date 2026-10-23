@@ -62,6 +62,7 @@ import { href, navigate, parseRoute } from '../router';
 import { LOGO, relativeTime, useApp } from '../state';
 import { applyDelegateEvent, TeamProgress } from '../components/Team';
 import { applyCompareEvent, CompareState, CompareView } from '../components/Compare';
+import { plural, tr } from '../i18n';
 
 type LiveBlock =
   | { kind: 'text'; text: string }
@@ -89,7 +90,7 @@ type Panel = { tab: SideTab; artifactId?: string; version?: number } | null;
 
 function greeting(): string {
   const h = new Date().getHours();
-  return h < 5 ? 'Up late?' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+  return h < 5 ? tr('Up late?') : h < 12 ? tr('Good morning') : h < 18 ? tr('Good afternoon') : tr('Good evening');
 }
 
 function loadPanelWidth(): number {
@@ -429,7 +430,7 @@ export function ChatView({
 
   /** /goal pause|resume|clear|status and /subgoal: change the goal without a model turn. */
   const runCommand = async (text: string) => {
-    if (!chat) return toast('Start the conversation first, then set a goal with /goal.', 'info');
+    if (!chat) return toast(tr('Start the conversation first, then set a goal with /goal.'), 'info');
     try {
       const res = await api.command(chat.id, text);
       setChat((c) => c && { ...c, goal: res.goal ?? undefined });
@@ -442,7 +443,7 @@ export function ChatView({
 
   /** /btw: a side question, answered beside the chat and not saved. */
   const askBtw = async (question: string) => {
-    if (!chat) return toast('Ask a side question once the conversation has started.', 'info');
+    if (!chat) return toast(tr('Ask a side question once the conversation has started.'), 'info');
     setBtw({ question, answer: '', status: 'asking' });
     try {
       await api.btw(chat.id, question, (e) => {
@@ -504,7 +505,7 @@ export function ChatView({
     try {
       const created = await api.branch(chat.id, index);
       void refreshChats();
-      toast('Branched into a new chat. The original is unchanged.', 'info');
+      toast(tr('Branched into a new chat. The original is unchanged.'), 'info');
       navigate({ page: 'chat', id: created.id });
     } catch (err) {
       toast((err as Error).message);
@@ -586,7 +587,7 @@ export function ChatView({
   };
 
   const deleteChat = async () => {
-    if (!chat || !(await confirm(`“${chat.title}” and its artifacts will be permanently deleted.`, { title: 'Delete chat?' }))) return;
+    if (!chat || !(await confirm(tr('“{0}” and its artifacts will be permanently deleted.', chat.title), { title: tr('Delete chat?') }))) return;
     await api.deleteChat(chat.id).catch((err) => toast(err.message));
     void refreshChats();
     navigate(chat.projectId ? { page: 'project', id: chat.projectId } : { page: 'new' });
@@ -631,14 +632,14 @@ export function ChatView({
           (err) => toast(err.message),
         )
       }
-      placeholder={placeholder ?? (customBot ? `Message ${customBot.name}…` : project ? `Message Mitzi in ${project.name}…` : undefined)}
+      placeholder={placeholder ?? (customBot ? tr('Message {0}…', customBot.name) : project ? tr('Message Mitzi in {0}…', project.name) : undefined)}
       autoFocus
       extra={
         <>
           {chat && chat.messages.length > 0 && !embedded && (
             <ContextButton chatId={chat.id} used={chat.lastPromptTokens} total={contextLength} refreshKey={contextVersion} onDetails={() => setPanel({ tab: 'context' })} />
           )}
-          <button className="icon-btn" title="Live conversation: talk and listen hands-free" aria-label="Start live conversation" onClick={() => void startLive()} disabled={running}>
+          <button className="icon-btn" title={tr('Live conversation: talk and listen hands-free')} aria-label={tr('Start live conversation')} onClick={() => void startLive()} disabled={running}>
             <AudioLines size={18} />
           </button>
         </>
@@ -669,7 +670,7 @@ export function ChatView({
             activeId={chat.id}
             onRename={() => setRenaming(true)}
             fallback={
-              <button className="chat-title-btn" onClick={() => setRenaming(true)} title="Rename">
+              <button className="chat-title-btn" onClick={() => setRenaming(true)} title={tr('Rename')}>
                 {chat.title}
               </button>
             }
@@ -694,19 +695,19 @@ export function ChatView({
         <button className={`pill-btn${panel?.tab === 'artifacts' ? ' on' : ''}`} onClick={() => togglePanel('artifacts')}>
           <Layers size={15} />
           <span>
-            {artifacts.length} artifact{artifacts.length === 1 ? '' : 's'}
+            {plural(artifacts.length, '1 artifact', '{0} artifacts')}
           </span>
         </button>
       )}
       {chat && !isEmpty && (
-        <button className={`icon-btn${panel ? ' on' : ''}`} onClick={() => setPanel((p) => (p ? null : { tab: chat.mode === 'work' || chat.goal || chat.plan ? 'tasks' : 'usage' }))} title="Side panel: tasks, browser, context and usage" aria-label="Toggle side panel">
+        <button className={`icon-btn${panel ? ' on' : ''}`} onClick={() => setPanel((p) => (p ? null : { tab: chat.mode === 'work' || chat.goal || chat.plan ? 'tasks' : 'usage' }))} title={tr('Side panel: tasks, browser, context and usage')} aria-label={tr('Toggle side panel')}>
           <PanelRight size={18} />
         </button>
       )}
       {chat && !isEmpty && (
         <Menu
           trigger={(_open, toggle) => (
-            <button className="icon-btn" onClick={toggle} aria-label="Chat options">
+            <button className="icon-btn" onClick={toggle} aria-label={tr('Chat options')}>
               <MoreHorizontal size={18} />
             </button>
           )}
@@ -714,13 +715,13 @@ export function ChatView({
           {(close) => (
             <>
               <button onClick={() => (close(), void updateChat({ pinned: !chat.pinned }))}>
-                {chat.pinned ? <PinOff size={15} /> : <Pin size={15} />} {chat.pinned ? 'Unpin' : 'Pin'}
+                {chat.pinned ? <PinOff size={15} /> : <Pin size={15} />} {chat.pinned ? tr('Unpin') : tr('Pin')}
               </button>
               <button onClick={() => (close(), setRenaming(true))}>
-                <Pencil size={15} /> Rename
+                <Pencil size={15} /> {tr('Rename')}
               </button>
               <button onClick={() => (close(), setSharing(true))}>
-                <Share2 size={15} /> Share or download…
+                <Share2 size={15} /> {tr('Share or download…')}
               </button>
               {projects.length > 0 && <hr />}
               {projects
@@ -728,17 +729,17 @@ export function ChatView({
                 .slice(0, 6)
                 .map((p) => (
                   <button key={p.id} onClick={() => (close(), void updateChat({ projectId: p.id }))}>
-                    <FolderOpen size={15} /> Move to {p.name}
+                    <FolderOpen size={15} /> {tr('Move to')}{' '}{p.name}
                   </button>
                 ))}
               {chat.projectId && (
                 <button onClick={() => (close(), void updateChat({ projectId: null }))}>
-                  <X size={15} /> Remove from project
+                  <X size={15} /> {tr('Remove from project')}
                 </button>
               )}
               <hr />
               <button className="danger" onClick={() => (close(), void deleteChat())}>
-                <Trash2 size={15} /> Delete chat
+                <Trash2 size={15} /> {tr('Delete chat')}
               </button>
             </>
           )}
@@ -755,24 +756,24 @@ export function ChatView({
         {customBot ? <div className="welcome-mark emoji">{customBot.emoji}</div> : <div className="welcome-mark">{LOGO}</div>}
         <h1 className="welcome-title">{customBot ? customBot.name : project ? project.name : `${greeting()}`}</h1>
         <p className="welcome-sub">
-          {customBot ? customBot.description || 'How can I help?' : project ? project.description || 'Start a new chat in this project.' : 'How can I help you today?'}
+          {customBot ? customBot.description || tr('How can I help?') : project ? project.description || tr('Start a new chat in this project.') : tr('How can I help you today?')}
         </p>
         <div className="context-chips">
           {project && (
             <a className="badge accent" href={href({ page: 'project', id: project.id })}>
               <FolderOpen size={12} /> {project.name}
-              {project.files.length > 0 && ` · ${project.files.length} file${project.files.length === 1 ? '' : 's'}`}
+              {project.files.length > 0 && ` · ${plural(project.files.length, '1 file', '{0} files')}`}
             </a>
           )}
           {project?.folder && (
             <span className="badge ok" title={project.folder}>
-              <Terminal size={12} /> Coding agent in {project.folder.split(/[\\/]/).slice(-2).join('/')}
+              <Terminal size={12} /> {tr('Coding agent in')}{' '}{project.folder.split(/[\\/]/).slice(-2).join('/')}
             </span>
           )}
           {project?.folder && <RepoBadge projectId={project.id} />}
           {settings?.memoryEnabled && bot?.tools.memory && (
-            <a className="badge" href={href({ page: 'memory', botId: bot.id })} title={`${bot.name}'s memory bank`}>
-              <Brain size={12} /> Memory on
+            <a className="badge" href={href({ page: 'memory', botId: bot.id })} title={tr('{0}\'s memory bank', bot.name)}>
+              <Brain size={12} /> {tr('Memory on')}
             </a>
           )}
         </div>
@@ -780,7 +781,7 @@ export function ChatView({
           <div className="error-box" style={{ marginBottom: 16, background: 'var(--warn-soft)', color: 'var(--warn)' }}>
             <KeyRound size={18} />
             <span style={{ flex: 1 }}>
-              Add an API key for OpenRouter or another provider to start chatting. <a href={href({ page: 'settings', section: 'providers' })}>Add a provider →</a>
+              {tr('Add an API key for OpenRouter or another provider to start chatting.')}{' '}<a href={href({ page: 'settings', section: 'providers' })}>{tr('Add a provider →')}</a>
             </span>
           </div>
         )}
@@ -788,14 +789,13 @@ export function ChatView({
         {composerNode}
         {mode === 'work' && (
           <p className="muted small mode-hint">
-            Work mode: describe a task and Mitzi plans it, keeps a task list and keeps going until it’s done. Try <code>/plan</code> to approve a plan first, or <code>/goal</code> to
-            keep it working until something is achieved.
+            {tr('Work mode: describe a task and Mitzi plans it, keeps a task list and keeps going until it’s done. Try')}{' '}<code>/plan</code> {tr('to approve a plan first, or')}{' '}<code>/goal</code> {tr('to keep it working until something is achieved.')}
           </p>
         )}
         {showStarters && bot && <Starters botId={bot.id} onPick={(s) => composer.current?.setText(s)} />}
         {!app.chats.length && !project && (
           <button className="link-btn small import-nudge" onClick={() => setImporting(true)}>
-            <Download size={13} /> Coming from ChatGPT, Claude or Gemini? Bring your memories and chats
+            <Download size={13} /> {tr('Coming from ChatGPT, Claude or Gemini? Bring your memories and chats')}
           </button>
         )}
         {importing && <ImportModal onClose={() => setImporting(false)} onDone={() => void app.refreshChats()} />}
@@ -830,7 +830,7 @@ export function ChatView({
             if (b.kind === 'goal') {
               return (
                 <div key={`g${i}`} className="auto-divider">
-                  {b.goal.status === 'complete' ? <>🎯 Goal achieved: {b.goal.lastCheck}</> : b.goal.status === 'active' ? <>Goal not met yet: {b.goal.lastCheck} · continuing</> : <>Goal {b.goal.status === 'budget' ? 'out of turns' : b.goal.status}</>}
+                  {b.goal.status === 'complete' ? <>{tr('🎯 Goal achieved:')}{' '}{b.goal.lastCheck}</> : b.goal.status === 'active' ? <>{tr('Goal not met yet:')}{' '}{b.goal.lastCheck} {tr('· continuing')}</> : <>{tr('Goal')}{' '}{b.goal.status === 'budget' ? tr('out of turns') : b.goal.status}</>}
                 </div>
               );
             }
@@ -852,12 +852,12 @@ export function ChatView({
           })}
           {(live.blocks.length === 0 || live.status || live.blocks.at(-1)?.kind === 'tool' || live.blocks.at(-1)?.kind === 'goal') && !live.blocks.some((b) => b.kind === 'permission' || b.kind === 'question') && (
             <div className="status-line">
-              <span className="thinking-dots" aria-label="Thinking">
+              <span className="thinking-dots" aria-label={tr('Thinking')}>
                 <span />
                 <span />
                 <span />
               </span>
-              {live.status ?? (live.blocks.length === 0 ? 'Thinking…' : 'Working…')}
+              {live.status ?? (live.blocks.length === 0 ? tr('Thinking…') : tr('Working…'))}
             </div>
           )}
           <div className="live-meta">
@@ -884,7 +884,7 @@ export function ChatView({
         {pinnedPrompt && (
           <div className="pinned-prompt-wrap">
             <div className="pinned-prompt-row">
-              <button className="pinned-prompt" dir="auto" title="Go to your message" onClick={() => {
+              <button className="pinned-prompt" dir="auto" title={tr('Go to your message')} onClick={() => {
                   // Going up stops following the answer as it streams.
                   stick.current = false;
                   latestPrompt()?.scrollIntoView({ block: 'start', behavior: 'smooth' });
@@ -897,28 +897,28 @@ export function ChatView({
         <div className="messages-inner">
           {loading && (
             <div className="status-line" style={{ justifyContent: 'center', padding: 40 }}>
-              <Loader2 className="spin" size={18} /> Loading conversation…
+              <Loader2 className="spin" size={18} /> {tr('Loading conversation…')}
             </div>
           )}
           {chat?.branchedFrom && (
             <div className="origin-banner">
               <GitBranch size={14} />
               <span>
-                Branched from <a href={href({ page: 'chat', id: chat.branchedFrom.chatId })}>{chat.branchedFrom.title}</a>
+                {tr('Branched from')}{' '}<a href={href({ page: 'chat', id: chat.branchedFrom.chatId })}>{chat.branchedFrom.title}</a>
               </span>
             </div>
           )}
           {chat?.imported && (
             <div className="origin-banner">
               <Download size={14} />
-              <span>Imported from {chat.imported.source === 'chatgpt' ? 'ChatGPT' : 'Claude'}. You can continue it here.</span>
+              <span>{tr('Imported from')}{' '}{chat.imported.source === 'chatgpt' ? tr('ChatGPT') : tr('Claude')}{tr('. You can continue it here.')}</span>
             </div>
           )}
           {chat?.taskId && (
             <div className="origin-banner">
               <CalendarClock size={14} />
               <span>
-                Created by a <a href={href({ page: 'tasks' })}>scheduled task</a>
+                {tr('Created by a')}{' '}<a href={href({ page: 'tasks' })}>{tr('scheduled task')}</a>
               </span>
             </div>
           )}
@@ -958,7 +958,7 @@ export function ChatView({
                 <span style={{ flex: 1 }}>{lastError}</span>
                 {chat?.messages.length ? (
                   <button className="btn btn-sm" onClick={() => void regenerate()}>
-                    Retry
+                    {tr('Retry')}
                   </button>
                 ) : null}
               </div>
@@ -971,7 +971,7 @@ export function ChatView({
           <div className="error-box budget-banner">
             <Wallet size={16} />
             <span style={{ flex: 1 }}>
-              You’ve reached your {app.budget.limit === 'daily' ? 'daily' : 'monthly'} budget, so Mitzi is paused. <a href={href({ page: 'settings', section: 'budget' })}>Change the budget</a>
+              {tr('You’ve reached your')}{' '}{app.budget.limit === 'daily' ? tr('daily') : tr('monthly')} {tr('budget, so Mitzi is paused.')}{' '}<a href={href({ page: 'settings', section: 'budget' })}>{tr('Change the budget')}</a>
             </span>
           </div>
         )}
@@ -1017,7 +1017,7 @@ export function ChatView({
   } else if (panel?.tab === 'artifacts') {
     panelBody = (
       <div className="panel-body artifact-list-panel">
-        {!artifacts.length && <p className="muted small">Documents, code, pages and media Mitzi makes in this chat appear here.</p>}
+        {!artifacts.length && <p className="muted small">{tr('Documents, code, pages and media Mitzi makes in this chat appear here.')}</p>}
         {artifacts.map((a) => (
           <button key={a.id} className="artifact-card" style={{ maxWidth: 'none' }} onClick={() => openArtifact(a)}>
             <span className="artifact-icon">
@@ -1037,7 +1037,7 @@ export function ChatView({
     panelBody = chat ? (
       <ContextPanel bare chatId={chat.id} refreshKey={contextVersion} onClose={() => setPanel(null)} onChanged={() => void reload(chat.id)} />
     ) : (
-      <div className="panel-body muted small">Send a message to see the context window.</div>
+      <div className="panel-body muted small">{tr('Send a message to see the context window.')}</div>
     );
   } else if (panel?.tab === 'tasks') {
     panelBody = <TasksPanel chat={chat} running={running} onCommand={(t) => void runCommand(t)} onApprove={() => void approvePlan()} onRevise={revisePlan} />;
@@ -1082,10 +1082,10 @@ export function ChatView({
   };
 
   const live_ = liveMode && (realtime && chatId ? (
-    <RealtimeMode chatId={chatId} title={customBot?.name ?? 'Mitzi'} emoji={customBot?.emoji} onClose={() => setLiveMode(false)} onSaved={() => void reload(chatId)} />
+    <RealtimeMode chatId={chatId} title={customBot?.name ?? tr('Mitzi')} emoji={customBot?.emoji} onClose={() => setLiveMode(false)} onSaved={() => void reload(chatId)} />
   ) : (
     <LiveMode
-      title={customBot?.name ?? 'Mitzi'}
+      title={customBot?.name ?? tr('Mitzi')}
       emoji={customBot?.emoji}
       onSend={(text) => send(text, [])}
       onInterrupt={stop}
@@ -1104,7 +1104,7 @@ export function ChatView({
       <div className="chat-col embedded">
         {isEmpty ? (
           <div className="embedded-empty">
-            <div className="muted small">Ask {customBot?.name ?? 'Mitzi'} to draft, rewrite, review or answer your comments. Changes appear on the left.</div>
+            <div className="muted small">{tr('Ask')}{' '}{customBot?.name ?? tr('Mitzi')} {tr('to draft, rewrite, review or answer your comments. Changes appear on the left.')}</div>
             {composerNode}
           </div>
         ) : (
@@ -1164,7 +1164,7 @@ function Starters({ botId, onPick }: { botId: string; onPick(text: string): void
 
   if (state === 'loading') {
     return (
-      <div className="starters" aria-busy="true" aria-label="Loading suggestions">
+      <div className="starters" aria-busy="true" aria-label={tr('Loading suggestions')}>
         {[0, 1, 2, 3].map((i) => (
           <div key={i} className="starter skeleton" />
         ))}
@@ -1184,9 +1184,9 @@ function Starters({ botId, onPick }: { botId: string; onPick(text: string): void
       </div>
       {state.personalized && (
         <div className="starters-note">
-          <Brain size={12} /> Suggested from your recent conversations
+          <Brain size={12} /> {tr('Suggested from your recent conversations')}
           <button className="link-btn" onClick={() => load(true)}>
-            New ideas
+            {tr('New ideas')}
           </button>
         </div>
       )}
@@ -1201,9 +1201,9 @@ function RepoBadge({ projectId }: { projectId: string }) {
     api.repoStatus(projectId).then(setStatus, () => setStatus(null));
   }, [projectId]);
   if (!status?.branch) return null;
-  const bits = [status.changed && `${status.changed} changed`, status.ahead && `${status.ahead} to push`, status.behind && `${status.behind} to pull`].filter(Boolean);
+  const bits = [status.changed && tr('{0} changed', status.changed), status.ahead && tr('{0} to push', status.ahead), status.behind && tr('{0} to pull', status.behind)].filter(Boolean);
   return (
-    <a className="badge" href={href({ page: 'project', id: projectId })} title={status.remote ?? 'Local repository'}>
+    <a className="badge" href={href({ page: 'project', id: projectId })} title={status.remote ?? tr('Local repository')}>
       <GitBranch size={12} /> {status.branch}
       {bits.length ? ` · ${bits.join(' · ')}` : ''}
     </a>
@@ -1217,7 +1217,7 @@ function ResizeHandle({ width, onChange }: { width: number; onChange(w: number):
       className={`resize-handle${dragging ? ' dragging' : ''}`}
       role="separator"
       aria-orientation="vertical"
-      aria-label="Resize panel"
+      aria-label={tr('Resize panel')}
       onPointerDown={(e) => {
         e.preventDefault();
         const startX = e.clientX;

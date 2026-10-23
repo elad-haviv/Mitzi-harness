@@ -4,8 +4,9 @@ import { api, SkillDetail, SkillInfo } from '../api';
 import { Markdown } from '../components/Markdown';
 import { Empty, Modal, Toggle, useConfirm } from '../components/ui';
 import { useApp } from '../state';
+import { tr } from '../i18n';
 
-const SOURCE_LABEL: Record<SkillInfo['source'], string> = { user: 'Your skills', plugin: 'From plugins', claude: 'From ~/.claude/skills' };
+const SOURCE_LABEL: Record<SkillInfo['source'], string> = { user: tr('Your skills'), plugin: tr('From plugins'), claude: tr('From ~/.claude/skills') };
 
 export function SkillsPage() {
   const { settings, refreshSettings, toast } = useApp();
@@ -23,7 +24,7 @@ export function SkillsPage() {
   const groups = useMemo(() => {
     const out: { label: string; items: SkillInfo[] }[] = [];
     for (const s of skills ?? []) {
-      const label = s.source === 'plugin' ? `From the ${s.pluginId} plugin` : SOURCE_LABEL[s.source];
+      const label = s.source === 'plugin' ? tr('From the {0} plugin', s.pluginId) : SOURCE_LABEL[s.source];
       const g = out.find((x) => x.label === label);
       if (g) g.items.push(s);
       else out.push({ label, items: [s] });
@@ -41,7 +42,7 @@ export function SkillsPage() {
     }
     try {
       const skill = await api.importSkill(list);
-      toast(`Imported “${skill.name}”`, 'info');
+      toast(tr('Imported “{0}”', skill.name), 'info');
       void load();
     } catch (err) {
       toast((err as Error).message);
@@ -53,15 +54,14 @@ export function SkillsPage() {
       <div className="page-inner">
         <div className="page-header">
           <div>
-            <h1 className="page-title">Skills</h1>
+            <h1 className="page-title">{tr('Skills')}</h1>
             <p className="page-subtitle">
-              Packaged instructions and resources for specific kinds of tasks. Bots see each skill’s name and description, and load the full instructions
-              only when a task needs them. Compatible with Claude’s SKILL.md format.
+              {tr('Packaged instructions and resources for specific kinds of tasks. Bots see each skill’s name and description, and load the full instructions only when a task needs them. Compatible with Claude’s SKILL.md format.')}
             </p>
           </div>
           <div className="row">
             <button className="btn" onClick={() => folderInput.current?.click()}>
-              <FolderUp size={16} /> Import folder
+              <FolderUp size={16} /> {tr('Import folder')}
             </button>
             <input
               ref={folderInput}
@@ -72,7 +72,7 @@ export function SkillsPage() {
               onChange={(e) => e.target.files && void importFolder(e.target.files).then(() => (e.target.value = ''))}
             />
             <button className="btn btn-primary" onClick={() => setEditing('new')}>
-              <Plus size={16} /> New skill
+              <Plus size={16} /> {tr('New skill')}
             </button>
           </div>
         </div>
@@ -80,7 +80,7 @@ export function SkillsPage() {
         {settings && (
           <label className="row small" style={{ marginBottom: 18 }}>
             <Toggle
-              label="Use skills from ~/.claude/skills"
+              label={tr('Use skills from ~/.claude/skills')}
               on={settings.useClaudeSkills}
               onChange={(v) =>
                 api
@@ -90,13 +90,13 @@ export function SkillsPage() {
                   .catch((err) => toast(err.message))
               }
             />
-            Also use skills from <code>~/.claude/skills</code>
+            {tr('Also use skills from')}{' '}<code>~/.claude/skills</code>
           </label>
         )}
 
         {skills && skills.length === 0 ? (
-          <Empty icon={<WandSparkles size={22} />} title="No skills yet">
-            Write one, import a skill folder, or install a plugin that includes skills (try Anthropic’s on the Plugins page).
+          <Empty icon={<WandSparkles size={22} />} title={tr('No skills yet')}>
+            {tr('Write one, import a skill folder, or install a plugin that includes skills (try Anthropic’s on the Plugins page).')}
           </Empty>
         ) : (
           groups.map((g) => (
@@ -120,19 +120,19 @@ export function SkillsPage() {
                       <span className="muted small" title={s.files.join('\n')}>
                         <FileText size={13} /> {s.files.length}
                       </span>
-                      <button className="icon-btn sm" aria-label={`View ${s.name}`} onClick={async () => setViewing(await api.skill(s.id))}>
+                      <button className="icon-btn sm" aria-label={tr('View {0}', s.name)} onClick={async () => setViewing(await api.skill(s.id))}>
                         <Eye size={15} />
                       </button>
                       {s.source === 'user' && (
                         <>
-                          <button className="icon-btn sm" aria-label={`Edit ${s.name}`} onClick={async () => setEditing(await api.skill(s.id))}>
+                          <button className="icon-btn sm" aria-label={tr('Edit {0}', s.name)} onClick={async () => setEditing(await api.skill(s.id))}>
                             <Pencil size={15} />
                           </button>
                           <button
                             className="icon-btn sm"
-                            aria-label={`Delete ${s.name}`}
+                            aria-label={tr('Delete {0}', s.name)}
                             onClick={async () => {
-                              if (!(await confirm(`Delete the skill “${s.name}” and its files?`, { title: 'Delete skill?' }))) return;
+                              if (!(await confirm(tr('Delete the skill “{0}” and its files?', s.name), { title: tr('Delete skill?') }))) return;
                               await api.deleteSkill(s.id).catch((err) => toast(err.message));
                               void load();
                             }}
@@ -142,7 +142,7 @@ export function SkillsPage() {
                         </>
                       )}
                       <Toggle
-                        label={`Enable ${s.name}`}
+                        label={tr('Enable {0}', s.name)}
                         on={s.enabled}
                         onChange={(v) =>
                           api
@@ -170,12 +170,12 @@ export function SkillsPage() {
           </div>
           {viewing.files.length > 1 && (
             <p className="muted small">
-              Files: {viewing.files.slice(0, 30).join(', ')}
+              {tr('Files:')}{' '}{viewing.files.slice(0, 30).join(', ')}
               {viewing.files.length > 30 ? ` … +${viewing.files.length - 30}` : ''}
             </p>
           )}
           <p className="muted small" style={{ marginBottom: 0 }}>
-            Location: <code>{viewing.dir}</code>
+            {tr('Location:')}{' '}<code>{viewing.dir}</code>
           </p>
         </Modal>
       )}
@@ -205,38 +205,38 @@ function SkillEditor({ skill, onClose, onSaved }: { skill?: SkillDetail; onClose
   };
   return (
     <Modal
-      title={skill ? `Edit ${skill.name}` : 'New skill'}
+      title={skill ? tr('Edit {0}', skill.name) : tr('New skill')}
       wide
       onClose={onClose}
       footer={
         <>
           <button className="btn btn-ghost" onClick={onClose}>
-            Cancel
+            {tr('Cancel')}
           </button>
           <button className="btn btn-primary" disabled={busy || !name.trim() || !description.trim()} onClick={save}>
-            {skill ? 'Save skill' : 'Create skill'}
+            {skill ? tr('Save skill') : tr('Create skill')}
           </button>
         </>
       }
     >
       <label className="field">
-        <span className="field-label">Name</span>
-        <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. release-notes" autoFocus />
+        <span className="field-label">{tr('Name')}</span>
+        <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={tr('e.g. release-notes')} autoFocus />
       </label>
       <label className="field">
-        <span className="field-label">When to use it</span>
+        <span className="field-label">{tr('When to use it')}</span>
         <textarea
           className="textarea"
           rows={2}
           style={{ minHeight: 0 }}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Write release notes from a list of merged PRs. Use when the user asks for release notes, a changelog or a version summary."
+          placeholder={tr('Write release notes from a list of merged PRs. Use when the user asks for release notes, a changelog or a version summary.')}
         />
-        <span className="field-hint">The model sees only this until it decides to load the skill, so say what it does and when to use it.</span>
+        <span className="field-hint">{tr('The model sees only this until it decides to load the skill, so say what it does and when to use it.')}</span>
       </label>
       <label className="field" style={{ marginBottom: 0 }}>
-        <span className="field-label">Instructions</span>
+        <span className="field-label">{tr('Instructions')}</span>
         <textarea
           className="textarea mono"
           rows={14}

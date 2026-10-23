@@ -6,6 +6,7 @@ import { api, ChannelKind, ChannelView } from '../api';
 import { Toggle } from '../components/ui';
 import { href } from '../router';
 import { useApp } from '../state';
+import { tr } from '../i18n';
 
 export const CHANNEL_ICONS: Record<ChannelKind, ReactNode> = {
   telegram: <Send size={15} />,
@@ -59,12 +60,12 @@ export function MessagingSettings({ initial }: { initial?: string }) {
 
   return (
     <>
-      <div className="channel-tabs" role="tablist" aria-label="Messaging services">
+      <div className="channel-tabs" role="tablist" aria-label={tr('Messaging services')}>
         {list.map((c) => (
           <button key={c.kind} role="tab" aria-selected={c.kind === kind} className={`channel-tab${c.kind === kind ? ' on' : ''}`} onClick={() => setKind(c.kind)}>
             {CHANNEL_ICONS[c.kind]}
             <span>{c.label}</span>
-            {c.running && <span className="channel-dot" aria-label="On" />}
+            {c.running && <span className="channel-dot" aria-label={tr('On')} />}
           </button>
         ))}
       </div>
@@ -98,7 +99,7 @@ function ChannelSettingsView({ channel: c, onChange }: { channel: ChannelView; o
   return (
     <>
       <section className="settings-section card">
-        <h2>Set up {c.label}</h2>
+        <h2>{tr('Set up')}{' '}{c.label}</h2>
         {c.unsupported && <p className="danger-text small">{c.unsupported}</p>}
         <ol className="steps-list">
           {c.steps.map((s, i) => (
@@ -109,16 +110,16 @@ function ChannelSettingsView({ channel: c, onChange }: { channel: ChannelView; o
         </ol>
         {webhook && (
           <div className="field">
-            <span className="field-label">Webhook address</span>
+            <span className="field-label">{tr('Webhook address')}</span>
             <div className="row" style={{ gap: 8 }}>
               <code className="pairing-code grow" style={{ overflowWrap: 'anywhere' }}>
                 {webhook}
               </code>
-              <button className="btn btn-sm btn-ghost" onClick={() => void navigator.clipboard?.writeText(webhook).then(() => toast('Copied', 'info'), () => {})}>
-                <Copy size={13} /> Copy
+              <button className="btn btn-sm btn-ghost" onClick={() => void navigator.clipboard?.writeText(webhook).then(() => toast(tr('Copied'), 'info'), () => {})}>
+                <Copy size={13} /> {tr('Copy')}
               </button>
             </div>
-            <span className="muted small">{c.label} must be able to reach it: use your public address (a tunnel such as Cloudflare Tunnel or ngrok in front of Mitzi) in place of this one.</span>
+            <span className="muted small">{c.label} {tr('must be able to reach it: use your public address (a tunnel such as Cloudflare Tunnel or ngrok in front of Mitzi) in place of this one.')}</span>
           </div>
         )}
         <form
@@ -132,13 +133,13 @@ function ChannelSettingsView({ channel: c, onChange }: { channel: ChannelView; o
             <label key={f.key} className="field">
               <span className="field-label">
                 {f.label}
-                {f.optional && <span className="muted small"> · optional</span>}
+                {f.optional && <span className="muted small"> {tr('· optional')}</span>}
               </span>
               <input
                 className={`input${f.secret ? ' mono' : ''}`}
                 type={f.secret ? 'password' : 'text'}
                 autoComplete="off"
-                placeholder={f.secret && c.values[f.key] ? 'Saved · type a new one to replace it' : f.placeholder}
+                placeholder={f.secret && c.values[f.key] ? tr('Saved · type a new one to replace it') : f.placeholder}
                 value={values[f.key] ?? ''}
                 onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
               />
@@ -146,7 +147,7 @@ function ChannelSettingsView({ channel: c, onChange }: { channel: ChannelView; o
           ))}
           <div>
             <button className="btn btn-primary" disabled={!dirty || busy}>
-              Save and turn on
+              {tr('Save and turn on')}
             </button>
           </div>
         </form>
@@ -155,32 +156,32 @@ function ChannelSettingsView({ channel: c, onChange }: { channel: ChannelView; o
             <div className="t">
               {c.label} {c.running ? <span className="badge ok">on{c.username ? ` · ${c.username}` : ''}</span> : <span className="badge">off</span>}
             </div>
-            <div className="s">{c.error ? <span className="danger-text">{c.error}</span> : 'Mitzi answers while it’s running on this computer.'}</div>
+            <div className="s">{c.error ? <span className="danger-text">{c.error}</span> : tr('Mitzi answers while it’s running on this computer.')}</div>
           </div>
-          <Toggle label={c.label} on={c.enabled && c.running} onChange={(v) => void update({ enabled: v }, v ? `${c.label} on` : `${c.label} off`)} />
+          <Toggle label={c.label} on={c.enabled && c.running} onChange={(v) => void update({ enabled: v }, v ? `${c.label} on` : tr('{0} off', c.label))} />
         </div>
       </section>
       {c.running && (
         <section className="settings-section card">
-          <h2>Pair a conversation</h2>
+          <h2>{tr('Pair a conversation')}</h2>
           <p className="muted small" style={{ marginTop: 0 }}>
-            Send this to Mitzi on {c.label}
+            {tr('Send this to Mitzi on')}{' '}{c.label}
             {pairLink && (
               <>
                 {' '}
-                (<a href={pairLink} target="_blank" rel="noreferrer">open @{c.username}</a> with the message ready)
+                (<a href={pairLink} target="_blank" rel="noreferrer">{tr('open @')}{c.username}</a> {tr('with the message ready)')}
               </>
             )}
-            . Each code works once; only paired conversations can use Mitzi.
+            {tr('. Each code works once; only paired conversations can use Mitzi.')}
           </p>
           <div className="row" style={{ gap: 8 }}>
             <code className="pairing-code">{c.pairHint}</code>
             <button className="btn btn-sm btn-ghost" onClick={() => void update({ newCode: true })}>
-              New code
+              {tr('New code')}
             </button>
           </div>
           <div className="panel-subhead" style={{ marginTop: 16 }}>
-            Paired
+            {tr('Paired')}
           </div>
           {c.links.length ? (
             c.links.map((l) => (
@@ -189,23 +190,23 @@ function ChannelSettingsView({ channel: c, onChange }: { channel: ChannelView; o
                 <span className="name">{l.name}</span>
                 {l.mitziChatId && (
                   <a className="small" href={href({ page: 'chat', id: l.mitziChatId })}>
-                    Open chat
+                    {tr('Open chat')}
                   </a>
                 )}
-                <button className="icon-btn sm" aria-label={`Unpair ${l.name}`} title="Unpair" onClick={() => void update({ unlink: l.address }, `${l.name} unpaired`)}>
+                <button className="icon-btn sm" aria-label={tr('Unpair {0}', l.name)} title={tr('Unpair')} onClick={() => void update({ unlink: l.address }, tr('{0} unpaired', l.name))}>
                   <X size={13} />
                 </button>
               </div>
             ))
           ) : (
-            <p className="muted small">None yet.</p>
+            <p className="muted small">{tr('None yet.')}</p>
           )}
           <div className="tool-toggle" style={{ padding: 0, border: 0, marginTop: 12 }}>
             <div className="grow">
-              <div className="t">Notifications</div>
-              <div className="s">Workflow approvals and finished scheduled tasks</div>
+              <div className="t">{tr('Notifications')}</div>
+              <div className="s">{tr('Workflow approvals and finished scheduled tasks')}</div>
             </div>
-            <Toggle label="Notifications" on={c.notify} onChange={(v) => void update({ notify: v })} />
+            <Toggle label={tr('Notifications')} on={c.notify} onChange={(v) => void update({ notify: v })} />
           </div>
         </section>
       )}

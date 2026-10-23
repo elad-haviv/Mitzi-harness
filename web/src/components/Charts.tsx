@@ -1,6 +1,7 @@
 // Small SVG charts: columns with an optional reference line, and dots over time. One y-axis,
 // hairline grid, thin marks, a hover tooltip on every mark.
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { tr } from '../i18n';
 
 export interface Point {
   label: string;

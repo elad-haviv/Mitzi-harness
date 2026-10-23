@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowUpCircle, Wallet, Brain, Check, CircleDashed, Loader2, RefreshCw, Copy, Database, Download, KeyRound, MessagesSquare, Monitor, Moon, Palette, Plug, Puzzle, Sparkles, Sun, Volume2, WandSparkles, Send, X, Smartphone, Bell } from 'lucide-react';
+import { AlertTriangle, ArrowUpCircle, Languages, Wallet, Brain, Check, CircleDashed, Loader2, RefreshCw, Copy, Database, Download, KeyRound, MessagesSquare, Monitor, Moon, Palette, Plug, Puzzle, Sparkles, Sun, Volume2, WandSparkles, Send, X, Smartphone, Bell } from 'lucide-react';
 import { ReactNode, useEffect, useState } from 'react';
 import { api, UpdateStep } from '../api';
 import { MessagingSettings } from './MessagingSettings';
@@ -11,32 +11,33 @@ import { MediaSettingsSection, ProvidersSection } from './ProviderSettings';
 import { BudgetMeters } from './Insights';
 import { qrSvg } from '../../../src/shared/qr';
 import { APPROVAL, LEVELS } from '../components/Approval';
+import { lang, LANGUAGES, plural, setLanguage, tr } from '../i18n';
 
 type Section = 'general' | 'models' | 'providers' | 'media' | 'budget' | 'phone' | 'messaging' | 'memory' | 'data' | 'updates';
 
 const SECTIONS: { id: Section; label: string; icon: ReactNode; hint: string }[] = [
-  { id: 'general', label: 'General', icon: <Palette size={16} />, hint: 'Appearance and long conversations' },
-  { id: 'providers', label: 'Providers', icon: <KeyRound size={16} />, hint: 'API keys for OpenRouter, OpenAI, Anthropic, Google and more' },
-  { id: 'models', label: 'Models', icon: <Sparkles size={16} />, hint: 'The models Mitzi uses by default' },
-  { id: 'media', label: 'Media & voice', icon: <Volume2 size={16} />, hint: 'Image, video, speech, sound and music models, and read-aloud voices' },
-  { id: 'budget', label: 'Usage & budget', icon: <Wallet size={16} />, hint: 'Spending limits and alerts' },
-  { id: 'phone', label: 'Phone & notifications', icon: <Smartphone size={16} />, hint: 'Use Mitzi on your phone, and get notified when chats finish' },
-  { id: 'messaging', label: 'Messaging', icon: <Send size={16} />, hint: 'Chat with Mitzi from Telegram, Discord, Slack, WhatsApp or email, and get approvals there' },
-  { id: 'memory', label: 'Memory', icon: <Brain size={16} />, hint: 'How bots remember, and importing memories from other AIs' },
-  { id: 'data', label: 'Data & about', icon: <Database size={16} />, hint: 'Where your data lives, importing chats, and version' },
-  { id: 'updates', label: 'Updates', icon: <ArrowUpCircle size={16} />, hint: 'Get the latest version of Mitzi' },
+  { id: 'general', label: tr('General'), icon: <Palette size={16} />, hint: tr('Appearance and long conversations') },
+  { id: 'providers', label: tr('Providers'), icon: <KeyRound size={16} />, hint: tr('API keys for OpenRouter, OpenAI, Anthropic, Google and more') },
+  { id: 'models', label: tr('Models'), icon: <Sparkles size={16} />, hint: tr('The models Mitzi uses by default') },
+  { id: 'media', label: tr('Media & voice'), icon: <Volume2 size={16} />, hint: tr('Image, video, speech, sound and music models, and read-aloud voices') },
+  { id: 'budget', label: tr('Usage & budget'), icon: <Wallet size={16} />, hint: tr('Spending limits and alerts') },
+  { id: 'phone', label: tr('Phone & notifications'), icon: <Smartphone size={16} />, hint: tr('Use Mitzi on your phone, and get notified when chats finish') },
+  { id: 'messaging', label: tr('Messaging'), icon: <Send size={16} />, hint: tr('Chat with Mitzi from Telegram, Discord, Slack, WhatsApp or email, and get approvals there') },
+  { id: 'memory', label: tr('Memory'), icon: <Brain size={16} />, hint: tr('How bots remember, and importing memories from other AIs') },
+  { id: 'data', label: tr('Data & about'), icon: <Database size={16} />, hint: tr('Where your data lives, importing chats, and version') },
+  { id: 'updates', label: tr('Updates'), icon: <ArrowUpCircle size={16} />, hint: tr('Get the latest version of Mitzi') },
 ];
 
 /** Pages of their own, linked from Settings so everything configurable is in one place. */
 const EXTENSIONS = [
-  { page: 'connectors' as const, label: 'Connectors', icon: <Plug size={16} /> },
-  { page: 'skills' as const, label: 'Skills', icon: <WandSparkles size={16} /> },
-  { page: 'plugins' as const, label: 'Plugins', icon: <Puzzle size={16} /> },
+  { page: 'connectors' as const, label: tr('Connectors'), icon: <Plug size={16} /> },
+  { page: 'skills' as const, label: tr('Skills'), icon: <WandSparkles size={16} /> },
+  { page: 'plugins' as const, label: tr('Plugins'), icon: <Puzzle size={16} /> },
 ];
 
 export function SettingsPage({ section }: { section?: string }) {
   const { settings, update } = useApp();
-  if (!settings) return <div className="page muted">Loading…</div>;
+  if (!settings) return <div className="page muted">{tr('Loading…')}</div>;
   // Without a provider there's nothing else to do, so start there.
   // Telegram had its own section before the other messaging services came.
   if (section === 'telegram') section = 'messaging';
@@ -46,8 +47,8 @@ export function SettingsPage({ section }: { section?: string }) {
   return (
     <div className="page">
       <div className="settings-layout">
-        <nav className="settings-nav" aria-label="Settings sections">
-          <h1 className="settings-nav-title">Settings</h1>
+        <nav className="settings-nav" aria-label={tr('Settings sections')}>
+          <h1 className="settings-nav-title">{tr('Settings')}</h1>
           {SECTIONS.map((s) => (
             <a
               key={s.id}
@@ -58,11 +59,11 @@ export function SettingsPage({ section }: { section?: string }) {
               className={`settings-nav-item${s.id === current ? ' active' : ''}`} href={href({ page: 'settings', section: s.id })} aria-current={s.id === current ? 'page' : undefined}>
               {s.icon}
               <span>{s.label}</span>
-              {s.id === 'providers' && !settings.hasApiKey && <span className="nav-dot" aria-label="Needs setup" />}
-              {s.id === 'updates' && !!update?.behind && update.supported && <span className="nav-dot accent-dot" aria-label="Update available" />}
+              {s.id === 'providers' && !settings.hasApiKey && <span className="nav-dot" aria-label={tr('Needs setup')} />}
+              {s.id === 'updates' && !!update?.behind && update.supported && <span className="nav-dot accent-dot" aria-label={tr('Update available')} />}
             </a>
           ))}
-          <div className="settings-nav-label">Extensions</div>
+          <div className="settings-nav-label">{tr('Extensions')}</div>
           {EXTENSIONS.map((e) => (
             <a key={e.page} className="settings-nav-item" href={href({ page: e.page })}>
               {e.icon}
@@ -113,13 +114,13 @@ function GeneralSettings() {
   return (
     <>
       <section className="settings-section card">
-        <h2>Appearance</h2>
+        <h2>{tr('Appearance')}</h2>
         <div className="segmented">
           {(
             [
-              ['system', <Monitor size={14} key="s" />, 'System'],
-              ['light', <Sun size={14} key="l" />, 'Light'],
-              ['dark', <Moon size={14} key="d" />, 'Dark'],
+              ['system', <Monitor size={14} key="s" />, tr('System')],
+              ['light', <Sun size={14} key="l" />, tr('Light')],
+              ['dark', <Moon size={14} key="d" />, tr('Dark')],
             ] as [Theme, ReactNode, string][]
           ).map(([t, icon, label]) => (
             <button key={t} className={theme === t ? 'active' : ''} onClick={() => setTheme(t)}>
@@ -127,16 +128,26 @@ function GeneralSettings() {
             </button>
           ))}
         </div>
+        <div className="field" style={{ marginTop: 16, marginBottom: 0 }}>
+          <span className="field-label">{tr('Language')}</span>
+          <div className="segmented">
+            {LANGUAGES.map((l) => (
+              <button key={l.code} className={lang === l.code ? 'active' : ''} lang={l.code} onClick={() => l.code !== lang && setLanguage(l.code)}>
+                <Languages size={14} /> {l.name}
+              </button>
+            ))}
+          </div>
+        </div>
       </section>
 
       <section className="settings-section card">
-        <h2>Approvals</h2>
+        <h2>{tr('Approvals')}</h2>
         <p className="muted small" style={{ marginTop: 0 }}>
-          How much Mitzi may do on its own in new chats. Each chat can change it from the chat box (Shift+Tab), and a project’s permissions apply to its chats.
+          {tr('How much Mitzi may do on its own in new chats. Each chat can change it from the chat box (Shift+Tab), and a project’s permissions apply to its chats.')}
         </p>
-        <div className="approval-options" role="radiogroup" aria-label="Default approval level">
+        <div className="approval-options" role="radiogroup" aria-label={tr('Default approval level')}>
           {LEVELS.map((l) => (
-            <button key={l} role="radio" aria-checked={(settings.approval ?? 'kitten') === l} className={`approval-option${(settings.approval ?? 'kitten') === l ? ' on' : ''}`} onClick={() => void save({ approval: l }, `New chats: ${APPROVAL[l].name}`)}>
+            <button key={l} role="radio" aria-checked={(settings.approval ?? 'kitten') === l} className={`approval-option${(settings.approval ?? 'kitten') === l ? ' on' : ''}`} onClick={() => void save({ approval: l }, tr('New chats: {0}', APPROVAL[l].name))}>
               <span className="approval-emoji big" aria-hidden>
                 {APPROVAL[l].emoji}
               </span>
@@ -148,33 +159,33 @@ function GeneralSettings() {
       </section>
 
       <section className="settings-section card">
-        <h2>Browser</h2>
+        <h2>{tr('Browser')}</h2>
         <div className="tool-toggle" style={{ padding: 0, border: 0 }}>
           <div className="grow">
-            <div className="t">Show the browser window</div>
-            <div className="s">When bots use the browser, open its window on your screen so you can watch, sign in to sites or take over. Otherwise it works out of sight and you see its pages in the chat’s side panel.</div>
+            <div className="t">{tr('Show the browser window')}</div>
+            <div className="s">{tr('When bots use the browser, open its window on your screen so you can watch, sign in to sites or take over. Otherwise it works out of sight and you see its pages in the chat’s side panel.')}</div>
           </div>
-          <Toggle label="Show the browser window" on={!!settings.browserHeaded} onChange={(v) => void save({ browserHeaded: v })} />
+          <Toggle label={tr('Show the browser window')} on={!!settings.browserHeaded} onChange={(v) => void save({ browserHeaded: v })} />
         </div>
       </section>
 
       <section className="settings-section card">
-        <h2>Computer control</h2>
+        <h2>{tr('Computer control')}</h2>
         <div className="tool-toggle" style={{ padding: 0, border: 0 }}>
           <div className="grow">
-            <div className="t">Let bots use this computer</div>
+            <div className="t">{tr('Let bots use this computer')}</div>
             <div className="s">
-              Bots can take screenshots and use the mouse and keyboard to work in your apps. They ask before every click or keystroke unless the chat is on Alley cat, and screenshots go to the chat’s model, so use a model that can see images. On a Mac, allow the app running Mitzi under Privacy &amp; Security → Screen Recording and Accessibility; on Linux it needs an X11 session with xdotool and ImageMagick.
+              {tr('Bots can take screenshots and use the mouse and keyboard to work in your apps. They ask before every click or keystroke unless the chat is on Alley cat, and screenshots go to the chat’s model, so use a model that can see images. On a Mac, allow the app running Mitzi under Privacy &amp; Security → Screen Recording and Accessibility; on Linux it needs an X11 session with xdotool and ImageMagick.')}
             </div>
           </div>
-          <Toggle label="Let bots use this computer" on={!!settings.computerUse} onChange={(v) => void save({ computerUse: v })} />
+          <Toggle label={tr('Let bots use this computer')} on={!!settings.computerUse} onChange={(v) => void save({ computerUse: v })} />
         </div>
       </section>
 
       <section className="settings-section card">
-        <h2>Long conversations</h2>
+        <h2>{tr('Long conversations')}</h2>
         <div className="field">
-          <span className="field-label">Auto-compact when the context window is</span>
+          <span className="field-label">{tr('Auto-compact when the context window is')}</span>
           <div className="range-row">
             <input
               type="range"
@@ -184,18 +195,18 @@ function GeneralSettings() {
               defaultValue={settings.autoCompactPercent}
               onPointerUp={(e) => void save({ autoCompactPercent: Number((e.target as HTMLInputElement).value) })}
               onKeyUp={(e) => void save({ autoCompactPercent: Number((e.target as HTMLInputElement).value) })}
-              aria-label="Auto-compact threshold"
+              aria-label={tr('Auto-compact threshold')}
             />
-            <span className="val">{settings.autoCompactPercent === 0 ? 'Off' : `${settings.autoCompactPercent}% full`}</span>
+            <span className="val">{settings.autoCompactPercent === 0 ? tr('Off') : tr('{0}% full', settings.autoCompactPercent)}</span>
           </div>
-          <span className="field-hint">Older messages are summarized automatically so long conversations never hit the model's limit.</span>
+          <span className="field-hint">{tr('Older messages are summarized automatically so long conversations never hit the model\'s limit.')}</span>
         </div>
         <div className="field" style={{ marginBottom: 0 }}>
-          <span className="field-label">Recent turns kept word-for-word</span>
+          <span className="field-label">{tr('Recent turns kept word-for-word')}</span>
           <select className="select" style={{ maxWidth: 200 }} value={settings.keepRecentTurns} onChange={(e) => void save({ keepRecentTurns: Number(e.target.value) })}>
             {[0, 1, 2, 3, 4, 6, 8].map((n) => (
               <option key={n} value={n}>
-                {n === 0 ? 'None (summarize all)' : `Last ${n} turn${n === 1 ? '' : 's'}`}
+                {n === 0 ? tr('None (summarize all)') : plural(n, 'Last turn', 'Last {0} turns')}
               </option>
             ))}
           </select>
@@ -206,32 +217,32 @@ function GeneralSettings() {
 }
 
 const PROVIDER_NAMES: Record<string, string> = {
-  openai: 'OpenAI',
-  google: 'Google',
-  anthropic: 'Anthropic',
-  elevenlabs: 'ElevenLabs',
-  groq: 'Groq',
+  openai: tr('OpenAI'),
+  google: tr('Google'),
+  anthropic: tr('Anthropic'),
+  elevenlabs: tr('ElevenLabs'),
+  groq: tr('Groq'),
   xai: 'xAI',
-  mistral: 'Mistral',
-  deepseek: 'DeepSeek',
-  together: 'Together AI',
-  ollama: 'Ollama',
-  lmstudio: 'LM Studio',
+  mistral: tr('Mistral'),
+  deepseek: tr('DeepSeek'),
+  together: tr('Together AI'),
+  ollama: tr('Ollama'),
+  lmstudio: tr('LM Studio'),
 };
 
 /** The provider a model id runs on: "google:…" → Google; ids without a prefix go through OpenRouter. */
 function providerOf(id: string): string {
   const prefix = /^([a-z0-9-]+):/.exec(id)?.[1];
-  return prefix ? (PROVIDER_NAMES[prefix] ?? prefix) : 'OpenRouter';
+  return prefix ? (PROVIDER_NAMES[prefix] ?? prefix) : tr('OpenRouter');
 }
 
 const JOBS = [
-  ['imageModel', 'Images'],
-  ['videoModel', 'Video'],
-  ['speechModel', 'Speech'],
-  ['transcribeModel', 'Transcription'],
+  ['imageModel', tr('Images')],
+  ['videoModel', tr('Video')],
+  ['speechModel', tr('Speech')],
+  ['transcribeModel', tr('Transcription')],
   ['soundModel', 'Sound effects'],
-  ['musicModel', 'Music'],
+  ['musicModel', tr('Music')],
 ] as const;
 
 function ModelSettings() {
@@ -240,7 +251,7 @@ function ModelSettings() {
   if (!settings) return null;
   const name = (id: string) => models.find((m) => m.id === id)?.name ?? id;
   const jobs: [string, string | undefined][] = [
-    ['Chat', settings.defaultModel],
+    [tr('Chat'), settings.defaultModel],
     ['Fast tasks', settings.smallModel || settings.defaultModel],
     ...JOBS.map(([k, label]): [string, string | undefined] => [label, settings.media[k] || undefined]),
   ];
@@ -248,21 +259,21 @@ function ModelSettings() {
     <>
     <section className="settings-section card">
       <div className="field">
-        <span className="field-label">Default model</span>
+        <span className="field-label">{tr('Default model')}</span>
         <ModelPicker value={settings.defaultModel} onChange={(m) => void save({ defaultModel: m })} variant="input" direction="down" />
-        <span className="field-hint">Used for new chats. You can switch models any time from the chat box, and give each bot its own.</span>
+        <span className="field-hint">{tr('Used for new chats. You can switch models any time from the chat box, and give each bot its own.')}</span>
       </div>
       <div className="field" style={{ marginBottom: 0 }}>
-        <span className="field-label">Fast model</span>
-        <ModelPicker value={settings.smallModel ?? ''} onChange={(m) => void save({ smallModel: m })} variant="input" direction="down" allowEmpty="Same as the chat's model" />
-        <span className="field-hint">A cheaper model for titles, summaries, memory, suggestions and learning from ratings.</span>
+        <span className="field-label">{tr('Fast model')}</span>
+        <ModelPicker value={settings.smallModel ?? ''} onChange={(m) => void save({ smallModel: m })} variant="input" direction="down" allowEmpty={tr('Same as the chat\'s model')} />
+        <span className="field-hint">{tr('A cheaper model for titles, summaries, memory, suggestions and learning from ratings.')}</span>
       </div>
     </section>
     <AutoSettings />
     <section className="settings-section card">
-      <h2>Who does what</h2>
+      <h2>{tr('Who does what')}</h2>
       <p className="muted small" style={{ marginTop: 0 }}>
-        Every job can use its own provider, for example chat through OpenRouter and speech through Google. Bots can also have their own model.
+        {tr('Every job can use its own provider, for example chat through OpenRouter and speech through Google. Bots can also have their own model.')}
       </p>
       <div className="jobs">
         {jobs.map(([label, id]) => (
@@ -274,12 +285,12 @@ function ModelSettings() {
                 <span className="badge">{providerOf(id)}</span>
               </>
             ) : (
-              <span className="muted">Off</span>
+              <span className="muted">{tr('Off')}</span>
             )}
           </div>
         ))}
       </div>
-      <a className="link-btn small" href={href({ page: 'settings', section: 'media' })}>Choose media and voice models →</a>
+      <a className="link-btn small" href={href({ page: 'settings', section: 'media' })}>{tr('Choose media and voice models →')}</a>
     </section>
     </>
   );
@@ -302,9 +313,9 @@ function BudgetSettings() {
   return (
     <>
       <section className="settings-section card">
-        <h2>Spending limits</h2>
+        <h2>{tr('Spending limits')}</h2>
         <p className="muted small" style={{ marginTop: 0 }}>
-          Costs come from your providers (or the model list’s prices when a provider doesn’t report them). Leave a limit empty for none.
+          {tr('Costs come from your providers (or the model list’s prices when a provider doesn’t report them). Leave a limit empty for none.')}
         </p>
         <form
           className="budget-form"
@@ -314,43 +325,43 @@ function BudgetSettings() {
           }}
         >
           <label className="field">
-            <span className="field-label">Per day</span>
+            <span className="field-label">{tr('Per day')}</span>
             <span className="money-input">
-              $<input className="input" type="number" min={0} step="any" value={daily} placeholder="No limit" onChange={(e) => setDaily(e.target.value)} />
+              $<input className="input" type="number" min={0} step="any" value={daily} placeholder={tr('No limit')} onChange={(e) => setDaily(e.target.value)} />
             </span>
           </label>
           <label className="field">
-            <span className="field-label">Per month</span>
+            <span className="field-label">{tr('Per month')}</span>
             <span className="money-input">
-              $<input className="input" type="number" min={0} step="any" value={monthly} placeholder="No limit" onChange={(e) => setMonthly(e.target.value)} />
+              $<input className="input" type="number" min={0} step="any" value={monthly} placeholder={tr('No limit')} onChange={(e) => setMonthly(e.target.value)} />
             </span>
           </label>
-          <button className="btn btn-primary">Save limits</button>
+          <button className="btn btn-primary">{tr('Save limits')}</button>
         </form>
         <div className="field">
-          <span className="field-label">Warn me at</span>
+          <span className="field-label">{tr('Warn me at')}</span>
           <select className="select" style={{ maxWidth: 200 }} value={b.alertPercent} onChange={(e) => void update({ alertPercent: Number(e.target.value) })}>
             {[50, 70, 80, 90, 95].map((p) => (
               <option key={p} value={p}>
-                {p}% of a limit
+                {p}{tr('% of a limit')}
               </option>
             ))}
           </select>
         </div>
         <div className="tool-toggle" style={{ padding: 0, border: 0 }}>
           <div className="grow">
-            <div className="t">Stop at the limit</div>
-            <div className="s">Refuse new requests once a limit is reached, including scheduled tasks and workflows. Otherwise Mitzi only warns.</div>
+            <div className="t">{tr('Stop at the limit')}</div>
+            <div className="s">{tr('Refuse new requests once a limit is reached, including scheduled tasks and workflows. Otherwise Mitzi only warns.')}</div>
           </div>
-          <Toggle label="Stop at the limit" on={b.hardStop} onChange={(v) => void update({ hardStop: v })} />
+          <Toggle label={tr('Stop at the limit')} on={b.hardStop} onChange={(v) => void update({ hardStop: v })} />
         </div>
       </section>
       {budget && (budget.daily || budget.monthly) ? (
         <section className="settings-section card">
-          <h2>So far</h2>
+          <h2>{tr('So far')}</h2>
           <BudgetMeters budget={budget} />
           <a className="link-btn small" href={href({ page: 'insights' })}>
-            See where it goes in Insights →
+            {tr('See where it goes in Insights →')}
           </a>
         </section>
       ) : null}
@@ -369,26 +380,25 @@ function AutoSettings() {
     <section className="settings-section card">
       <h2>
         <Sparkles size={16} className="accent" style={{ verticalAlign: -2, marginRight: 6 }} />
-        Auto
+        {tr('Auto')}
       </h2>
       <p className="muted small" style={{ marginTop: 0 }}>
-        Choose <b>Auto</b> in the model picker and Mitzi picks a model for each message: the quick model for everyday questions and small talk, the in-depth model for code,
-        analysis, long documents, planning and multi-step work. Each answer shows which one it used and why.
+        {tr('Choose')}{' '}<b>{tr('Auto')}</b> {tr('in the model picker and Mitzi picks a model for each message: the quick model for everyday questions and small talk, the in-depth model for code, analysis, long documents, planning and multi-step work. Each answer shows which one it used and why.')}
       </p>
       <div className="field">
-        <span className="field-label">Quick model</span>
-        <ModelPicker value={routing.fast} onChange={(m) => update({ fast: m })} variant="input" direction="down" allowEmpty="The fast model (above)" />
+        <span className="field-label">{tr('Quick model')}</span>
+        <ModelPicker value={routing.fast} onChange={(m) => update({ fast: m })} variant="input" direction="down" allowEmpty={tr('The fast model (above)')} />
       </div>
       <div className="field">
-        <span className="field-label">In-depth model</span>
-        <ModelPicker value={routing.strong} onChange={(m) => update({ strong: m })} variant="input" direction="down" allowEmpty="The default model (above)" />
+        <span className="field-label">{tr('In-depth model')}</span>
+        <ModelPicker value={routing.strong} onChange={(m) => update({ strong: m })} variant="input" direction="down" allowEmpty={tr('The default model (above)')} />
       </div>
       <div className="tool-toggle" style={{ padding: 0, border: 0 }}>
         <div className="grow">
-          <div className="t">Start new chats on Auto</div>
-          <div className="s">Bots with their own model keep it.</div>
+          <div className="t">{tr('Start new chats on Auto')}</div>
+          <div className="s">{tr('Bots with their own model keep it.')}</div>
         </div>
-        <Toggle label="Start new chats on Auto" on={routing.newChats} onChange={(v) => update({ newChats: v })} />
+        <Toggle label={tr('Start new chats on Auto')} on={routing.newChats} onChange={(v) => update({ newChats: v })} />
       </div>
     </section>
   );
@@ -405,53 +415,52 @@ function PhoneSettings() {
   return (
     <>
       <section className="settings-section card">
-        <h2>Use Mitzi on your phone</h2>
+        <h2>{tr('Use Mitzi on your phone')}</h2>
         {!phone ? (
           <Loader2 className="spin muted" size={18} />
         ) : url ? (
           <div className="phone-pair">
-            <div className="phone-qr" aria-label="QR code for your phone" dangerouslySetInnerHTML={{ __html: qrSvg(url, 5) }} />
+            <div className="phone-qr" aria-label={tr('QR code for your phone')} dangerouslySetInnerHTML={{ __html: qrSvg(url, 5) }} />
             <div>
               <ol className="steps-list">
-                <li>On your phone, connect to the same Wi-Fi as this computer.</li>
-                <li>Scan the code with the camera, or open the address below.</li>
+                <li>{tr('On your phone, connect to the same Wi-Fi as this computer.')}</li>
+                <li>{tr('Scan the code with the camera, or open the address below.')}</li>
                 <li>
-                  To keep Mitzi on your home screen: <b>Share → Add to Home Screen</b> on iPhone, or <b>⋮ → Add to Home screen</b> on Android.
+                  {tr('To keep Mitzi on your home screen:')}{' '}<b>{tr('Share → Add to Home Screen')}</b> {tr('on iPhone, or')}{' '}<b>{tr('⋮ → Add to Home screen')}</b> {tr('on Android.')}
                 </li>
               </ol>
               <code className="phone-url">{url}</code>
-              {phone.urls.length > 1 && <p className="muted small">Other addresses of this computer: {phone.urls.slice(1).map((u) => new URL(u).host).join(', ')}</p>}
-              <p className="muted small">The address includes your private access token: anyone on this network who has it can use Mitzi as you.</p>
+              {phone.urls.length > 1 && <p className="muted small">{tr('Other addresses of this computer:')}{' '}{phone.urls.slice(1).map((u) => new URL(u).host).join(', ')}</p>}
+              <p className="muted small">{tr('The address includes your private access token: anyone on this network who has it can use Mitzi as you.')}</p>
             </div>
           </div>
         ) : (
           <>
             <p className="muted small" style={{ marginTop: 0 }}>
-              Mitzi only accepts connections from this computer right now. To open it on your phone (on the same Wi-Fi), start it with:
+              {tr('Mitzi only accepts connections from this computer right now. To open it on your phone (on the same Wi-Fi), start it with:')}
             </p>
             <pre className="trigger-example">mitzi web --lan</pre>
             <p className="muted small">
-              It then shows a QR code here and in the terminal. Use it on networks you trust, like your home Wi-Fi. Away from home, a private network like Tailscale gives the same
-              access securely.
+              {tr('It then shows a QR code here and in the terminal. Use it on networks you trust, like your home Wi-Fi. Away from home, a private network like Tailscale gives the same access securely.')}
             </p>
           </>
         )}
       </section>
       <section className="settings-section card">
-        <h2>Notifications</h2>
+        <h2>{tr('Notifications')}</h2>
         <p className="muted small" style={{ marginTop: 0 }}>
-          A system notification when a chat finishes or needs your approval while you’re in another window or app.
-          {!window.isSecureContext && ' Browsers allow notifications only over https or on this computer (localhost).'}
+          {tr('A system notification when a chat finishes or needs your approval while you’re in another window or app.')}
+          {!window.isSecureContext && tr(' Browsers allow notifications only over https or on this computer (localhost).')}
         </p>
         {permission === 'granted' ? (
-          <span className="badge ok">On</span>
+          <span className="badge ok">{tr('On')}</span>
         ) : permission === 'denied' ? (
-          <p className="small">Notifications are blocked for this site in your browser’s settings.</p>
+          <p className="small">{tr('Notifications are blocked for this site in your browser’s settings.')}</p>
         ) : permission === 'unsupported' || !window.isSecureContext ? (
-          <p className="small muted">Not available here.</p>
+          <p className="small muted">{tr('Not available here.')}</p>
         ) : (
           <button className="btn btn-sm" onClick={() => void Notification.requestPermission().then(setPermission)}>
-            <Bell size={14} /> Turn on notifications
+            <Bell size={14} /> {tr('Turn on notifications')}
           </button>
         )}
       </section>
@@ -468,21 +477,20 @@ function DataSettings() {
     <>
       <section className="settings-section card">
         <h2 className="row" style={{ gap: 8 }}>
-          <Download size={17} /> Import from other AIs
+          <Download size={17} /> {tr('Import from other AIs')}
         </h2>
         <p className="muted small" style={{ marginTop: 0 }}>
-          Bring what ChatGPT, Claude or Gemini know about you, and your chat history from ChatGPT or Claude.
+          {tr('Bring what ChatGPT, Claude or Gemini know about you, and your chat history from ChatGPT or Claude.')}
         </p>
         <button className="btn" onClick={() => setImporting(true)}>
-          <MessagesSquare size={15} /> Import memories or chats…
+          <MessagesSquare size={15} /> {tr('Import memories or chats…')}
         </button>
         {importing && <ImportModal onClose={() => setImporting(false)} />}
       </section>
       <section className="settings-section card">
-        <h2>Your data</h2>
+        <h2>{tr('Your data')}</h2>
         <p className="muted small" style={{ marginTop: 0 }}>
-          Everything stays on this computer: settings and API keys in <code>config.json</code>, and chats, projects, bots, artifacts, memory banks and
-          generated media under <code>data</code>. Back up this folder to keep it all.
+          {tr('Everything stays on this computer: settings and API keys in')}{' '}<code>config.json</code>{tr(', and chats, projects, bots, artifacts, memory banks and generated media under')}{' '}<code>data</code>{tr('. Back up this folder to keep it all.')}
         </p>
         <div className="row">
           <code className="grow" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -493,21 +501,21 @@ function DataSettings() {
             onClick={() =>
               void navigator.clipboard.writeText(settings.home).then(
                 () => (setCopied(true), setTimeout(() => setCopied(false), 1500)),
-                () => toast('Couldn’t copy'),
+                () => toast(tr('Couldn’t copy')),
               )
             }
           >
-            {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'Copied' : 'Copy path'}
+            {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? tr('Copied') : tr('Copy path')}
           </button>
         </div>
       </section>
       <section className="settings-section card">
-        <h2>About</h2>
+        <h2>{tr('About')}</h2>
         <p className="small" style={{ margin: 0 }}>
-          Mitzi <strong>v{settings.version}</strong> · settings are shared with the <code>mitzi</code> command-line tool.
+          {tr('Mitzi')}{' '}<strong>v{settings.version}</strong> {tr('· settings are shared with the')}{' '}<code>mitzi</code> {tr('command-line tool.')}
         </p>
         <p className="muted small" style={{ marginBottom: 0 }}>
-          Updates: <a href={href({ page: 'settings', section: 'updates' })}>check for a new version</a>.
+          {tr('Updates:')}{' '}<a href={href({ page: 'settings', section: 'updates' })}>{tr('check for a new version')}</a>.
         </p>
       </section>
     </>
@@ -536,21 +544,21 @@ function MemorySettings() {
   return (
     <>
     <section className="settings-section card">
-      <h2>Memory engine</h2>
+      <h2>{tr('Memory engine')}</h2>
       <div className="field">
-        <span className="field-label">Memory engine</span>
+        <span className="field-label">{tr('Memory engine')}</span>
         <div className="segmented" style={{ alignSelf: 'flex-start' }}>
           <button className={settings.memoryBackend === 'builtin' ? 'active' : ''} onClick={() => save({ memoryBackend: 'builtin' })}>
-            Built-in
+            {tr('Built-in')}
           </button>
           <button className={settings.memoryBackend === 'hindsight' ? 'active' : ''} onClick={() => save({ memoryBackend: 'hindsight' })}>
-            Hindsight server
+            {tr('Hindsight server')}
           </button>
         </div>
         <span className="field-hint">
           {settings.memoryBackend === 'builtin'
-            ? 'Banks are stored in ~/.mitzi/data/banks and use your fast model to extract and consolidate memories.'
-            : 'Banks live on a Hindsight server, which runs its own extraction, embeddings and reranking.'}
+            ? tr('Banks are stored in ~/.mitzi/data/banks and use your fast model to extract and consolidate memories.')
+            : tr('Banks live on a Hindsight server, which runs its own extraction, embeddings and reranking.')}
         </span>
       </div>
 
@@ -562,30 +570,29 @@ function MemorySettings() {
             void save({ embeddingModel: embedding.trim() }, embedding.trim() ? 'Semantic recall enabled' : 'Semantic recall disabled');
           }}
         >
-          <span className="field-label">Embedding model (optional)</span>
+          <span className="field-label">{tr('Embedding model (optional)')}</span>
           <div className="row">
-            <input className="input mono" placeholder="e.g. openai/text-embedding-3-small" value={embedding} onChange={(e) => setEmbedding(e.target.value)} />
+            <input className="input mono" placeholder={tr('e.g. openai/text-embedding-3-small')} value={embedding} onChange={(e) => setEmbedding(e.target.value)} />
             <button className="btn" disabled={embedding.trim() === settings.embeddingModel}>
-              Save
+              {tr('Save')}
             </button>
           </div>
           <span className="field-hint">
-            Adds semantic search to recall, using an OpenAI-compatible embeddings endpoint on your API provider. Leave empty to recall with keywords,
-            entities and time only.
+            {tr('Adds semantic search to recall, using an OpenAI-compatible embeddings endpoint on your API provider. Leave empty to recall with keywords, entities and time only.')}
           </span>
         </form>
       ) : (
         <>
           <div className="field">
-            <span className="field-label">Server URL</span>
+            <span className="field-label">{tr('Server URL')}</span>
             <div className="row">
               <input className="input mono" placeholder="http://localhost:8888" value={url} onChange={(e) => setUrl(e.target.value)} />
               <button className="btn" disabled={url.trim() === settings.hindsightUrl} onClick={() => save({ hindsightUrl: url.trim() }, 'Hindsight server saved')}>
-                Save
+                {tr('Save')}
               </button>
             </div>
             <span className="field-hint">
-              Run one with <code>docker run -p 8888:8888 -p 9999:9999 -e HINDSIGHT_API_LLM_API_KEY=… ghcr.io/vectorize-io/hindsight:latest</code>. See{' '}
+              {tr('Run one with')}{' '}<code>docker run -p 8888:8888 -p 9999:9999 -e HINDSIGHT_API_LLM_API_KEY=… ghcr.io/vectorize-io/hindsight:latest</code>{tr('. See')}{' '}
               <a href="https://github.com/vectorize-io/hindsight" target="_blank" rel="noreferrer">
                 github.com/vectorize-io/hindsight
               </a>
@@ -593,13 +600,13 @@ function MemorySettings() {
             </span>
           </div>
           <div className="field">
-            <span className="field-label">API key (if your server needs one)</span>
+            <span className="field-label">{tr('API key (if your server needs one)')}</span>
             <div className="row">
               <input
                 className="input mono"
                 type="password"
                 autoComplete="off"
-                placeholder={settings.hasHindsightKey ? 'Saved; enter a new key to replace it' : 'Optional'}
+                placeholder={settings.hasHindsightKey ? tr('Saved; enter a new key to replace it') : tr('Optional')}
                 value={key}
                 onChange={(e) => setKey(e.target.value)}
               />
@@ -611,7 +618,7 @@ function MemorySettings() {
                   setKey('');
                 }}
               >
-                Save
+                {tr('Save')}
               </button>
             </div>
           </div>
@@ -630,34 +637,34 @@ function MemorySettings() {
                 }
               }}
             >
-              {testing === 'ok' ? <Check size={14} /> : null} {testing === 'busy' ? 'Testing…' : testing === 'ok' ? 'Connected' : 'Test connection'}
+              {testing === 'ok' ? <Check size={14} /> : null} {testing === 'busy' ? tr('Testing…') : testing === 'ok' ? tr('Connected') : tr('Test connection')}
             </button>
           </div>
         </>
       )}
 
       <div className="field" style={{ marginTop: 18, marginBottom: 0 }}>
-        <span className="field-label">Memories recalled per message</span>
+        <span className="field-label">{tr('Memories recalled per message')}</span>
         <select className="select" style={{ maxWidth: 260 }} value={settings.recallTokens} onChange={(e) => void save({ recallTokens: Number(e.target.value) })}>
           {[600, 1200, 2000, 4000].map((n) => (
             <option key={n} value={n}>
-              Up to ~{n.toLocaleString()} tokens{n === 1200 ? ' (default)' : ''}
+              {tr('Up to ~')}{n.toLocaleString()} tokens{n === 1200 ? tr(' (default)') : ''}
             </option>
           ))}
         </select>
       </div>
     </section>
     <section className="settings-section card">
-      <h2>Memory banks</h2>
+      <h2>{tr('Memory banks')}</h2>
       <p className="muted small" style={{ marginTop: 0 }}>
-        Browse, edit and teach each bot’s memory, or bring memories over from ChatGPT, Claude and Gemini.
+        {tr('Browse, edit and teach each bot’s memory, or bring memories over from ChatGPT, Claude and Gemini.')}
       </p>
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
         <a className="btn" href={href({ page: 'memory' })}>
-          <Brain size={15} /> Open memory banks
+          <Brain size={15} /> {tr('Open memory banks')}
         </a>
         <button className="btn" onClick={() => setImporting(true)}>
-          <Download size={15} /> Import from other AIs
+          <Download size={15} /> {tr('Import from other AIs')}
         </button>
       </div>
       {importing && <ImportModal initialTab="memory" onClose={() => setImporting(false)} />}
@@ -666,7 +673,7 @@ function MemorySettings() {
   );
 }
 
-const STEP_LABEL: Record<UpdateStep, string> = { download: 'Download the new version', install: 'Install dependencies', build: 'Build' };
+const STEP_LABEL: Record<UpdateStep, string> = { download: tr('Download the new version'), install: tr('Install dependencies'), build: tr('Build') };
 
 function UpdateSettings() {
   const { settings, update, setUpdate, toast } = useApp();
@@ -734,8 +741,8 @@ function UpdateSettings() {
     return (
       <section className="settings-section card update-restart">
         <Loader2 size={26} className="spin accent" />
-        <h2>Restarting Mitzi…</h2>
-        <p className="muted small">The new version is starting. This page reloads by itself in a few seconds.</p>
+        <h2>{tr('Restarting Mitzi…')}</h2>
+        <p className="muted small">{tr('The new version is starting. This page reloads by itself in a few seconds.')}</p>
       </section>
     );
   }
@@ -746,31 +753,30 @@ function UpdateSettings() {
         <div className="update-head">
           <div className="grow">
             <div className="update-version">
-              Mitzi <strong>v{u?.current.version ?? settings.version}</strong>
+              {tr('Mitzi')}{' '}<strong>v{u?.current.version ?? settings.version}</strong>
               {u?.current.commit && <span className="muted small"> · {u.current.commit} · {date(u.current.date)}</span>}
             </div>
             <div className="small">
               {!u ? (
-                <span className="muted">Checking…</span>
+                <span className="muted">{tr('Checking…')}</span>
               ) : !u.supported ? (
                 <span className="update-warn">
                   <AlertTriangle size={13} /> {u.reason}
                 </span>
               ) : u.behind ? (
                 <span className="accent">
-                  <ArrowUpCircle size={13} /> {u.latest && u.latest.version !== u.current.version ? `Version ${u.latest.version} is available` : 'An update is available'} ({u.behind} change
-                  {u.behind === 1 ? '' : 's'}, {date(u.latest?.date)})
+                  <ArrowUpCircle size={13} /> {u.latest && u.latest.version !== u.current.version ? tr('Version {0} is available', u.latest.version) : tr('An update is available')} ({plural(u.behind, '1 change', '{0} changes')}, {date(u.latest?.date)})
                 </span>
               ) : (
                 <span className="ok-text">
-                  <Check size={13} /> You have the latest version
+                  <Check size={13} /> {tr('You have the latest version')}
                 </span>
               )}
-              {u && <span className="muted"> · checked {new Date(u.checkedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</span>}
+              {u && <span className="muted"> {tr('· checked')}{' '}{new Date(u.checkedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</span>}
             </div>
           </div>
           <button className="btn btn-sm" disabled={checking || phase === 'updating'} onClick={() => void check()}>
-            {checking ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />} Check now
+            {checking ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />} {tr('Check now')}
           </button>
         </div>
 
@@ -778,7 +784,7 @@ function UpdateSettings() {
           <>
             <div className="update-changes">
               <div className="small" style={{ fontWeight: 600, marginBottom: 6 }}>
-                What’s new
+                {tr('What’s new')}
               </div>
               <ul>
                 {u.commits.slice(0, 12).map((c) => (
@@ -786,15 +792,15 @@ function UpdateSettings() {
                     {c.subject} <span className="muted small">{date(c.date)}</span>
                   </li>
                 ))}
-                {u.commits.length > 12 && <li className="muted">…and {u.behind - 12} more</li>}
+                {u.commits.length > 12 && <li className="muted">{tr('…and')}{' '}{u.behind - 12} more</li>}
               </ul>
             </div>
             <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
               <button className="btn btn-primary" onClick={() => void run()}>
-                <ArrowUpCircle size={15} /> {u.canRestart ? 'Update and restart' : 'Update'}
+                <ArrowUpCircle size={15} /> {u.canRestart ? tr('Update and restart') : tr('Update')}
               </button>
               <span className="muted small">
-                {u.canRestart ? 'Takes a minute or two. Replies in progress stop when Mitzi restarts.' : 'After updating, restart Mitzi to use the new version.'}
+                {u.canRestart ? tr('Takes a minute or two. Replies in progress stop when Mitzi restarts.') : tr('After updating, restart Mitzi to use the new version.')}
               </span>
             </div>
           </>
@@ -808,13 +814,13 @@ function UpdateSettings() {
                 <div key={step} className={`update-step ${st ?? 'waiting'}`}>
                   {st === 'running' ? <Loader2 size={15} className="spin" /> : st === 'done' ? <Check size={15} /> : <CircleDashed size={15} />}
                   {STEP_LABEL[step]}
-                  {st === 'skipped' && <span className="muted small"> · no changes</span>}
+                  {st === 'skipped' && <span className="muted small"> {tr('· no changes')}</span>}
                 </div>
               );
             })}
             {log.length > 0 && (
               <details className="update-log">
-                <summary className="small muted">Details</summary>
+                <summary className="small muted">{tr('Details')}</summary>
                 <pre>{log.slice(-60).join('\n')}</pre>
               </details>
             )}
@@ -823,7 +829,7 @@ function UpdateSettings() {
         {phase === 'error' && <div className="error-box" style={{ marginTop: 12, whiteSpace: 'pre-wrap' }}>{error}</div>}
         {phase === 'restart-required' && (
           <div className="card small" style={{ marginTop: 12, padding: 12 }}>
-            Updated. Close Mitzi and start it again (<code>mitzi ui</code>) to use the new version.
+            {tr('Updated. Close Mitzi and start it again (')}<code>mitzi ui</code>{tr(') to use the new version.')}
           </div>
         )}
       </section>
@@ -831,13 +837,13 @@ function UpdateSettings() {
       <section className="settings-section card">
         <div className="setting-row" style={{ borderTop: 0, paddingTop: 0 }}>
           <div>
-            <div>Check for updates automatically</div>
-            <div className="muted small">Mitzi looks for a new version twice a day and shows “Update available” in the sidebar. It never updates without asking.</div>
+            <div>{tr('Check for updates automatically')}</div>
+            <div className="muted small">{tr('Mitzi looks for a new version twice a day and shows “Update available” in the sidebar. It never updates without asking.')}</div>
           </div>
-          <Toggle on={settings.autoCheckUpdates} label="Check for updates automatically" onChange={(v) => void save({ autoCheckUpdates: v })} />
+          <Toggle on={settings.autoCheckUpdates} label={tr('Check for updates automatically')} onChange={(v) => void save({ autoCheckUpdates: v })} />
         </div>
         <p className="muted small" style={{ marginBottom: 0 }}>
-          From a terminal: <code>mitzi update</code>.
+          {tr('From a terminal:')}{' '}<code>mitzi update</code>.
         </p>
       </section>
     </>

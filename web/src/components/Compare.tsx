@@ -2,6 +2,7 @@ import { Columns2, Loader2, Trophy, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../api';
 import { Markdown } from './Markdown';
+import { tr } from '../i18n';
 
 /** Live state of a /compare race, fed by compare_* stream events. */
 export interface CompareState {
@@ -43,7 +44,7 @@ function Side({ label, model, text, done, error, winner }: { label: string; mode
       <div className="compare-head">
         <span className="compare-badge">{label}</span>
         <code className="compare-model" title={model}>{model}</code>
-        {winner && <Trophy size={13} className="compare-trophy" aria-label="Winner" />}
+        {winner && <Trophy size={13} className="compare-trophy" aria-label={tr('Winner')} />}
         {!done && <Loader2 size={13} className="spin muted" />}
       </div>
       <div className="compare-body">
@@ -54,7 +55,7 @@ function Side({ label, model, text, done, error, winner }: { label: string; mode
         ) : text ? (
           <Markdown text={text} />
         ) : (
-          <span className="muted small">Waiting for {model}…</span>
+          <span className="muted small">{tr('Waiting for')}{' '}{model}…</span>
         )}
       </div>
     </div>
@@ -79,28 +80,28 @@ export function CompareView({ chatId, state, onPicked }: { chatId: string; state
     <div className="compare">
       <div className="compare-title">
         <Columns2 size={14} />
-        <span>Comparing two models</span>
+        <span>{tr('Comparing two models')}</span>
       </div>
       <div className="compare-grid">
         <Side label="A" model={state.modelA} text={state.textA} done={state.doneA !== undefined} error={state.errorA} winner={state.picked === 'A'} />
         <Side label="B" model={state.modelB} text={state.textB} done={state.doneB !== undefined} error={state.errorB} winner={state.picked === 'B'} />
       </div>
       {showPicker && !bothFailed && (
-        <div className="compare-pick" role="group" aria-label="Pick the winner">
-          <span className="small">Which answer is better?</span>
+        <div className="compare-pick" role="group" aria-label={tr('Pick the winner')}>
+          <span className="small">{tr('Which answer is better?')}</span>
           <button className="pill-btn" disabled={busy || state.errorA !== undefined} onClick={() => void pick('A')}>
-            A {state.errorA === undefined ? 'wins' : ''}
+            A {state.errorA === undefined ? tr('wins') : ''}
           </button>
           <button className="pill-btn" disabled={busy || state.errorB !== undefined} onClick={() => void pick('B')}>
-            B {state.errorB === undefined ? 'wins' : ''}
+            B {state.errorB === undefined ? tr('wins') : ''}
           </button>
           <button className="pill-btn" disabled={busy} onClick={() => void pick('skip')}>
             skip
           </button>
         </div>
       )}
-      {state.picked && state.picked !== 'skip' && <div className="small muted">Picked {state.picked === 'A' ? state.modelA : state.modelB} — kept as this turn's answer.</div>}
-      {state.picked === 'skip' && <div className="small muted">Skipped — neither answer was kept.</div>}
+      {state.picked && state.picked !== 'skip' && <div className="small muted">{tr('Picked')}{' '}{state.picked === 'A' ? state.modelA : state.modelB} {tr('— kept as this turn\'s answer.')}</div>}
+      {state.picked === 'skip' && <div className="small muted">{tr('Skipped — neither answer was kept.')}</div>}
     </div>
   );
 }
