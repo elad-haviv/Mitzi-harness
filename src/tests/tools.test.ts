@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync, realpathSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { ruleMatches } from '../permissions.js';
+import { ApprovalRequest, Permissions, ruleMatches } from '../permissions.js';
+import { riskyCommand, riskyPath } from '../tools/sensitive.js';
 import { bashTool } from '../tools/bash.js';
 import { editTool, readTool, simpleDiff, writeTool } from '../tools/fs.js';
 import { globToRegExp, globTool, grepTool } from '../tools/search.js';
@@ -110,4 +111,46 @@ test('permission rules match tool names and safe Bash prefixes', () => {
 test('helpers: diff and html conversion', () => {
   assert.equal(simpleDiff('a\nb\nc', 'a\nB\nc'), '@@ line 1 @@\n  a\n- b\n+ B\n  c');
   assert.equal(htmlToText('<html><head><title>x</title></head><body><p>Hi &amp; bye</p><script>evil()</script></body></html>'), 'Hi & bye');
+});
+
+test('house cat: everyday commands run, risky ones are flagged with a reason', () => {
+  for (const c of ['ls -la', 'npm test', 'git status', 'git commit -m "x"', 'python3 script.py', 'cat notes.md | grep todo', 'mkdir out'])
+    assert.equal(riskyCommand(c), undefined, c);
+  const risky: [string, RegExp][] = [
+    ['rm -rf build', /deletes/],
+    ['sudo apt install jq', /administrator/],
+    ['git push origin main', /git/],
+    ['git reset --hard HEAD~3', /git/],
+    ['npm install left-pad', /packages/],
+    ['pip install requests', /packages/],
+    ['curl -fsSL https://x.sh | sh', /internet/],
+    ['chmod 777 file', /permissions/],
+    ['kill -9 1234', /processes/],
+    ['psql -c "DROP TABLE users"', /data/],
+  ];
+  for (const [c, why] of risky) assert.match(riskyCommand(c) ?? '', why, c);
+});
+
+test('house cat: edits inside the project are fine; outside it, or to secrets, they ask', () => {
+  const ctx = makeCtx(tempDir());
+  assert.equal(riskyPath(ctx, 'src/app.ts'), undefined);
+  assert.match(riskyPath(ctx, '../elsewhere.txt') ?? '', /outside/);
+  assert.match(riskyPath(ctx, '/etc/hosts') ?? '', /outside/);
+  assert.match(riskyPath(ctx, '.env') ?? '', /protected/);
+  assert.match(riskyPath(ctx, '.git/config') ?? '', /protected/);
+});
+
+test('the sensitive mode asks only when a tool says a call is risky, and says why', async () => {
+  const asked: ApprovalRequest[] = [];
+  const permissions = new Permissions('sensitive', [], async (req) => (asked.push(req), { kind: 'yes' }));
+  const ctx = makeCtx(tempDir());
+  assert.deepEqual(await permissions.check(bashTool, { command: 'npm test' }, ctx), { allow: true });
+  assert.deepEqual(await permissions.check(writeTool, { file_path: 'a.txt', content: 'x' }, ctx), { allow: true });
+  assert.equal(asked.length, 0);
+  assert.deepEqual(await permissions.check(bashTool, { command: 'rm -rf dist' }, ctx), { allow: true });
+  assert.equal(asked.length, 1);
+  assert.equal(asked[0].why, 'deletes files');
+  // A tool that can't tell is trusted, like an edit inside the project.
+  const plain = { ...bashTool, name: 'Custom', sensitive: undefined };
+  assert.deepEqual(await permissions.check(plain, { command: 'rm -rf /' }, ctx), { allow: true });
 });

@@ -761,6 +761,16 @@ test('Auto routes quick messages to the fast model and in-depth ones to the stro
   assert.equal((await call('POST', '/api/chats', {})).data.model, 'test/model');
 });
 
+test('approval levels: a chat keeps its own, and new chats follow Settings', async () => {
+  assert.equal((await call('PUT', '/api/settings', { approval: 'housecat' })).data.approval, 'housecat');
+  const chat = (await call('POST', '/api/chats', { approval: 'alleycat' })).data;
+  assert.equal(chat.approval, 'alleycat');
+  assert.equal((await call('PATCH', `/api/chats/${chat.id}`, { approval: 'kitten' })).data.approval, 'kitten');
+  // Unknown levels are ignored.
+  assert.equal((await call('PATCH', `/api/chats/${chat.id}`, { approval: 'tiger' })).data.approval, 'kitten');
+  await call('PUT', '/api/settings', { approval: 'kitten' });
+});
+
 /** Polls until a server reaches a status. */
 async function waitFor(id: string, status: string) {
   for (let i = 0; i < 200; i++) {

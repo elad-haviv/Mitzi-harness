@@ -6422,3 +6422,77 @@ button.todo-check:not(:disabled):hover {
 .chat-group-new:focus-visible {
   opacity: 1;
 }
+
+/* ---------- Approval levels (Kitten / House cat / Alley cat) ---------- */
+.approval-emoji {
+  font-size: 14px;
+  line-height: 1;
+}
+.approval-emoji.big {
+  font-size: 22px;
+}
+.approval-chip.alleycat {
+  color: var(--warn);
+}
+.approval-menu {
+  width: 340px;
+  max-width: calc(100vw - 32px);
+}
+.approval-menu > button {
+  align-items: flex-start;
+  white-space: normal;
+}
+.approval-menu > button.on {
+  background: var(--surface-2);
+}
+.approval-menu .menu-sub {
+  white-space: normal;
+  line-height: 1.35;
+}
+.approval-menu .menu-foot {
+  padding: 6px 10px 4px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+.approval-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+.approval-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+  color: var(--text);
+}
+.approval-option.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.approval-option .t {
+  font-weight: 600;
+  font-size: 14px;
+}
+.approval-option .s {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.permission-why {
+  display: block;
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+@media (max-width: 720px) {
+  .approval-chip .approval-name {
+    display: none;
+  }
+}

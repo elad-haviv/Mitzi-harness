@@ -32,6 +32,8 @@ interface Props {
   extra?: ReactNode;
   /** Shown after the model picker, e.g. the project picker. */
   leading?: ReactNode;
+  /** Shift+Tab in the message box (switches the approval level). */
+  onShiftTab?(): void;
 }
 
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(props, handle) {
@@ -204,6 +206,11 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
                 setText('');
                 return;
               }
+            }
+            if (e.key === 'Tab' && e.shiftKey && props.onShiftTab) {
+              e.preventDefault();
+              props.onShiftTab();
+              return;
             }
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();

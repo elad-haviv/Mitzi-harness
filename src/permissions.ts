@@ -16,6 +16,8 @@ export interface ApprovalRequest {
   preview?: string;
   /** The rule that "always allow" would add, e.g. `Bash(npm)`. */
   alwaysRule: string;
+  /** Why the call needs a look, in the `sensitive` mode ("deletes files"). */
+  why?: string;
   callId?: string;
 }
 
@@ -69,6 +71,15 @@ export class Permissions implements PermissionChecker {
       };
     }
     if (this.mode === 'acceptEdits' && tool.kind === 'edit') return { allow: true };
+    let why: string | undefined;
+    if (this.mode === 'sensitive') {
+      try {
+        why = tool.sensitive?.(args, ctx);
+      } catch {
+        why = undefined;
+      }
+      if (!why) return { allow: true };
+    }
     if ([...this.rules, ...this.sessionRules].some((r) => ruleMatches(r, tool, args))) return { allow: true };
 
     if (!this.approver) {
@@ -90,7 +101,7 @@ export class Permissions implements PermissionChecker {
 
     let answer: ApprovalAnswer;
     try {
-      answer = await this.approver({ tool, args, summary, preview, alwaysRule, callId }, signal);
+      answer = await this.approver({ tool, args, summary, preview, alwaysRule, callId, why }, signal);
     } catch {
       return { allow: false, stop: true, reason: 'The user interrupted the permission prompt.' };
     }

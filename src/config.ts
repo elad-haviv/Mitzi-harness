@@ -3,8 +3,9 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { ProviderConfig } from './shared/types.js';
 
-export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'yolo';
-export const PERMISSION_MODES: PermissionMode[] = ['default', 'acceptEdits', 'plan', 'yolo'];
+/** `sensitive` asks only for risky calls (see each tool's `sensitive`). */
+export type PermissionMode = 'default' | 'acceptEdits' | 'sensitive' | 'plan' | 'yolo';
+export const PERMISSION_MODES: PermissionMode[] = ['default', 'acceptEdits', 'sensitive', 'plan', 'yolo'];
 
 export interface Config {
   apiKey: string;

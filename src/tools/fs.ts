@@ -1,5 +1,6 @@
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
+import { riskyPath } from './sensitive.js';
 import { resolvePath, Tool, ToolContext, ToolError } from './types.js';
 
 const MAX_LINES = 2000;
@@ -130,6 +131,7 @@ export const writeTool: Tool<WriteArgs> = {
     required: ['file_path', 'content'],
   },
   summarize: (a, ctx) => display(ctx, resolvePath(ctx, a.file_path)),
+  sensitive: (a, ctx) => riskyPath(ctx, a.file_path),
   async preview(args, ctx) {
     const abs = resolvePath(ctx, args.file_path);
     const old = await readFile(abs, 'utf8').catch(() => null);
@@ -189,6 +191,7 @@ export const editTool: Tool<EditArgs> = {
     required: ['file_path', 'old_string', 'new_string'],
   },
   summarize: (a, ctx) => display(ctx, resolvePath(ctx, a.file_path)),
+  sensitive: (a, ctx) => riskyPath(ctx, a.file_path),
   async preview(args, ctx) {
     try {
       const old = await readFile(resolvePath(ctx, args.file_path), 'utf8');

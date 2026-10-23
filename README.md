@@ -13,6 +13,7 @@ An open-source, Claude-style AI workspace that runs on **any model available thr
 - **Budgets and alerts**: set a daily or monthly spending limit (Settings → Usage & budget). Mitzi warns you when you near it (at 80% by default), and can stop new requests, scheduled tasks and workflows included, once a limit is reached.
 - **Auto model**: pick *Auto* in the model picker and Mitzi chooses a model for each message: a quick, cheap one for everyday questions and a strong one for code, analysis, long documents and multi-step work. Each answer shows which model it used and why, and Insights shows the split and the estimated savings. Choose the two models in Settings → Models.
 - Edit any earlier message, regenerate the last answer, stop a response mid-stream, and copy replies.
+- **Approval levels, cat style**: 🐱 *Kitten* asks before every change, 🐈 *House cat* works on its own and asks only before risky actions (deleting, installing, pushing, system changes, writing outside the project, acting in connected apps), and 🐈‍⬛ *Alley cat* never asks. Pick one per chat from the chat box (Shift+Tab cycles), and the default in Settings → General.
 - Switch models per chat. The model picker is searchable and shows each model's price, context size, and vision and tool support.
 - One-click web search uses OpenRouter's `:online` option.
 - Chats get titles automatically. Rename, pin, delete or move a chat to a project from its **⋯** menu in the sidebar (or right-click it), and search them.

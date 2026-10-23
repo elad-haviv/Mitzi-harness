@@ -1,10 +1,10 @@
 import { homedir } from 'node:os';
 import { Agent } from '../agent.js';
-import type { Config } from '../config.js';
+import type { Config, PermissionMode } from '../config.js';
 import type { ContentPart, LlmClient, Message } from '../openrouter.js';
 import type { RoutingClient } from '../providers.js';
 import { ApprovalAnswer, Approver, Permissions } from '../permissions.js';
-import { Artifact, Attachment, AUTO_MODEL, Bot, Chat, ChatMessage, ChatSummary, DEFAULT_BOT_ID, RecalledMemory, RouteChoice, StreamEvent } from '../shared/types.js';
+import { ApprovalLevel, Artifact, Attachment, AUTO_MODEL, Bot, Chat, ChatMessage, ChatSummary, DEFAULT_BOT_ID, RecalledMemory, RouteChoice, StreamEvent } from '../shared/types.js';
 import { ALL_TOOLS, Tool, toToolSpecs } from '../tools/index.js';
 import { webFetchTool } from '../tools/web.js';
 import type { Todo } from '../tools/types.js';
@@ -210,6 +210,25 @@ export class ChatRunner {
   /** The bots this bot can hand tasks to. */
   teamFor(bot: Bot): Bot[] {
     return bot.tools.team === false ? [] : this.deps.store.bots.all().filter((b) => b.id !== bot.id);
+  }
+
+  /** The chat's approval level: its own, else the project's permissions, else the default from Settings. */
+  approvalOf(chat: Chat): ApprovalLevel {
+    if (chat.approval) return chat.approval;
+    const project = chat.projectId ? this.deps.store.projects.get(chat.projectId) : undefined;
+    if (project?.permissionMode === 'yolo') return 'alleycat';
+    if (project?.permissionMode === 'sensitive') return 'housecat';
+    return this.deps.store.settings.approval ?? 'kitten';
+  }
+
+  /** The permission mode a turn runs in. A project in plan mode stays read-only whatever the level. */
+  permissionMode(chat: Chat): PermissionMode {
+    const project = chat.projectId ? this.deps.store.projects.get(chat.projectId) : undefined;
+    if (project?.permissionMode === 'plan') return 'plan';
+    const level = this.approvalOf(chat);
+    if (level === 'alleycat') return 'yolo';
+    if (level === 'housecat') return 'sensitive';
+    return project?.permissionMode === 'acceptEdits' ? 'acceptEdits' : 'default';
   }
 
   /** The fast and strong models the Auto model picks from. */
@@ -586,6 +605,7 @@ export class ChatRunner {
           summary: req.summary,
           preview: req.preview,
           alwaysRule: req.alwaysRule,
+          ...(req.why ? { why: req.why } : {}),
         });
       });
 
@@ -593,7 +613,7 @@ export class ChatRunner {
     for (const w of toolset.warnings) emit({ type: 'warn', message: w });
     let tools = toolset.tools;
     const team = this.teamFor(bot);
-    const permissions = new Permissions(project?.permissionMode ?? 'default', chat.allowedRules, approver);
+    const permissions = new Permissions(this.permissionMode(chat), chat.allowedRules, approver);
     if (team.length && !planRequest) {
       tools.push(delegateTool(team, (mate, task, callId, toolSignal) => this.runTeammate(chat, bot, mate, task, { callId, permissions, emit, signal: toolSignal ?? signal, model })));
     }

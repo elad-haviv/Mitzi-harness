@@ -233,6 +233,8 @@ export class McpManager {
         return `${server.name} · ${label}${first ? `: ${first.slice(0, 80)}` : ''}`;
       },
       preview: async (args) => JSON.stringify(args ?? {}, null, 2),
+      // Writes in a connected app (email, calendar, files…) are always worth a look.
+      sensitive: () => `acts in ${server.name}`,
       run: async (args, ctx) => {
         await this.ensure(server.id);
         const client = this.conns.get(server.id)?.client;

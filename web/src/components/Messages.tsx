@@ -798,6 +798,8 @@ export interface PermissionRequest {
   summary: string;
   preview?: string;
   alwaysRule: string;
+  /** Why it asks, when only risky actions need approval. */
+  why?: string;
 }
 
 export function PermissionCard({ req, onAnswer }: { req: PermissionRequest; onAnswer(answer: 'yes' | 'always' | 'no' | 'feedback', feedback?: string): void }) {
@@ -813,6 +815,7 @@ export function PermissionCard({ req, onAnswer }: { req: PermissionRequest; onAn
         <ShieldCheck size={18} />
         <span>
           <strong>Allow {req.tool}?</strong> <code>{req.summary}</code>
+          {req.why && <span className="permission-why">🐈 Asking because it {req.why}</span>}
         </span>
       </div>
       {req.preview && (

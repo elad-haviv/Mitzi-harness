@@ -24,7 +24,7 @@ import {
   X,
 } from 'lucide-react';
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, Artifact, Attachment, AUTO_MODEL, Chat, ChatMessage, ChatMode, DEFAULT_BOT_ID, FeedbackLoop, Goal, RecalledMemory, RepoStatus, RouteChoice, StreamEvent } from '../api';
+import { api, ApprovalLevel, Artifact, Attachment, AUTO_MODEL, Chat, ChatMessage, ChatMode, DEFAULT_BOT_ID, FeedbackLoop, Goal, RecalledMemory, RepoStatus, RouteChoice, StreamEvent } from '../api';
 import { ImportModal } from '../components/Import';
 import { LiveMode } from '../components/LiveMode';
 import { ProjectChip } from '../components/ProjectChip';
@@ -49,6 +49,7 @@ import {
   UsagePanel,
 } from '../components/Work';
 import { Markdown } from '../components/Markdown';
+import { APPROVAL, ApprovalPicker, approvalOf, nextLevel } from '../components/Approval';
 import { AssistantTurn, Avatar, buildTurns, messageText, Reasoning, CompactDivider, MemoryRecall, PermissionCard, PermissionRequest, RouteBadge, ToolBlock, UserTurn } from '../components/Messages';
 import { Menu, useConfirm } from '../components/ui';
 import { href, navigate, parseRoute } from '../router';
@@ -144,6 +145,7 @@ export function ChatView({
   const [btw, setBtw] = useState<BtwState>();
   const [loops, setLoops] = useState<FeedbackLoop[]>([]);
   const [draftMode, setDraftMode] = useState<ChatMode>('chat');
+  const [draftApproval, setDraftApproval] = useState<ApprovalLevel>();
   const onArtifactRef = useRef(onArtifact);
   onArtifactRef.current = onArtifact;
 
@@ -433,7 +435,7 @@ export function ChatView({
     let id = chatId;
     if (!id) {
       try {
-        const created = await api.createChat({ projectId, botId, model: draftModel || undefined, mode: draftMode === 'work' ? 'work' : undefined });
+        const created = await api.createChat({ projectId, botId, model: draftModel || undefined, mode: draftMode === 'work' ? 'work' : undefined, approval: draftApproval });
         if (draftWeb) await api.updateChat(created.id, { webSearch: true });
         const fresh = { ...created, webSearch: draftWeb };
         setChat(fresh);
@@ -516,6 +518,12 @@ export function ChatView({
     composer.current?.setText(`/plan ${chat.plan.request}\n\nChanges to the last plan: `);
   };
   const setMode = (mode: ChatMode) => (chat ? void updateChat({ mode }) : setDraftMode(mode));
+  const approval = approvalOf(chat ?? { approval: draftApproval }, projects.find((p) => p.id === (chat?.projectId ?? projectId)), settings);
+  const setApproval = (level: ApprovalLevel) => {
+    if (chat) void updateChat({ approval: level });
+    else setDraftApproval(level);
+    toast(`${APPROVAL[level].emoji} ${APPROVAL[level].name}: ${APPROVAL[level].short.toLowerCase()}`, 'info');
+  };
   const chatActions: ChatActions = {
     chat,
     running,
@@ -567,15 +575,19 @@ export function ChatView({
       webSearch={webSearch}
       onWebSearchChange={(on) => (chat ? void updateChat({ webSearch: on }) : setDraftWeb(on))}
       leading={
-        !embedded && (
-          <ProjectChip
-            projectId={chat?.projectId ?? projectId}
-            onChange={(id) =>
-              chat ? void updateChat({ projectId: id }) : navigate({ page: 'new', projectId: id ?? undefined, botId }, true)
-            }
-          />
-        )
+        <>
+          {!embedded && (
+            <ProjectChip
+              projectId={chat?.projectId ?? projectId}
+              onChange={(id) =>
+                chat ? void updateChat({ projectId: id }) : navigate({ page: 'new', projectId: id ?? undefined, botId }, true)
+              }
+            />
+          )}
+          <ApprovalPicker level={approval} onChange={setApproval} planOnly={project?.permissionMode === 'plan'} />
+        </>
       }
+      onShiftTab={() => setApproval(nextLevel(approval))}
       placeholder={placeholder ?? (customBot ? `Message ${customBot.name}…` : project ? `Message Mitzi in ${project.name}…` : undefined)}
       autoFocus
       extra={

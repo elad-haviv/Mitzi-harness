@@ -176,6 +176,7 @@ function ProjectForm({ project, onClose, onSaved }: { project?: ProjectView; onC
 const MODE_INFO: Record<PermissionMode, string> = {
   default: 'Ask before editing files, running commands or fetching URLs',
   acceptEdits: 'Edit files freely, ask before commands and network',
+  sensitive: 'Work freely, ask only before risky actions',
   plan: 'Read-only: research and propose a plan',
   yolo: 'Never ask (use with care)',
 };

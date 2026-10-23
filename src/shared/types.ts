@@ -34,6 +34,8 @@ export interface UiSettings {
   budget?: BudgetSettings;
   /** The models the "Auto" model chooses between. */
   routing?: RoutingSettings;
+  /** Approval level for chats that don't set their own. */
+  approval?: ApprovalLevel;
 }
 
 /** The model id that picks a fast or strong model for each message. */
@@ -285,6 +287,8 @@ export interface Chat {
   imported?: { source: ImportSource; id: string };
   /** Chat answers conversationally; Work takes on tasks: it plans, keeps a task list and works until done. */
   mode?: ChatMode;
+  /** How much the bot may do without asking; unset follows the project, then Settings. */
+  approval?: ApprovalLevel;
   /** The task list the bot keeps while working. */
   todos?: Todo[];
   /** A goal set with /goal: the bot keeps working, turn after turn, until it's met. */
@@ -296,6 +300,13 @@ export interface Chat {
 }
 
 export type ChatMode = 'chat' | 'work';
+
+/**
+ * How much a bot may do without asking: a kitten asks before every change, a house cat only before risky ones
+ * (deleting, installing, pushing, system changes, acting in connected apps), an alley cat never asks.
+ */
+export type ApprovalLevel = 'kitten' | 'housecat' | 'alleycat';
+export const APPROVAL_LEVELS: ApprovalLevel[] = ['kitten', 'housecat', 'alleycat'];
 
 export interface Subgoal {
   id: string;
@@ -627,7 +638,7 @@ export type StreamEvent =
   | { type: 'tool_result'; id: string; output: string; isError: boolean }
   /** Progress of a bot working on a task handed to it with the Delegate tool (callId is that call's id). */
   | { type: 'delegate'; callId: string; botId: string; event: 'start' | 'text' | 'tool' | 'done' | 'error'; text: string }
-  | { type: 'permission'; requestId: string; callId?: string; tool: string; summary: string; preview?: string; alwaysRule: string }
+  | { type: 'permission'; requestId: string; callId?: string; tool: string; summary: string; preview?: string; alwaysRule: string; why?: string }
   | { type: 'permission_resolved'; requestId: string }
   | { type: 'artifact'; artifact: Artifact }
   | { type: 'todos'; todos: Todo[] }

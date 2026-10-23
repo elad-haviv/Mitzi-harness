@@ -47,6 +47,7 @@ import type {
   SearchHit,
   SearchKind,
   BudgetStatus,
+  ApprovalLevel,
 } from '../../src/shared/types';
 
 export type * from '../../src/shared/types';
@@ -210,8 +211,8 @@ export const api = {
 
   chats: (projectId?: string) => request<ChatListItem[]>('GET', `/api/chats${projectId ? `?projectId=${projectId}` : ''}`),
   chat: (id: string) => request<Chat & { running: boolean }>('GET', `/api/chats/${id}`),
-  createChat: (body: { projectId?: string; botId?: string; model?: string; mode?: ChatMode }) => request<Chat>('POST', '/api/chats', body),
-  updateChat: (id: string, body: Partial<{ title: string; model: string; pinned: boolean; webSearch: boolean; projectId: string | null; mode: ChatMode }>) =>
+  createChat: (body: { projectId?: string; botId?: string; model?: string; mode?: ChatMode; approval?: ApprovalLevel }) => request<Chat>('POST', '/api/chats', body),
+  updateChat: (id: string, body: Partial<{ title: string; model: string; pinned: boolean; webSearch: boolean; projectId: string | null; mode: ChatMode; approval: ApprovalLevel }>) =>
     request<ChatSummary>('PATCH', `/api/chats/${id}`, body),
   deleteChat: (id: string) => request('DELETE', `/api/chats/${id}`),
   send: (

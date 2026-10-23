@@ -7,7 +7,7 @@ import { Config, loadConfig, MITZI_HOME, PERMISSION_MODES, PermissionMode } from
 import { PROVIDER_PRESETS, providerView, resolveProviders, RoutingClient, usable } from '../providers.js';
 import type { ProviderConfig, ProviderKind, SearchKind } from '../shared/types.js';
 import type { ApprovalAnswer } from '../permissions.js';
-import { Attachment, AUTO_MODEL, BankProfile, BankSummary, Bot, BotTools, Chat, DEFAULT_BOT_ID, MemoryType, Project, PublicSettings, SettingsUpdate, StreamEvent } from '../shared/types.js';
+import { APPROVAL_LEVELS, Attachment, AUTO_MODEL, BankProfile, BankSummary, Bot, BotTools, Chat, DEFAULT_BOT_ID, MemoryType, Project, PublicSettings, SettingsUpdate, StreamEvent } from '../shared/types.js';
 import { toToolSpecs } from '../tools/index.js';
 import { compactChat, contextBreakdown, ModelCatalog } from './context.js';
 import { MemoryService } from './memory/index.js';
@@ -201,6 +201,7 @@ export function createApp(opts: AppOptions) {
       const model = (v: unknown) => (typeof v === 'string' && v.trim() !== AUTO_MODEL ? v.trim() : '');
       ui.routing = { fast: model(update.routing.fast), strong: model(update.routing.strong), newChats: update.routing.newChats === true };
     }
+    if (APPROVAL_LEVELS.includes(update.approval as never)) ui.approval = update.approval;
     store.updateSettings(ui);
     return publicSettings();
   });
@@ -337,7 +338,15 @@ export function createApp(opts: AppOptions) {
   route('POST', '/api/chats', ({ body }) => {
     const project = body?.projectId ? getProject(body.projectId) : undefined;
     const bot = getBot(str(body?.botId) || DEFAULT_BOT_ID);
-    return store.chats.put(newChat({ projectId: project?.id, botId: bot.id, model: str(body?.model) || undefined, ...(body?.mode === 'work' ? { mode: 'work' as const } : {}) }));
+    return store.chats.put(
+      newChat({
+        projectId: project?.id,
+        botId: bot.id,
+        model: str(body?.model) || undefined,
+        ...(body?.mode === 'work' ? { mode: 'work' as const } : {}),
+        ...(APPROVAL_LEVELS.includes(body?.approval) ? { approval: body.approval } : {}),
+      }),
+    );
   });
   route('GET', '/api/chats/:id', ({ params }) => ({ ...getChat(params.id), running: runner.isRunning(params.id) }));
   route('PATCH', '/api/chats/:id', ({ params, body }) => {
@@ -347,6 +356,7 @@ export function createApp(opts: AppOptions) {
     if (typeof body.pinned === 'boolean') chat.pinned = body.pinned;
     if (typeof body.webSearch === 'boolean') chat.webSearch = body.webSearch;
     if (body.mode === 'chat' || body.mode === 'work') chat.mode = body.mode;
+    if (APPROVAL_LEVELS.includes(body.approval)) chat.approval = body.approval;
     if (body.projectId === null) chat.projectId = undefined;
     else if (typeof body.projectId === 'string') chat.projectId = getProject(body.projectId).id;
     chat.updatedAt = now();

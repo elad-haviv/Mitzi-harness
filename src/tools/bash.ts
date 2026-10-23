@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { riskyCommand } from './sensitive.js';
 import { Tool, ToolError, truncateMiddle } from './types.js';
 
 const DEFAULT_TIMEOUT = 120_000;
@@ -31,6 +32,7 @@ export const bashTool: Tool<BashArgs> = {
     required: ['command'],
   },
   summarize: (a) => a.command,
+  sensitive: (a) => riskyCommand(String(a?.command ?? '')),
   async run(args, ctx) {
     if (!args.command?.trim()) throw new ToolError('command is required');
     const timeout = Math.min(Math.max(1000, args.timeout ?? DEFAULT_TIMEOUT), MAX_TIMEOUT);

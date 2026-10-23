@@ -26,6 +26,8 @@ export interface Tool<A = any> {
   kind: ToolKind;
   /** One-line description of a call, shown next to the tool name. */
   summarize(args: A, ctx: ToolContext): string;
+  /** Why a call is risky enough to ask about even in the `sensitive` mode; undefined when it's safe. */
+  sensitive?(args: A, ctx: ToolContext): string | undefined;
   /** Optional longer preview (e.g. a diff) shown when asking for permission. */
   preview?(args: A, ctx: ToolContext): Promise<string | undefined>;
   run(args: A, ctx: ToolContext): Promise<string>;

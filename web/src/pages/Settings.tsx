@@ -8,6 +8,7 @@ import { href } from '../router';
 import { Theme, useApp } from '../state';
 import { MediaSettingsSection, ProvidersSection } from './ProviderSettings';
 import { BudgetMeters } from './Insights';
+import { APPROVAL, LEVELS } from '../components/Approval';
 
 type Section = 'general' | 'models' | 'providers' | 'media' | 'budget' | 'memory' | 'data' | 'updates';
 
@@ -115,6 +116,24 @@ function GeneralSettings() {
           ).map(([t, icon, label]) => (
             <button key={t} className={theme === t ? 'active' : ''} onClick={() => setTheme(t)}>
               {icon} {label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="settings-section card">
+        <h2>Approvals</h2>
+        <p className="muted small" style={{ marginTop: 0 }}>
+          How much Mitzi may do on its own in new chats. Each chat can change it from the chat box (Shift+Tab), and a project’s permissions apply to its chats.
+        </p>
+        <div className="approval-options" role="radiogroup" aria-label="Default approval level">
+          {LEVELS.map((l) => (
+            <button key={l} role="radio" aria-checked={(settings.approval ?? 'kitten') === l} className={`approval-option${(settings.approval ?? 'kitten') === l ? ' on' : ''}`} onClick={() => void save({ approval: l }, `New chats: ${APPROVAL[l].name}`)}>
+              <span className="approval-emoji big" aria-hidden>
+                {APPROVAL[l].emoji}
+              </span>
+              <span className="t">{APPROVAL[l].name}</span>
+              <span className="s">{APPROVAL[l].description}</span>
             </button>
           ))}
         </div>
