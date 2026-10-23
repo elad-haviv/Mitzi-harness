@@ -63,6 +63,10 @@ export { AUTO_MODEL, DEFAULT_BOT_ID, TEXT_ARTIFACT_TYPES } from '../../src/share
 export type ProjectView = Project & { chatCount: number; knowledge?: { chars: number; docs: number; searched: boolean } };
 export type WorkflowView = Workflow & { running: boolean };
 export type ShareView = Omit<Share, 'html'> & { url: string };
+/** What the server gives the browser to start a realtime voice call. */
+export type RealtimeSessionInfo =
+  | { provider: 'openai'; key: string; model: string; callUrl: string; expiresAt?: number }
+  | { provider: 'google'; key: string; model: string; url: string; setup: Record<string, unknown>; expiresAt?: number };
 export interface GalleryItem {
   id: string;
   category: string;
@@ -460,7 +464,7 @@ export const api = {
   /** `language`: what the speaker speaks (BCP 47), when known; otherwise the model detects it. */
   transcribe: (audio: string, language?: string) => request<{ text: string }>('POST', '/api/transcribe', { audio, language }),
   /** A short-lived key for a realtime voice call, made for this chat. */
-  realtimeSession: (id: string) => request<{ key: string; model: string; callUrl: string; expiresAt?: number }>('POST', `/api/chats/${id}/realtime`, {}),
+  realtimeSession: (id: string) => request<RealtimeSessionInfo>('POST', `/api/chats/${id}/realtime`, {}),
   /** Saves one spoken line of a realtime call to the chat. */
   saveSpoken: (id: string, role: 'user' | 'assistant', content: string) => request<unknown>('POST', `/api/chats/${id}/spoken`, { role, content }),
 };

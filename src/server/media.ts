@@ -53,6 +53,8 @@ export const MEDIA_OPTIONS: Record<keyof Omit<MediaSettings, 'voice'>, { id: str
   realtimeModel: [
     { id: 'openai:gpt-realtime', label: 'OpenAI GPT Realtime' },
     { id: 'openai:gpt-realtime-mini', label: 'OpenAI GPT Realtime mini' },
+    { id: 'google:gemini-2.5-flash-native-audio-preview-09-2025', label: 'Google Gemini 2.5 Flash Native Audio' },
+    { id: 'google:gemini-live-2.5-flash-preview', label: 'Google Gemini Live 2.5 Flash' },
   ],
   transcribeModel: [
     { id: 'openai:gpt-4o-mini-transcribe', label: 'OpenAI GPT-4o mini Transcribe' },
@@ -63,6 +65,15 @@ export const MEDIA_OPTIONS: Record<keyof Omit<MediaSettings, 'voice'>, { id: str
 };
 
 const GEMINI = 'https://generativelanguage.googleapis.com/v1beta';
+/** Gemini Live (realtime voice): ephemeral tokens and the WebSocket. Tests point it at a fake. */
+const geminiLive = () => (process.env.MITZI_GEMINI_LIVE ?? 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
+/** Gemini's prebuilt voices; anything else falls back to Kore. */
+const GEMINI_VOICES = new Set(['Kore', 'Puck', 'Charon', 'Fenrir', 'Aoede', 'Leda', 'Orus', 'Zephyr']);
+
+/** What the browser needs to start a realtime call. */
+export type RealtimeSession =
+  | { provider: 'openai'; key: string; model: string; callUrl: string; expiresAt?: number }
+  | { provider: 'google'; key: string; model: string; url: string; setup: Record<string, unknown>; expiresAt?: number };
 
 /** Providers whose media endpoints follow OpenAI's API (images, speech, transcription). */
 function openAiCompatible(kind: ProviderKind): boolean {
@@ -83,7 +94,7 @@ const KIND_PATTERNS: Partial<Record<MediaField, RegExp>> = {
   videoModel: /(sora|veo)/i,
   speechModel: /(tts|speech)/i,
   transcribeModel: /(whisper|transcribe)/i,
-  realtimeModel: /realtime/i,
+  realtimeModel: /realtime|native-audio|(^|[-/:])live\b/i,
 };
 
 function supports(kind: ProviderKind, field: MediaField): boolean {
@@ -100,7 +111,7 @@ function supports(kind: ProviderKind, field: MediaField): boolean {
     case 'musicModel':
       return kind === 'elevenlabs';
     case 'realtimeModel':
-      return kind === 'openai';
+      return kind === 'openai' || kind === 'google';
   }
 }
 
@@ -525,11 +536,12 @@ export class MediaService {
    * Starts a realtime voice session: a short-lived key the browser uses to connect to the provider directly
    * (WebRTC), so the real API key never leaves this computer.
    */
-  async realtimeSession(instructions: string, voice?: string): Promise<{ key: string; model: string; callUrl: string; expiresAt?: number }> {
+  async realtimeSession(instructions: string, voice?: string): Promise<RealtimeSession> {
     const id = this.settings().realtimeModel;
     if (!id) throw new ToolError('No realtime voice model is set up (Settings → Media & voice).');
     const { provider, model, base, key } = this.resolve(id);
-    if (provider.kind !== 'openai') throw new ToolError('Realtime voice works with OpenAI realtime models.');
+    if (provider.kind === 'google') return this.geminiLiveSession(model, key, instructions, voice);
+    if (provider.kind !== 'openai') throw new ToolError('Realtime voice works with OpenAI and Google realtime models.');
     const session = {
       type: 'realtime',
       model,
@@ -551,7 +563,47 @@ export class MediaService {
     const json = (await res.json()) as { value?: string; expires_at?: number; client_secret?: { value: string; expires_at?: number } };
     const secret = json.value ?? json.client_secret?.value;
     if (!secret) throw new ToolError('The provider didn’t return a session key');
-    return { key: secret, model, callUrl: `${base}/realtime/calls`, expiresAt: json.expires_at ?? json.client_secret?.expires_at };
+    return { provider: 'openai', key: secret, model, callUrl: `${base}/realtime/calls`, expiresAt: json.expires_at ?? json.client_secret?.expires_at };
+  }
+
+  /**
+   * Gemini Live: a single-use ephemeral token with the model, voice and instructions locked in, so the API key never
+   * reaches the browser. The browser opens the WebSocket with it and sends the same setup.
+   */
+  private async geminiLiveSession(model: string, key: string, instructions: string, voice?: string): Promise<RealtimeSession> {
+    const setup = {
+      model: `models/${model}`,
+      generationConfig: {
+        responseModalities: ['AUDIO'],
+        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice && GEMINI_VOICES.has(voice) ? voice : 'Kore' } } },
+      },
+      systemInstruction: { parts: [{ text: instructions }] },
+      inputAudioTranscription: {},
+      outputAudioTranscription: {},
+    };
+    const now = Date.now();
+    const expireTime = new Date(now + 30 * 60_000).toISOString();
+    const res = await check(
+      await fetch(`${geminiLive()}/v1alpha/auth_tokens`, {
+        method: 'POST',
+        headers: { 'x-goog-api-key': key, 'content-type': 'application/json' },
+        // The call must start within a minute; it can then last until the token expires.
+        body: JSON.stringify({ uses: 1, expireTime, newSessionExpireTime: new Date(now + 60_000).toISOString(), bidiGenerateContentSetup: setup }),
+        signal: AbortSignal.timeout(20_000),
+      }),
+      'Realtime session',
+    );
+    const token = ((await res.json()) as { name?: string }).name;
+    if (!token) throw new ToolError('Google didn’t return a session token');
+    const ws = geminiLive().replace(/^http/, 'ws');
+    return {
+      provider: 'google',
+      key: token,
+      model,
+      url: `${ws}/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=${encodeURIComponent(token)}`,
+      setup,
+      expiresAt: Math.floor(Date.parse(expireTime) / 1000),
+    };
   }
 
   exists(name: string): boolean {

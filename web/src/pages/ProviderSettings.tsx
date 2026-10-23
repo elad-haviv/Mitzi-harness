@@ -253,7 +253,7 @@ const MEDIA_FIELDS: { key: keyof MediaModels; label: string; hint: string; empty
   { key: 'speechModel', label: tr('Speech (text to speech)'), hint: tr('Natural voices for read-aloud and live mode. Without it, your browser’s voices are used.'), empty: tr('Add OpenAI, ElevenLabs, Google or OpenRouter for natural voices.') },
   { key: 'soundModel', label: tr('Sound effects'), hint: tr('Sound design from a description.'), empty: tr('Add ElevenLabs to generate sound effects.') },
   { key: 'musicModel', label: tr('Music'), hint: tr('Original music from a description.'), empty: tr('Add ElevenLabs to generate music.') },
-  { key: 'realtimeModel', label: tr('Realtime voice'), hint: tr('Natural spoken conversations: you can interrupt, and it answers as you finish speaking. Used by the voice button when set; otherwise live mode uses the speech and transcription models.'), empty: tr('Add OpenAI to talk with a realtime model.') },
+  { key: 'realtimeModel', label: tr('Realtime voice'), hint: tr('Natural spoken conversations: you can interrupt, and it answers as you finish speaking. Used by the voice button when set; otherwise live mode uses the speech and transcription models.'), empty: tr('Add OpenAI or Google to talk with a realtime model.') },
   { key: 'transcribeModel', label: tr('Transcription (speech to text)'), hint: tr('For live mode in browsers without built-in speech recognition (Firefox, some Safari).'), empty: tr('Add OpenAI, Groq, Google or OpenRouter for transcription.') },
 ];
 

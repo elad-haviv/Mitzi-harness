@@ -1,8 +1,9 @@
-// Realtime voice: a spoken conversation with a speech-to-speech model over WebRTC. The server mints a short-lived
-// key; audio goes straight between the browser and the provider. Each finished exchange is saved to the chat.
+// Realtime voice: a spoken conversation with a speech-to-speech model (OpenAI or Google; see realtime.ts). Each
+// finished line is saved to the chat.
 import { Mic, MicOff, PhoneOff } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
+import { Call, callGemini, callOpenAI, CallEvents, Line } from '../realtime';
 import { VoiceCat } from './VoiceCat';
 import { tr } from '../i18n';
 
@@ -17,20 +18,12 @@ const LABEL: Record<Phase, string> = {
   error: tr('Something went wrong'),
 };
 
-interface Line {
-  id: string;
-  role: 'user' | 'assistant';
-  text: string;
-  done: boolean;
-}
-
 export function RealtimeMode({ chatId, title, emoji, onClose, onSaved }: { chatId: string; title: string; emoji?: string; onClose(): void; onSaved(): void }) {
   const [phase, setPhase] = useState<Phase>('connecting');
   const [error, setError] = useState('');
   const [lines, setLines] = useState<Line[]>([]);
   const [level, setLevel] = useState(0);
   const [voice, setVoice] = useState(0);
-  const pc = useRef<RTCPeerConnection>(undefined);
   const mic = useRef<MediaStream>(undefined);
   const muted = useRef(false);
   const saved = useRef(new Set<string>());
@@ -55,87 +48,41 @@ export function RealtimeMode({ chatId, title, emoji, onClose, onSaved }: { chatI
   useEffect(() => {
     let alive = true;
     let meter: number | undefined;
-    const audio = new Audio();
-    audio.autoplay = true;
+    let call: Call | undefined;
+    let ctx: AudioContext | undefined;
     (async () => {
       try {
         const session = await api.realtimeSession(chatId);
         const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
         if (!alive) return stream.getTracks().forEach((t) => t.stop());
         mic.current = stream;
-        // A level meter for the orb.
-        const ctx = new AudioContext();
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 256;
-        ctx.createMediaStreamSource(stream).connect(analyser);
-        const buf = new Uint8Array(analyser.frequencyBinCount);
-        // Mitzi's voice is measured too, so the cat's mouth moves with it.
+        ctx = new AudioContext();
+        // Level meters: yours for the cat's ears and eyes, Mitzi's for its mouth.
+        const mine = ctx.createAnalyser();
+        mine.fftSize = 256;
+        ctx.createMediaStreamSource(stream).connect(mine);
         let out: AnalyserNode | undefined;
-        const outBuf = new Uint8Array(analyser.frequencyBinCount);
-        const loudness = (a: AnalyserNode, b: Uint8Array<ArrayBuffer>) => {
-          a.getByteFrequencyData(b);
-          return Math.min(1, b.reduce((n, v) => n + v, 0) / b.length / 80);
+        const buf = new Uint8Array(mine.frequencyBinCount);
+        const loudness = (a: AnalyserNode) => {
+          a.getByteFrequencyData(buf);
+          return Math.min(1, buf.reduce((n, v) => n + v, 0) / buf.length / 80);
         };
         const tick = () => {
-          setLevel(muted.current ? 0 : loudness(analyser, buf));
-          if (out) setVoice(loudness(out, outBuf));
+          setLevel(muted.current ? 0 : loudness(mine));
+          if (out) setVoice(loudness(out));
           meter = requestAnimationFrame(tick);
         };
         tick();
-
-        const peer = new RTCPeerConnection();
-        pc.current = peer;
-        peer.ontrack = (e) => {
-          audio.srcObject = e.streams[0];
-          out = ctx.createAnalyser();
-          out.fftSize = 256;
-          ctx.createMediaStreamSource(e.streams[0]).connect(out);
+        const events: CallEvents = {
+          upsert,
+          phase: (p) => alive && setPhase(muted.current && p !== 'speaking' ? 'muted' : p),
+          error: (message) => alive && (setError(message), setPhase('error')),
+          output: (node) => (out = node),
         };
-        stream.getTracks().forEach((t) => peer.addTrack(t, stream));
-        const events = peer.createDataChannel('oai-events');
-        events.onmessage = (m) => {
-          const e = JSON.parse(m.data);
-          switch (e.type) {
-            case 'input_audio_buffer.speech_started':
-              setPhase('hearing');
-              // Interrupting: what was being said stops where it was.
-              if (e.item_id) upsert(e.item_id, 'user', (l) => l);
-              break;
-            case 'input_audio_buffer.speech_stopped':
-              setPhase('listening');
-              break;
-            case 'conversation.item.input_audio_transcription.delta':
-              upsert(e.item_id, 'user', (l) => ({ ...l, text: l.text + (e.delta ?? '') }));
-              break;
-            case 'conversation.item.input_audio_transcription.completed':
-              upsert(e.item_id, 'user', (l) => ({ ...l, text: e.transcript ?? l.text, done: true }));
-              break;
-            case 'conversation.item.input_audio_transcription.failed':
-              upsert(e.item_id, 'user', (l) => ({ ...l, done: true }));
-              break;
-            case 'response.output_audio_transcript.delta':
-            case 'response.audio_transcript.delta':
-              setPhase('speaking');
-              upsert(e.item_id, 'assistant', (l) => ({ ...l, text: l.text + (e.delta ?? '') }));
-              break;
-            case 'response.output_audio_transcript.done':
-            case 'response.audio_transcript.done':
-              upsert(e.item_id, 'assistant', (l) => ({ ...l, text: e.transcript ?? l.text, done: true }));
-              break;
-            case 'response.done':
-              setPhase(muted.current ? 'muted' : 'listening');
-              break;
-            case 'error':
-              setError(e.error?.message ?? tr('The voice service reported an error'));
-              break;
-          }
-        };
-        const offer = await peer.createOffer();
-        await peer.setLocalDescription(offer);
-        const res = await fetch(session.callUrl, { method: 'POST', body: offer.sdp, headers: { authorization: `Bearer ${session.key}`, 'content-type': 'application/sdp' } });
-        if (!res.ok) throw new Error(tr('The voice service refused the call ({0}): {1}', res.status, (await res.text()).slice(0, 200)));
-        await peer.setRemoteDescription({ type: 'answer', sdp: await res.text() });
-        if (alive) setPhase('listening');
+        call = session.provider === 'google' ? await callGemini(session, stream, ctx, events) : await callOpenAI(session, stream, ctx, events);
+        if (!alive) return call.close();
+        // Gemini says when it's ready; WebRTC is ready once connected.
+        if (session.provider === 'openai') setPhase('listening');
       } catch (err) {
         if (!alive) return;
         setError((err as Error).name === 'NotAllowedError' ? tr('Mitzi needs your microphone. Allow it in the browser and try again.') : (err as Error).message);
@@ -145,9 +92,9 @@ export function RealtimeMode({ chatId, title, emoji, onClose, onSaved }: { chatI
     return () => {
       alive = false;
       if (meter) cancelAnimationFrame(meter);
-      pc.current?.close();
+      call?.close();
       mic.current?.getTracks().forEach((t) => t.stop());
-      audio.srcObject = null;
+      void ctx?.close();
     };
   }, [chatId]); // eslint-disable-line react-hooks/exhaustive-deps
 

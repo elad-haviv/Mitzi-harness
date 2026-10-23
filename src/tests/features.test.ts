@@ -62,6 +62,12 @@ before(async () => {
         res.end(JSON.stringify({ text: ' hello there ' }));
         return;
       }
+      if (req.url?.endsWith('/v1alpha/auth_tokens')) {
+        realtimeRequests.push({ auth: req.headers['x-goog-api-key'], body: JSON.parse(raw) });
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ name: 'auth_tokens/live123' }));
+        return;
+      }
       if (req.url?.endsWith('/realtime/client_secrets')) {
         realtimeRequests.push({ auth: req.headers.authorization, body: JSON.parse(raw) });
         res.writeHead(200, { 'content-type': 'application/json' });
@@ -614,7 +620,7 @@ test('realtime voice: a short-lived key with the chat in its instructions, and s
   reply = () => textChunks('Cats nap a lot.');
   await send(chat.id, 'Why do cats nap?');
   const session = (await call('POST', `/api/chats/${chat.id}/realtime`, { voice: 'cedar' })).data;
-  assert.deepEqual(session, { key: 'ek_test_123', model: 'gpt-realtime', callUrl: `${mockUrl}/realtime/calls`, expiresAt: 1900000000 });
+  assert.deepEqual(session, { provider: 'openai', key: 'ek_test_123', model: 'gpt-realtime', callUrl: `${mockUrl}/realtime/calls`, expiresAt: 1900000000 });
   // The real key stays on the server; the session knows the conversation.
   const sent = realtimeRequests.at(-1);
   assert.match(sent.auth, /^Bearer sk-/);
@@ -631,4 +637,30 @@ test('realtime voice: a short-lived key with the chat in its instructions, and s
     ['assistant', 'Dogs nap too.', true, 'openai:gpt-realtime'],
   ]);
   await call('PUT', '/api/settings', { media: { realtimeModel: '' } });
+});
+
+test('realtime voice with Google: a single-use Gemini Live token with the setup locked in', async () => {
+  process.env.MITZI_GEMINI_LIVE = mockUrl;
+  try {
+    const providers = (await call('POST', '/api/providers', { kind: 'google', apiKey: 'AIza-real' })).data;
+    const google = providers.find((p: any) => p.kind === 'google');
+    const chat = (await call('POST', '/api/chats', {})).data;
+    await call('PUT', '/api/settings', { media: { realtimeModel: `${google.id}:gemini-2.5-flash-native-audio-preview-09-2025` } });
+    const session = (await call('POST', `/api/chats/${chat.id}/realtime`, { voice: 'Puck' })).data;
+    assert.equal(session.provider, 'google');
+    assert.equal(session.key, 'auth_tokens/live123');
+    assert.equal(session.url, `${mockUrl.replace(/^http/, 'ws')}/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=auth_tokens%2Flive123`);
+    const sent = realtimeRequests.at(-1);
+    // The key stays on the server; the token is for one call, with the model, voice and instructions fixed.
+    assert.equal(sent.auth, 'AIza-real');
+    assert.equal(sent.body.uses, 1);
+    assert.equal(sent.body.bidiGenerateContentSetup.model, 'models/gemini-2.5-flash-native-audio-preview-09-2025');
+    assert.equal(sent.body.bidiGenerateContentSetup.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName, 'Puck');
+    assert.match(sent.body.bidiGenerateContentSetup.systemInstruction.parts[0].text, /Voice conversation/);
+    assert.deepEqual(session.setup, sent.body.bidiGenerateContentSetup);
+    assert.ok(Date.parse(sent.body.newSessionExpireTime) - Date.now() <= 61_000);
+    await call('PUT', '/api/settings', { media: { realtimeModel: '' } });
+  } finally {
+    delete process.env.MITZI_GEMINI_LIVE;
+  }
 });
