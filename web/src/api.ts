@@ -105,7 +105,8 @@ export interface LearningCurve {
 }
 export type UpdateStatus = UpdateInfo & { updating: boolean; canRestart: boolean };
 export type UpdateStreamEvent = UpdateEvent | { type: 'restarting' } | { type: 'restart-required' };
-export type ChatListItem = ChatSummary & { running?: boolean };
+/** `waiting`: responding, and waiting for the user to approve something. */
+export type ChatListItem = ChatSummary & { running?: boolean; waiting?: boolean };
 export type ArtifactListItem = Artifact & { chatTitle?: string };
 /** An artifact with what its workspace needs. */
 export type ArtifactWork = Artifact & { chatTitle?: string; running: boolean };
@@ -167,13 +168,14 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return data as T;
 }
 
-/** POSTs and consumes a server-sent event stream until it ends. */
+/** POSTs (or GETs, without a body) and consumes a server-sent event stream until it ends. */
 async function stream<E = StreamEvent>(path: string, body: unknown, onEvent: (e: E) => void): Promise<void> {
-  const res = await fetch(path, {
-    method: 'POST',
-    headers: { 'x-mitzi-token': token, 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const res = await fetch(
+    path,
+    body === undefined
+      ? { headers: { 'x-mitzi-token': token } }
+      : { method: 'POST', headers: { 'x-mitzi-token': token, 'content-type': 'application/json' }, body: JSON.stringify(body) },
+  );
   if (!res.ok || !res.body) {
     const data = await res.json().catch(() => ({}));
     throw new ApiError(res.status, data?.error ?? `Request failed (${res.status})`);
@@ -226,6 +228,8 @@ export const api = {
   planAction: (id: string, action: 'approve' | 'revise') => request<{ plan: Plan; todos: Todo[]; mode: ChatMode }>('POST', `/api/chats/${id}/plan`, { action }),
   /** /goal pause|resume|clear|status and /subgoal. */
   command: (id: string, text: string) => request<{ goal: Goal | null; message: string; resume: boolean }>('POST', `/api/chats/${id}/command`, { text }),
+  /** Follows a chat that is already responding: what it streamed so far, then the rest. */
+  follow: (id: string, onEvent: (e: StreamEvent) => void) => stream(`/api/chats/${id}/stream`, undefined, onEvent),
   /** /btw: a side question, answered without tools and not saved. */
   btw: (id: string, question: string, onEvent: (e: { type: 'start' | 'text' | 'done' | 'error'; text?: string }) => void) => stream(`/api/chats/${id}/btw`, { question }, onEvent),
   review: (id: string, index: number, body: { rating: number; meant?: string; did?: string; directions?: string; redo?: boolean }) =>

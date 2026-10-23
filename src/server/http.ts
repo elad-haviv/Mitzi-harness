@@ -313,7 +313,7 @@ export function createApp(opts: AppOptions) {
       .all()
       .filter((c) => !projectId || c.projectId === projectId)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-      .map((c) => ({ ...summarizeChat(c), running: runner.isRunning(c.id) }));
+      .map((c) => ({ ...summarizeChat(c), running: runner.isRunning(c.id), waiting: runner.isWaiting(c.id) }));
   });
   /** A new, unsaved chat; `fields` override the defaults. */
   const newChat = (fields: Partial<Chat> = {}): Chat => {
@@ -373,16 +373,15 @@ export function createApp(opts: AppOptions) {
     if (runner.isRunning(chatId)) throw new HttpError(409, 'This chat is already responding');
     client(); // fail fast (as JSON) when no API key is set
     res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache', connection: 'keep-alive' });
-    const disconnect = new AbortController();
-    res.on('close', () => {
-      if (!res.writableFinished) disconnect.abort();
-    });
+    // The run goes on if the browser leaves: it works in the background, and coming back follows it again.
+    let open = true;
+    res.on('close', () => (open = false));
     const emit = (e: StreamEvent) => {
-      if (!res.writableEnded) res.write(`data: ${JSON.stringify(e)}\n\n`);
+      if (open && !res.writableEnded) res.write(`data: ${JSON.stringify(e)}\n\n`);
     };
     req.socket.setTimeout(0);
     try {
-      await runner.run(chatId, input, emit, disconnect.signal);
+      await runner.run(chatId, input, emit, new AbortController().signal);
     } catch (err: any) {
       emit({ type: 'error', message: err.message });
       emit({ type: 'done' });
@@ -405,6 +404,21 @@ export function createApp(opts: AppOptions) {
     return stream(r.params.id, { kind: 'message', content, attachments, editIndex, focus: str(r.body?.focus) || undefined, auto, feedbackLoopId })(r);
   });
   route('POST', '/api/chats/:id/regenerate', (r) => stream(r.params.id, { kind: 'regenerate' })(r));
+  /** Follows a running chat: what it streamed so far, then live events until it's done. */
+  route('GET', '/api/chats/:id/stream', ({ params, req, res }) => {
+    getChat(params.id);
+    res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache', connection: 'keep-alive' });
+    req.socket.setTimeout(0);
+    const write = (e: StreamEvent) => {
+      if (res.writableEnded) return;
+      res.write(`data: ${JSON.stringify(e)}\n\n`);
+      if (e.type === 'done') res.end();
+    };
+    const detach = runner.attach(params.id, write);
+    if (!detach) write({ type: 'done' });
+    else res.on('close', detach);
+    return STREAMED;
+  });
   route('POST', '/api/chats/:id/stop', ({ params }) => ({ stopped: runner.stop(params.id) }));
   route('POST', '/api/chats/:id/compare/pick', ({ params, body }) => {
     const choice = str(body?.choice);

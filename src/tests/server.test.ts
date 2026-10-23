@@ -20,6 +20,8 @@ let close: () => Promise<void>;
 /** Decides the mock model's reply to each request. */
 let reply: (body: any) => object[] = () => textChunks('Hello!');
 const requests: any[] = [];
+/** Milliseconds between the mock model's chunks (0: all at once). */
+let chunkDelay = 0;
 /** The latest chat request, ignoring concurrent title-generation requests. */
 const isMemoryJob = (body: any) => /Extract memories worth keeping|You maintain \\?"observations|reflective memory of/.test(JSON.stringify(body.messages?.[0] ?? ''));
 const lastMain = (): any => requests.filter((r) => r.max_tokens !== 60 && !isMemoryJob(r)).at(-1);
@@ -42,8 +44,13 @@ before(async () => {
       // Title requests are recognizable by their small token budget.
       const chunks = body.max_tokens === 60 ? textChunks('Generated Title') : isMemoryJob(body) ? memoryReply(body) : reply(body);
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      for (const c of chunks) res.write(`data: ${JSON.stringify(c)}\n\n`);
-      res.end('data: [DONE]\n\n');
+      void (async () => {
+        for (const c of chunks) {
+          res.write(`data: ${JSON.stringify(c)}\n\n`);
+          if (chunkDelay) await new Promise((r) => setTimeout(r, chunkDelay));
+        }
+        res.end('data: [DONE]\n\n');
+      })();
     });
   });
   await new Promise<void>((r) => mock.listen(0, '127.0.0.1', r));
@@ -769,6 +776,49 @@ test('approval levels: a chat keeps its own, and new chats follow Settings', asy
   // Unknown levels are ignored.
   assert.equal((await call('PATCH', `/api/chats/${chat.id}`, { approval: 'tiger' })).data.approval, 'kitten');
   await call('PUT', '/api/settings', { approval: 'kitten' });
+});
+
+test('a running chat keeps going when the browser leaves, and coming back catches up', async () => {
+  const words = Array.from({ length: 12 }, (_, i) => `word${i}`);
+  // One chunk per word, so the answer takes a while.
+  reply = () => [...words.map((w, i) => ({ choices: [{ delta: { content: i ? ` ${w}` : w } }] })), ...textChunks('').slice(1)];
+  chunkDelay = 40;
+  try {
+    const chat = (await call('POST', '/api/chats', {})).data;
+    // Start a turn, then drop the connection right away.
+    const leaving = new AbortController();
+    const started = await fetch(`${base}/api/chats/${chat.id}/messages`, {
+      method: 'POST',
+      headers: { 'x-mitzi-token': TOKEN, 'content-type': 'application/json' },
+      body: JSON.stringify({ content: 'Say twelve words' }),
+      signal: leaving.signal,
+    });
+    assert.equal(started.status, 200);
+    await new Promise((r) => setTimeout(r, 150));
+    leaving.abort();
+    const listed = (await call('GET', '/api/chats')).data.find((c: any) => c.id === chat.id);
+    assert.equal(listed.running, true);
+
+    // Coming back: the stream starts with when the run began, replays what was missed, then follows to the end.
+    const res = await fetch(`${base}/api/chats/${chat.id}/stream`, { headers: { 'x-mitzi-token': TOKEN } });
+    const events = (await res.text())
+      .split('\n\n')
+      .filter((f) => f.startsWith('data: '))
+      .map((f) => JSON.parse(f.slice(6)));
+    assert.equal(events[0].type, 'run');
+    assert.ok(events[0].startedAt <= Date.now());
+    assert.equal(events.filter((e) => e.type === 'text').map((e) => e.text).join(''), words.join(' '));
+    assert.equal(events.at(-1).type, 'done');
+
+    const saved = (await call('GET', `/api/chats/${chat.id}`)).data;
+    assert.equal(saved.running, false);
+    assert.equal(saved.messages.at(-1).content, words.join(' '));
+    // Nothing running: the stream just ends.
+    const idle = await (await fetch(`${base}/api/chats/${chat.id}/stream`, { headers: { 'x-mitzi-token': TOKEN } })).text();
+    assert.match(idle, /"type":"done"/);
+  } finally {
+    chunkDelay = 0;
+  }
 });
 
 /** Polls until a server reaches a status. */

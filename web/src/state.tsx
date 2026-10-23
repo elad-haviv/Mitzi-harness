@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { speaker } from './speech';
 import { api, ApiError, AUTO_MODEL, BudgetStatus, Bot, ChatListItem, ModelInfo, ProjectView, PublicSettings, TaskView, UpdateStatus } from './api';
 
@@ -169,6 +169,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
       clearInterval(updates);
     };
   }, [refreshSettings, refreshChats, refreshProjects, refreshBots, refreshModels, refreshTasks]);
+
+  // While chats work in the background, keep their status fresh, and say when one finishes or needs you.
+  const anyRunning = chats.some((c) => c.running);
+  const previous = useRef(new Map<string, { running?: boolean; waiting?: boolean }>());
+  useEffect(() => {
+    const open = /^#\/chat\/([^?/]+)/.exec(location.hash)?.[1];
+    for (const c of chats) {
+      const was = previous.current.get(c.id);
+      if (was && c.id !== open) {
+        if (was.running && !c.running) toast(`✓ “${c.title}” is done`, 'info');
+        else if (!was.waiting && c.waiting) toast(`🐾 “${c.title}” needs your approval`, 'info');
+      }
+    }
+    previous.current = new Map(chats.map((c) => [c.id, { running: c.running, waiting: c.waiting }]));
+    document.title = anyRunning ? `(${chats.filter((c) => c.running).length}) Mitzi` : 'Mitzi';
+  }, [chats, anyRunning, toast]);
+  useEffect(() => {
+    if (!anyRunning) return;
+    const timer = setInterval(() => void api.chats().then(setChats, () => {}), 2000);
+    return () => clearInterval(timer);
+  }, [anyRunning]);
 
   const value = useMemo<AppState>(
     () => ({

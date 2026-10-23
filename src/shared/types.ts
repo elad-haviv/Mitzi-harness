@@ -653,6 +653,8 @@ export type StreamEvent =
   | { type: 'compacted'; contextStart: number }
   | { type: 'chat'; chat: ChatSummary }
   | { type: 'error'; message: string }
+  /** First event when following a run that already started. */
+  | { type: 'run'; startedAt: number }
   | { type: 'done' };
 
 export interface Attachment {

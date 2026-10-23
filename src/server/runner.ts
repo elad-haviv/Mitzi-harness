@@ -28,6 +28,13 @@ import { BrowserService, browserTool } from './browser.js';
 
 const MAX_EVENT_OUTPUT = 20_000;
 
+/** Keeps a run's events for replay, joining streamed text so the log stays small. */
+function record(events: StreamEvent[], e: StreamEvent): void {
+  const last = events.at(-1);
+  if ((e.type === 'text' || e.type === 'reasoning') && last?.type === e.type) events[events.length - 1] = { type: e.type, text: last.text + e.text };
+  else if (events.length < 20_000) events.push(e);
+}
+
 export function summarizeChat(chat: Chat): ChatSummary {
   const { messages, summary: _summary, ...rest } = chat;
   return { ...rest, messageCount: messages.length };
@@ -83,6 +90,11 @@ interface RunTotals {
 interface ActiveRun {
   controller: AbortController;
   pending: Map<string, (answer: ApprovalAnswer) => void>;
+  startedAt: number;
+  /** Everything the run has streamed so far, so a browser that comes back can catch up. */
+  events: StreamEvent[];
+  /** Browsers following the run besides the one that started it. */
+  listeners: Set<(e: StreamEvent) => void>;
   /** Resolves the /compare A/B/skip pick for this run, when one is waiting. */
   comparePick?: (choice: 'A' | 'B' | 'skip') => void;
 }
@@ -174,6 +186,24 @@ export class ChatRunner {
 
   isRunning(chatId: string): boolean {
     return this.active.has(chatId);
+  }
+
+  /** Whether a running chat is waiting for the user to approve something. */
+  isWaiting(chatId: string): boolean {
+    return (this.active.get(chatId)?.pending.size ?? 0) > 0;
+  }
+
+  /**
+   * Follows a running chat: replays what it streamed so far, then streams the rest. Returns a function that
+   * stops following, or undefined when the chat isn't running.
+   */
+  attach(chatId: string, listener: (e: StreamEvent) => void): (() => void) | undefined {
+    const run = this.active.get(chatId);
+    if (!run) return undefined;
+    listener({ type: 'run', startedAt: run.startedAt });
+    for (const e of run.events) listener(e);
+    run.listeners.add(listener);
+    return () => run.listeners.delete(listener);
   }
 
   stop(chatId: string): boolean {
@@ -452,9 +482,15 @@ export class ChatRunner {
     if (!chat) throw new Error('Chat not found');
     if (this.active.has(chatId)) throw new Error('This chat is already running');
 
-    const run: ActiveRun = { controller: new AbortController(), pending: new Map() };
+    const run: ActiveRun = { controller: new AbortController(), pending: new Map(), startedAt: Date.now(), events: [], listeners: new Set() };
     const signal = AbortSignal.any([run.controller.signal, disconnect]);
     this.active.set(chatId, run);
+    const caller = emit;
+    emit = (e) => {
+      record(run.events, e);
+      caller(e);
+      for (const l of run.listeners) l(e);
+    };
     const totals: RunTotals = { prompt: 0, completion: 0, cost: 0, requests: 0 };
     try {
       await withUsage(
@@ -478,6 +514,7 @@ export class ChatRunner {
     }
     emit({ type: 'chat', chat: summarizeChat(chat) });
     emit({ type: 'done' });
+    run.listeners.clear();
   }
 
   private async execute(

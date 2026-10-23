@@ -272,7 +272,7 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
                       {c.branchedFrom && <GitBranch size={12} className="muted" aria-label="Branch" />}
                       {c.taskId && <CalendarClock size={12} className="muted" aria-label="Scheduled task" />}
                       <span className="title">{c.title}</span>
-                      {c.running && <span className="live-dot" aria-label="Responding" />}
+                      {c.waiting ? <span className="tab-paw" title="Waiting for your approval" aria-label="Needs you">🐾</span> : c.running && <span className="live-dot" aria-label="Responding" />}
                       <button
                         className="chat-more"
                         aria-label={`Options for ${c.title}`}

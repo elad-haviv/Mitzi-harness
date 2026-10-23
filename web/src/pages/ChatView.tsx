@@ -165,9 +165,9 @@ export function ChatView({
   const composer = useRef<ComposerHandle>(null);
   const currentId = useRef(chatId);
   currentId.current = chatId;
-  // True when the open chat is still answering a request this page isn't streaming (e.g. after navigating back).
-  const [background, setBackground] = useState(false);
-  const running = !!live || background;
+  // Bumped whenever the open chat changes, so streams for a chat that was left stop updating the page.
+  const streamToken = useRef(0);
+  const running = !!live;
 
   // Follow route changes, except when we navigated to a chat we just created.
   useEffect(() => {
@@ -176,7 +176,7 @@ export function ChatView({
     setChat(undefined);
     setArtifacts([]);
     setLive(null);
-    setBackground(false);
+    streamToken.current++;
     setLastError(undefined);
     setPanel(null);
     setExpanded(false);
@@ -210,21 +210,9 @@ export function ChatView({
   );
 
   useEffect(() => {
-    if (chatId && chat?.id !== chatId) void reload(chatId).then((c) => c?.running && !live && setBackground(true));
+    // A chat that is still responding (it kept working while you were elsewhere): follow it from where it is.
+    if (chatId && chat?.id !== chatId) void reload(chatId).then((c) => c?.running && !live && void runStream(chatId, (h) => api.follow(chatId, h)));
   }, [chatId, chat?.id, reload]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Poll a chat that is responding elsewhere until it finishes.
-  useEffect(() => {
-    if (!background || !chatId) return;
-    const timer = setInterval(async () => {
-      const c = await reload(chatId);
-      if (c && !c.running) {
-        setBackground(false);
-        void refreshChats();
-      }
-    }, 1500);
-    return () => clearInterval(timer);
-  }, [background, chatId, reload, refreshChats]);
 
   // Opened from search: show the message that matched.
   const focused = useRef<string>(undefined);
@@ -326,6 +314,9 @@ export function ChatView({
       case 'route':
         setLive((l) => l && { ...l, route: e.route });
         break;
+      case 'run':
+        setLive((l) => l && { ...l, startedAt: e.startedAt });
+        break;
       case 'recall':
         setLive((l) => l && { ...l, memories: e.memories });
         break;
@@ -363,14 +354,21 @@ export function ChatView({
     setLastError(undefined);
     stick.current = true;
     setLive({ user, blocks: [], startedAt: Date.now() });
-    // Events keep arriving if the user switches chats mid-stream; only the open chat should see them.
-    const handler = (e: StreamEvent) => currentId.current === id && onEvent(e);
+    // Events keep arriving if the user switches chats mid-stream; only the stream of the open chat updates the page.
+    const token = ++streamToken.current;
+    const mine = () => streamToken.current === token && currentId.current === id;
+    let first = true;
+    const handler = (e: StreamEvent) => {
+      // Once the server has the run, the chat list (tabs, sidebar) can show it as working.
+      if (first) (first = false), void refreshChats();
+      if (mine()) onEvent(e);
+    };
     try {
       await start(handler);
     } catch (err) {
-      if (currentId.current === id) setLastError((err as Error).message);
+      if (mine()) setLastError((err as Error).message);
     } finally {
-      if (currentId.current === id) {
+      if (mine()) {
         result = await reload(id);
         setLive(null);
         setContextVersion((v) => v + 1);
@@ -500,7 +498,7 @@ export function ChatView({
     await runStream(chat.id, (h) => api.regenerate(chat.id, h));
   };
 
-  const stop = () => chatId && void api.stop(chatId).then(() => background && setBackground(false));
+  const stop = () => chatId && void api.stop(chatId);
 
   const approvePlan = async () => {
     if (!chat) return;
@@ -880,19 +878,6 @@ export function ChatView({
             );
           })}
           {liveTurn}
-          {background && !live && (
-            <div className="turn turn-assistant">
-              <Avatar bot={bot} />
-              <div className="status-line">
-                <span className="thinking-dots" aria-label="Responding">
-                  <span />
-                  <span />
-                  <span />
-                </span>
-                Still responding…
-              </div>
-            </div>
-          )}
           {lastError && !running && (
             <div className="turn">
               <div className="error-box">
