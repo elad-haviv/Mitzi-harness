@@ -50,6 +50,10 @@ export const MEDIA_OPTIONS: Record<keyof Omit<MediaSettings, 'voice'>, { id: str
   ],
   soundModel: [{ id: 'elevenlabs:eleven_text_to_sound_v2', label: 'ElevenLabs Sound Effects v2' }],
   musicModel: [{ id: 'elevenlabs:music_v1', label: 'ElevenLabs Music' }],
+  realtimeModel: [
+    { id: 'openai:gpt-realtime', label: 'OpenAI GPT Realtime' },
+    { id: 'openai:gpt-realtime-mini', label: 'OpenAI GPT Realtime mini' },
+  ],
   transcribeModel: [
     { id: 'openai:gpt-4o-mini-transcribe', label: 'OpenAI GPT-4o mini Transcribe' },
     { id: 'openai:whisper-1', label: 'OpenAI Whisper' },
@@ -79,6 +83,7 @@ const KIND_PATTERNS: Partial<Record<MediaField, RegExp>> = {
   videoModel: /(sora|veo)/i,
   speechModel: /(tts|speech)/i,
   transcribeModel: /(whisper|transcribe)/i,
+  realtimeModel: /realtime/i,
 };
 
 function supports(kind: ProviderKind, field: MediaField): boolean {
@@ -94,6 +99,8 @@ function supports(kind: ProviderKind, field: MediaField): boolean {
     case 'soundModel':
     case 'musicModel':
       return kind === 'elevenlabs';
+    case 'realtimeModel':
+      return kind === 'openai';
   }
 }
 
@@ -453,7 +460,7 @@ export class MediaService {
     const providers = this.router().providers.filter((p) => usable(p));
     const key = JSON.stringify(providers.map((p) => [p.id, p.kind, p.baseUrl, !!p.apiKey]));
     if (this.catalog?.key === key && Date.now() - this.catalog.at < 3600_000) return this.catalog.models;
-    const out: Record<MediaField, MediaModel[]> = { imageModel: [], videoModel: [], speechModel: [], soundModel: [], musicModel: [], transcribeModel: [] };
+    const out: Record<MediaField, MediaModel[]> = { imageModel: [], videoModel: [], speechModel: [], soundModel: [], musicModel: [], transcribeModel: [], realtimeModel: [] };
     const add = (field: MediaField, m: MediaModel) => !out[field].some((x) => x.id === m.id) && out[field].push(m);
 
     await Promise.all(
@@ -512,6 +519,39 @@ export class MediaService {
     for (const list of Object.values(out)) list.sort((a, b) => a.provider.localeCompare(b.provider) || a.name.localeCompare(b.name));
     this.catalog = { key, at: Date.now(), models: out };
     return out;
+  }
+
+  /**
+   * Starts a realtime voice session: a short-lived key the browser uses to connect to the provider directly
+   * (WebRTC), so the real API key never leaves this computer.
+   */
+  async realtimeSession(instructions: string, voice?: string): Promise<{ key: string; model: string; callUrl: string; expiresAt?: number }> {
+    const id = this.settings().realtimeModel;
+    if (!id) throw new ToolError('No realtime voice model is set up (Settings → Media & voice).');
+    const { provider, model, base, key } = this.resolve(id);
+    if (provider.kind !== 'openai') throw new ToolError('Realtime voice works with OpenAI realtime models.');
+    const session = {
+      type: 'realtime',
+      model,
+      instructions,
+      audio: {
+        input: { transcription: { model: 'gpt-4o-mini-transcribe' }, turn_detection: { type: 'semantic_vad' } },
+        output: { voice: voice || 'marin' },
+      },
+    };
+    const res = await check(
+      await fetch(`${base}/realtime/client_secrets`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ session }),
+        signal: AbortSignal.timeout(20_000),
+      }),
+      'Realtime session',
+    );
+    const json = (await res.json()) as { value?: string; expires_at?: number; client_secret?: { value: string; expires_at?: number } };
+    const secret = json.value ?? json.client_secret?.value;
+    if (!secret) throw new ToolError('The provider didn’t return a session key');
+    return { key: secret, model, callUrl: `${base}/realtime/calls`, expiresAt: json.expires_at ?? json.client_secret?.expires_at };
   }
 
   exists(name: string): boolean {

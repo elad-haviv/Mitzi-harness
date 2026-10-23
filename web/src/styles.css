@@ -3130,6 +3130,13 @@ button.memory-chip:hover {
 .live-caption.error {
   color: var(--danger);
 }
+.realtime-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 640px;
+  text-align: center;
+}
 .live-controls {
   display: flex;
   gap: 18px;

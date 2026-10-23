@@ -23,6 +23,7 @@ let mock: Server;
 let close: () => Promise<void>;
 let reply: (body: any) => object[] = () => textChunks('Hello!');
 const requests: any[] = [];
+const realtimeRequests: any[] = [];
 const speechRequests: any[] = [];
 const isBackground = (body: any) =>
   body.max_tokens === 60 || /Extract memories worth keeping|You maintain \\?"observations|reflective memory of|rated an AI assistant|conversation starters|another AI assistant wrote/.test(JSON.stringify(body.messages?.[0] ?? ''));
@@ -59,6 +60,12 @@ before(async () => {
         speechRequests.push(JSON.parse(raw));
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ text: ' hello there ' }));
+        return;
+      }
+      if (req.url?.endsWith('/realtime/client_secrets')) {
+        realtimeRequests.push({ auth: req.headers.authorization, body: JSON.parse(raw) });
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ value: 'ek_test_123', expires_at: 1900000000 }));
         return;
       }
       if (req.url?.endsWith('/audio/speech')) {
@@ -596,4 +603,32 @@ test('media: image generation tool, read-aloud and media files', async () => {
   assert.equal((await call('POST', '/api/transcribe', { audio: 'data:audio/webm;base64,eA==', language: 'he IL; drop' })).status, 200);
   assert.equal(speechRequests[3].language, undefined);
   await call('PUT', '/api/settings', { media: { speechModel: '', transcribeModel: '' } });
+});
+
+test('realtime voice: a short-lived key with the chat in its instructions, and spoken turns saved', async () => {
+  await call('POST', '/api/providers', { kind: 'openai', apiKey: 'sk-real', baseUrl: mockUrl });
+  const chat = (await call('POST', '/api/chats', {})).data;
+  // Not set up yet.
+  assert.equal((await call('POST', `/api/chats/${chat.id}/realtime`, {})).status, 500);
+  await call('PUT', '/api/settings', { media: { realtimeModel: 'openai:gpt-realtime' } });
+  reply = () => textChunks('Cats nap a lot.');
+  await send(chat.id, 'Why do cats nap?');
+  const session = (await call('POST', `/api/chats/${chat.id}/realtime`, { voice: 'cedar' })).data;
+  assert.deepEqual(session, { key: 'ek_test_123', model: 'gpt-realtime', callUrl: `${mockUrl}/realtime/calls`, expiresAt: 1900000000 });
+  // The real key stays on the server; the session knows the conversation.
+  const sent = realtimeRequests.at(-1);
+  assert.match(sent.auth, /^Bearer sk-/);
+  assert.equal(sent.body.session.model, 'gpt-realtime');
+  assert.equal(sent.body.session.audio.output.voice, 'cedar');
+  assert.match(sent.body.session.instructions, /Voice conversation[\s\S]*User: Why do cats nap\?\nYou: Cats nap a lot\./);
+
+  await call('POST', `/api/chats/${chat.id}/spoken`, { role: 'user', content: 'And dogs?' });
+  await call('POST', `/api/chats/${chat.id}/spoken`, { role: 'assistant', content: 'Dogs nap too.' });
+  assert.equal((await call('POST', `/api/chats/${chat.id}/spoken`, { role: 'system', content: 'x' })).status, 400);
+  const saved = (await call('GET', `/api/chats/${chat.id}`)).data.messages.slice(-2);
+  assert.deepEqual(saved.map((m: any) => [m.role, m.content, m.spoken, m.model]), [
+    ['user', 'And dogs?', true, undefined],
+    ['assistant', 'Dogs nap too.', true, 'openai:gpt-realtime'],
+  ]);
+  await call('PUT', '/api/settings', { media: { realtimeModel: '' } });
 });

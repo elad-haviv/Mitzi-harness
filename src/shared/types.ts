@@ -223,6 +223,8 @@ export type ChatMessage = Message & {
   route?: RouteChoice;
   /** The feedback loop this answer belongs to (an attempt the user reviewed or asked to redo). */
   feedbackLoopId?: string;
+  /** Said aloud in a realtime voice conversation (the text is its transcript). */
+  spoken?: boolean;
   /** Set on user messages Mitzi sent for the user: redo directions, plan approval, goal follow-ups. */
   auto?: 'redo' | 'plan' | 'goal';
 };
@@ -907,6 +909,8 @@ export interface MediaSettings {
   musicModel: string;
   /** Speech-to-text for live mode in browsers without built-in recognition. */
   transcribeModel: string;
+  /** Speech-to-speech for realtime voice conversations (OpenAI Realtime). Empty: live mode uses the models above. */
+  realtimeModel?: string;
 }
 
 export type MediaKind = 'image' | 'video' | 'speech' | 'sound' | 'music';

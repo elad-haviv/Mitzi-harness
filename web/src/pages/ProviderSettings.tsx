@@ -253,6 +253,7 @@ const MEDIA_FIELDS: { key: keyof MediaModels; label: string; hint: string; empty
   { key: 'speechModel', label: 'Speech (text to speech)', hint: 'Natural voices for read-aloud and live mode. Without it, your browser’s voices are used.', empty: 'Add OpenAI, ElevenLabs, Google or OpenRouter for natural voices.' },
   { key: 'soundModel', label: 'Sound effects', hint: 'Sound design from a description.', empty: 'Add ElevenLabs to generate sound effects.' },
   { key: 'musicModel', label: 'Music', hint: 'Original music from a description.', empty: 'Add ElevenLabs to generate music.' },
+  { key: 'realtimeModel', label: 'Realtime voice', hint: 'Natural spoken conversations: you can interrupt, and it answers as you finish speaking. Used by the voice button when set; otherwise live mode uses the speech and transcription models.', empty: 'Add OpenAI to talk with a realtime model.' },
   { key: 'transcribeModel', label: 'Transcription (speech to text)', hint: 'For live mode in browsers without built-in speech recognition (Firefox, some Safari).', empty: 'Add OpenAI, Groq, Google or OpenRouter for transcription.' },
 ];
 
@@ -305,7 +306,7 @@ export function MediaSettingsSection() {
         <div key={f.key} className="field">
           <span className="field-label">{f.label}</span>
           <ModelPicker
-            value={settings.media[f.key]}
+            value={settings.media[f.key] ?? ''}
             onChange={(v) => void save({ [f.key]: v })}
             variant="input"
             direction="down"

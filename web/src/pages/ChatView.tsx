@@ -30,6 +30,7 @@ import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 're
 import { api, ApprovalLevel, Artifact, Attachment, AUTO_MODEL, Chat, ChatMessage, ChatMode, DEFAULT_BOT_ID, FeedbackLoop, Goal, RecalledMemory, RepoStatus, RouteChoice, StreamEvent } from '../api';
 import { ImportModal } from '../components/Import';
 import { LiveMode } from '../components/LiveMode';
+import { RealtimeMode } from '../components/RealtimeMode';
 import { ProjectChip } from '../components/ProjectChip';
 import { speaker } from '../speech';
 import { ArtifactIcon, ArtifactView, TYPE_LABEL } from '../components/Artifacts';
@@ -613,7 +614,7 @@ export function ChatView({
           {chat && chat.messages.length > 0 && !embedded && (
             <ContextButton chatId={chat.id} used={chat.lastPromptTokens} total={contextLength} refreshKey={contextVersion} onDetails={() => setPanel({ tab: 'context' })} />
           )}
-          <button className="icon-btn" title="Live conversation: talk and listen hands-free" aria-label="Start live conversation" onClick={() => setLiveMode(true)} disabled={running}>
+          <button className="icon-btn" title="Live conversation: talk and listen hands-free" aria-label="Start live conversation" onClick={() => void startLive()} disabled={running}>
             <AudioLines size={18} />
           </button>
         </>
@@ -1024,7 +1025,25 @@ export function ChatView({
     );
   }
 
-  const live_ = liveMode && (
+  const realtime = !!settings?.media.realtimeModel;
+  // Realtime voice saves to a chat as it goes, so a new chat is made first.
+  const startLive = async () => {
+    if (realtime && !chatId) {
+      try {
+        const created = await api.createChat({ projectId, botId, model: draftModel || undefined, mode: draftMode === 'work' ? 'work' : undefined, approval: draftApproval });
+        setChat(created);
+        setChatId(created.id);
+        if (parseRoute(location.hash).page === 'new') navigate({ page: 'chat', id: created.id }, true);
+      } catch (err) {
+        return toast((err as Error).message);
+      }
+    }
+    setLiveMode(true);
+  };
+
+  const live_ = liveMode && (realtime && chatId ? (
+    <RealtimeMode chatId={chatId} title={customBot?.name ?? 'Mitzi'} emoji={customBot?.emoji} onClose={() => setLiveMode(false)} onSaved={() => void reload(chatId)} />
+  ) : (
     <LiveMode
       title={customBot?.name ?? 'Mitzi'}
       emoji={customBot?.emoji}
@@ -1037,7 +1056,7 @@ export function ChatView({
         .map(messageText)
         .join('\n')}
     />
-  );
+  ));
 
   if (embedded) {
     return (

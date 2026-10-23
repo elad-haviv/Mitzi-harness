@@ -68,7 +68,7 @@ const DEFAULT_UI_SETTINGS: UiSettings = {
   recallTokens: 1200,
   disabledSkills: [],
   useClaudeSkills: true,
-  media: { imageModel: '', videoModel: '', speechModel: '', voice: '', soundModel: '', musicModel: '', transcribeModel: '' },
+  media: { imageModel: '', videoModel: '', speechModel: '', voice: '', soundModel: '', musicModel: '', transcribeModel: '', realtimeModel: '' },
   autoCompactPercent: 80,
   keepRecentTurns: 2,
   autoCheckUpdates: true,

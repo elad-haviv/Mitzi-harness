@@ -9,7 +9,7 @@ import type { ProviderConfig, ProviderKind, SearchKind } from '../shared/types.j
 import type { ApprovalAnswer } from '../permissions.js';
 import { APPROVAL_LEVELS, Attachment, TelegramSettings, AUTO_MODEL, BankProfile, BankSummary, Bot, BotTools, Chat, DEFAULT_BOT_ID, MemoryType, Project, PublicSettings, SettingsUpdate, StreamEvent } from '../shared/types.js';
 import { toToolSpecs } from '../tools/index.js';
-import { compactChat, contextBreakdown, ModelCatalog } from './context.js';
+import { compactChat, contextBreakdown, ModelCatalog, systemPrompt } from './context.js';
 import { MemoryService } from './memory/index.js';
 import { listCommands } from './extensions/commands.js';
 import { Plugins, syncPlugins } from './extensions/plugins.js';
@@ -413,6 +413,33 @@ export function createApp(opts: AppOptions) {
     const auto = ['redo', 'plan', 'goal'].includes(str(r.body?.auto)) ? (str(r.body.auto) as 'redo' | 'plan' | 'goal') : undefined;
     const feedbackLoopId = str(r.body?.feedbackLoopId) || undefined;
     return stream(r.params.id, { kind: 'message', content, attachments, editIndex, focus: str(r.body?.focus) || undefined, auto, feedbackLoopId })(r);
+  });
+  /** Starts a realtime voice conversation in the chat: a short-lived key and the call address for the browser. */
+  route('POST', '/api/chats/:id/realtime', async ({ params, body }) => {
+    const chat = getChat(params.id);
+    if (runner.isRunning(chat.id)) throw new HttpError(409, 'Wait for the response to finish first');
+    // The bot's instructions and memories, and the conversation so far, so the voice picks up where the chat is.
+    const history = chat.messages
+      .filter((m) => (m.role === 'user' && !m.auto) || (m.role === 'assistant' && typeof m.content === 'string' && m.content.trim()))
+      .slice(-20)
+      .map((m) => `${m.role === 'user' ? 'User' : 'You'}: ${(typeof m.content === 'string' ? m.content : (m.content ?? []).map((p) => (p.type === 'text' ? p.text : '')).join(' ')).replace(/<attachment[\s\S]*?<\/attachment>/g, '[file]').slice(0, 1500)}`)
+      .join('\n');
+    const instructions =
+      `${systemPrompt({ ...runner.setup(chat), toolNames: [], team: [] })}\n\n# Voice conversation\nYou are talking with the user out loud. Keep answers short and natural to listen to: no Markdown, lists or code. ` +
+      `Speak the language the user speaks. You can't use tools in this conversation; if something needs them, say so and suggest continuing in the chat.` +
+      (history ? `\n\n# The conversation so far\n${history}` : '');
+    return media.realtimeSession(instructions.slice(0, 60_000), str(body?.voice) || undefined);
+  });
+  /** Saves a spoken turn of a realtime conversation to the chat. */
+  route('POST', '/api/chats/:id/spoken', ({ params, body }) => {
+    const chat = getChat(params.id);
+    const content = str(body?.content).trim();
+    if (!content || (body?.role !== 'user' && body?.role !== 'assistant')) throw new HttpError(400, 'A spoken turn needs a role and its text');
+    chat.messages.push({ role: body.role, content, ts: Date.now(), spoken: true, ...(body.role === 'assistant' ? { model: store.settings.media.realtimeModel || undefined } : {}) });
+    if (chat.title === 'New chat' && body.role === 'user') chat.title = content.slice(0, 60);
+    chat.updatedAt = now();
+    store.chats.put(chat);
+    return { ok: true, count: chat.messages.length };
   });
   route('POST', '/api/chats/:id/regenerate', (r) => stream(r.params.id, { kind: 'regenerate' })(r));
   /** Queues a message while the chat is responding; `now` interrupts the response to send it right away. */
