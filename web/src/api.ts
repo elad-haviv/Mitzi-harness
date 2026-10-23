@@ -45,6 +45,7 @@ import type {
   WorkflowNodeType,
   SearchHit,
   SearchKind,
+  BudgetStatus,
 } from '../../src/shared/types';
 
 export type * from '../../src/shared/types';
@@ -229,6 +230,7 @@ export const api = {
   feedbackLoops: (botId?: string) => request<(FeedbackLoop & { chatTitle?: string })[]>('GET', `/api/feedback${botId ? `?botId=${botId}` : ''}`),
   deleteLoop: (id: string) => request('DELETE', `/api/feedback/${id}`),
   learning: (botId?: string) => request<LearningCurve>('GET', `/api/insights/learning${botId ? `?botId=${botId}` : ''}`),
+  budget: () => request<BudgetStatus>('GET', '/api/budget'),
   search: (q: string, kinds?: SearchKind[]) => request<{ hits: SearchHit[]; semantic: boolean }>('GET', `/api/search?q=${encodeURIComponent(q)}${kinds?.length ? `&kinds=${kinds.join(',')}` : ''}`),
   usage: (q: { days?: number; projectId?: string; chatId?: string; botId?: string } = {}) =>
     request<UsageReport>('GET', `/api/usage?${new URLSearchParams(Object.entries(q).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))}`),

@@ -1,6 +1,6 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { speaker } from './speech';
-import { api, ApiError, Bot, ChatListItem, ModelInfo, ProjectView, PublicSettings, TaskView, UpdateStatus } from './api';
+import { api, ApiError, BudgetStatus, Bot, ChatListItem, ModelInfo, ProjectView, PublicSettings, TaskView, UpdateStatus } from './api';
 
 export type Theme = 'system' | 'light' | 'dark';
 
@@ -34,6 +34,9 @@ interface AppState {
   /** The last update check (the server checks in the background). */
   update?: UpdateStatus;
   setUpdate(u: UpdateStatus): void;
+  /** Spending against the budget, refreshed after each answer. */
+  budget?: BudgetStatus;
+  refreshBudget(): Promise<void>;
   toast(message: string, tone?: Toast['tone']): void;
   toasts: Toast[];
   dismissToast(id: number): void;
@@ -66,6 +69,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [tasks, setTasks] = useState<TaskView[]>([]);
   const [update, setUpdate] = useState<UpdateStatus>();
+  const [budget, setBudget] = useState<BudgetStatus>();
+  const refreshBudget = useCallback(() => api.budget().then(setBudget, () => {}), []);
   const [modelsError, setModelsError] = useState<string>();
   const [authError, setAuthError] = useState(false);
   const [theme, setThemeState] = useState<Theme>(readTheme);
@@ -102,7 +107,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const refreshSettings = useCallback(() => guard(api.settings(), setSettings), [guard]);
-  const refreshChats = useCallback(() => guard(api.chats(), setChats), [guard]);
+  // Chats are refreshed after every answer, which is also when spending changes.
+  const refreshChats = useCallback(() => {
+    void refreshBudget();
+    return guard(api.chats(), setChats);
+  }, [guard, refreshBudget]);
   const refreshProjects = useCallback(() => guard(api.projects(), setProjects), [guard]);
   const refreshBots = useCallback(() => guard(api.bots(), setBots), [guard]);
   const refreshTasks = useCallback(async () => {
@@ -181,11 +190,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       refreshTasks,
       update,
       setUpdate,
+      budget,
+      refreshBudget,
       toast,
       toasts,
       dismissToast,
     }),
-    [settings, chats, projects, bots, models, modelsError, authError, theme, setTheme, refreshSettings, refreshChats, refreshProjects, refreshBots, refreshModels, tasks, refreshTasks, update, toast, toasts, dismissToast],
+    [settings, chats, projects, bots, models, modelsError, authError, theme, setTheme, refreshSettings, refreshChats, refreshProjects, refreshBots, refreshModels, tasks, refreshTasks, update, budget, refreshBudget, toast, toasts, dismissToast],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

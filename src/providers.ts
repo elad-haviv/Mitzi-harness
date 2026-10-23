@@ -98,6 +98,8 @@ export class RoutingClient implements LlmClient {
   /** Errors from the last listModels(), by provider id. */
   readonly errors = new Map<string, string>();
   readonly counts = new Map<string, number>();
+  /** Called before every chat call; throws to refuse it (the budget's hard stop). */
+  beforeChat?: () => void;
   /** Told about every chat call's token usage (for the usage log). */
   onUsage?: (model: string, usage: ChatResult['usage']) => void;
 
@@ -148,6 +150,7 @@ export class RoutingClient implements LlmClient {
   }
 
   async chat(req: ChatRequest, handlers?: StreamHandlers): Promise<ChatResult> {
+    this.beforeChat?.();
     const { provider, model } = this.route(req.model);
     const result = await this.client(provider).chat({ ...req, model }, handlers);
     this.onUsage?.(req.model, result.usage);

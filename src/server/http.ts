@@ -26,7 +26,7 @@ import { registerUpdateRoutes } from './routes-update.js';
 import { registerImportRoutes } from './importer.js';
 import { mediaUpdate, registerFeatureRoutes } from './routes-features.js';
 import { newId, now, Store } from './store.js';
-import { UsageLog } from './usage.js';
+import { budgetMessage, BudgetExceeded, budgetStatus, UsageLog } from './usage.js';
 import { SearchIndex } from './search.js';
 import { BrowserService } from './browser.js';
 import { registerWorkRoutes } from './routes-work.js';
@@ -76,6 +76,10 @@ export function createApp(opts: AppOptions) {
     if (routing?.key !== key) {
       routing = { key, client: new RoutingClient(providers) };
       routing.client.onUsage = (model, u) => usage.record(model, u);
+      routing.client.beforeChat = () => {
+        const b = budgetStatus(usage, store.settings.budget);
+        if (b.state === 'over' && b.hardStop) throw new BudgetExceeded(budgetMessage(b));
+      };
       catalog?.invalidate();
     }
     return routing.client;
@@ -182,6 +186,15 @@ export function createApp(opts: AppOptions) {
     if (typeof update.browserHeaded === 'boolean') ui.browserHeaded = update.browserHeaded;
     if (typeof update.recallTokens === 'number') ui.recallTokens = clamp(Math.round(update.recallTokens), 200, 8000);
     if (update.media) ui.media = mediaUpdate(update.media, store.settings.media);
+    if (update.budget && typeof update.budget === 'object') {
+      const money = (v: unknown) => (typeof v === 'number' && v > 0 ? Math.round(v * 10_000) / 10_000 : undefined);
+      ui.budget = {
+        daily: money(update.budget.daily),
+        monthly: money(update.budget.monthly),
+        alertPercent: clamp(Math.round(Number(update.budget.alertPercent) || 80), 10, 100),
+        hardStop: update.budget.hardStop === true,
+      };
+    }
     store.updateSettings(ui);
     return publicSettings();
   });
@@ -600,6 +613,7 @@ export function createApp(opts: AppOptions) {
     if (!model || !hasChatProvider()) return undefined;
     return { client: router(), model };
   });
+  route('GET', '/api/budget', () => budgetStatus(usage, store.settings.budget));
   route('GET', '/api/search', async ({ query }) => {
     const q = (query.get('q') ?? '').trim();
     if (!q) return { hits: [], semantic: false };

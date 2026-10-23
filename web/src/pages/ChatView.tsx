@@ -20,6 +20,7 @@ import {
   Sparkles,
   Terminal,
   Trash2,
+  Wallet,
   X,
 } from 'lucide-react';
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -869,6 +870,14 @@ export function ChatView({
         </div>
       </div>
       <div className="composer-stack">
+        {app.budget?.state === 'over' && app.budget.hardStop && (
+          <div className="error-box budget-banner">
+            <Wallet size={16} />
+            <span style={{ flex: 1 }}>
+              You’ve reached your {app.budget.limit === 'daily' ? 'daily' : 'monthly'} budget, so Mitzi is paused. <a href={href({ page: 'settings', section: 'budget' })}>Change the budget</a>
+            </span>
+          </div>
+        )}
         {btw && <BtwCard state={btw} onClose={() => setBtw(undefined)} />}
         {chat?.goal && <GoalBar goal={chat.goal} onCommand={(t) => void runCommand(t)} onOpen={() => setPanel({ tab: 'tasks' })} />}
       </div>

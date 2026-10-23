@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowUpCircle, Brain, Check, CircleDashed, Loader2, RefreshCw, Copy, Database, Download, KeyRound, MessagesSquare, Monitor, Moon, Palette, Plug, Puzzle, Sparkles, Sun, Volume2, WandSparkles } from 'lucide-react';
+import { AlertTriangle, ArrowUpCircle, Wallet, Brain, Check, CircleDashed, Loader2, RefreshCw, Copy, Database, Download, KeyRound, MessagesSquare, Monitor, Moon, Palette, Plug, Puzzle, Sparkles, Sun, Volume2, WandSparkles } from 'lucide-react';
 import { ReactNode, useEffect, useState } from 'react';
 import { api, UpdateStep } from '../api';
 import { ImportModal } from '../components/Import';
@@ -7,14 +7,16 @@ import { Toggle } from '../components/ui';
 import { href } from '../router';
 import { Theme, useApp } from '../state';
 import { MediaSettingsSection, ProvidersSection } from './ProviderSettings';
+import { BudgetMeters } from './Insights';
 
-type Section = 'general' | 'models' | 'providers' | 'media' | 'memory' | 'data' | 'updates';
+type Section = 'general' | 'models' | 'providers' | 'media' | 'budget' | 'memory' | 'data' | 'updates';
 
 const SECTIONS: { id: Section; label: string; icon: ReactNode; hint: string }[] = [
   { id: 'general', label: 'General', icon: <Palette size={16} />, hint: 'Appearance and long conversations' },
   { id: 'providers', label: 'Providers', icon: <KeyRound size={16} />, hint: 'API keys for OpenRouter, OpenAI, Anthropic, Google and more' },
   { id: 'models', label: 'Models', icon: <Sparkles size={16} />, hint: 'The models Mitzi uses by default' },
   { id: 'media', label: 'Media & voice', icon: <Volume2 size={16} />, hint: 'Image, video, speech, sound and music models, and read-aloud voices' },
+  { id: 'budget', label: 'Usage & budget', icon: <Wallet size={16} />, hint: 'Spending limits and alerts' },
   { id: 'memory', label: 'Memory', icon: <Brain size={16} />, hint: 'How bots remember, and importing memories from other AIs' },
   { id: 'data', label: 'Data & about', icon: <Database size={16} />, hint: 'Where your data lives, importing chats, and version' },
   { id: 'updates', label: 'Updates', icon: <ArrowUpCircle size={16} />, hint: 'Get the latest version of Mitzi' },
@@ -72,6 +74,7 @@ export function SettingsPage({ section }: { section?: string }) {
           {current === 'models' && <ModelSettings />}
           {current === 'providers' && <ProvidersSection />}
           {current === 'media' && <MediaSettingsSection />}
+          {current === 'budget' && <BudgetSettings />}
           {current === 'memory' && <MemorySettings />}
           {current === 'data' && <DataSettings />}
           {current === 'updates' && <UpdateSettings />}
@@ -237,6 +240,79 @@ function ModelSettings() {
       </div>
       <a className="link-btn small" href={href({ page: 'settings', section: 'media' })}>Choose media and voice models →</a>
     </section>
+    </>
+  );
+}
+
+function BudgetSettings() {
+  const { settings, budget, refreshBudget } = useApp();
+  const save = useSave();
+  const b = settings?.budget ?? { alertPercent: 80, hardStop: false };
+  const [daily, setDaily] = useState(b.daily ? String(b.daily) : '');
+  const [monthly, setMonthly] = useState(b.monthly ? String(b.monthly) : '');
+  useEffect(() => {
+    void refreshBudget();
+  }, [refreshBudget]);
+  if (!settings) return null;
+  const update = async (patch: Partial<typeof b>) => {
+    await save({ budget: { ...b, daily: Number(daily) || undefined, monthly: Number(monthly) || undefined, ...patch } }, 'Budget saved');
+    void refreshBudget();
+  };
+  return (
+    <>
+      <section className="settings-section card">
+        <h2>Spending limits</h2>
+        <p className="muted small" style={{ marginTop: 0 }}>
+          Costs come from your providers (or the model list’s prices when a provider doesn’t report them). Leave a limit empty for none.
+        </p>
+        <form
+          className="budget-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void update({});
+          }}
+        >
+          <label className="field">
+            <span className="field-label">Per day</span>
+            <span className="money-input">
+              $<input className="input" type="number" min={0} step="any" value={daily} placeholder="No limit" onChange={(e) => setDaily(e.target.value)} />
+            </span>
+          </label>
+          <label className="field">
+            <span className="field-label">Per month</span>
+            <span className="money-input">
+              $<input className="input" type="number" min={0} step="any" value={monthly} placeholder="No limit" onChange={(e) => setMonthly(e.target.value)} />
+            </span>
+          </label>
+          <button className="btn btn-primary">Save limits</button>
+        </form>
+        <div className="field">
+          <span className="field-label">Warn me at</span>
+          <select className="select" style={{ maxWidth: 200 }} value={b.alertPercent} onChange={(e) => void update({ alertPercent: Number(e.target.value) })}>
+            {[50, 70, 80, 90, 95].map((p) => (
+              <option key={p} value={p}>
+                {p}% of a limit
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="tool-toggle" style={{ padding: 0, border: 0 }}>
+          <div className="grow">
+            <div className="t">Stop at the limit</div>
+            <div className="s">Refuse new requests once a limit is reached, including scheduled tasks and workflows. Otherwise Mitzi only warns.</div>
+          </div>
+          <Toggle label="Stop at the limit" on={b.hardStop} onChange={(v) => void update({ hardStop: v })} />
+        </div>
+      </section>
+      {budget && (budget.daily || budget.monthly) ? (
+        <section className="settings-section card">
+          <h2>So far</h2>
+          <BudgetMeters budget={budget} />
+          <a className="link-btn small" href={href({ page: 'insights' })}>
+            See where it goes in Insights →
+          </a>
+        </section>
+      ) : null}
     </>
   );
 }

@@ -4,7 +4,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { appendFileSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Usage } from '../openrouter.js';
-import type { ModelInfo, UsageEvent, UsageKind } from '../shared/types.js';
+import type { BudgetSettings, BudgetStatus, ModelInfo, UsageEvent, UsageKind } from '../shared/types.js';
 
 export interface UsageTag {
   kind: UsageKind;
@@ -115,4 +115,38 @@ export function groupBy(events: UsageEvent[], key: (e: UsageEvent) => string | u
 export function dayOf(ts: number): string {
   const d = new Date(ts);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Spending against the budget limits, from the usage log. */
+export function budgetStatus(log: UsageLog, budget: BudgetSettings | undefined, now = new Date()): BudgetStatus {
+  const day = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const month = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const events = log.all(month);
+  const spentMonth = events.reduce((n, e) => n + e.cost, 0);
+  const spentToday = events.filter((e) => e.ts >= day).reduce((n, e) => n + e.cost, 0);
+  const daily = budget?.daily || undefined;
+  const monthly = budget?.monthly || undefined;
+  const alertPercent = budget?.alertPercent ?? 80;
+  const status: BudgetStatus = { daily, monthly, spentToday, spentMonth, alertPercent, hardStop: !!budget?.hardStop, state: 'ok' };
+  // The tighter of the two limits decides.
+  const checks: ['daily' | 'monthly', number, number | undefined][] = [
+    ['daily', spentToday, daily],
+    ['monthly', spentMonth, monthly],
+  ];
+  for (const [limit, spent, max] of checks) {
+    if (!max) continue;
+    if (spent >= max) return { ...status, state: 'over', limit };
+    if (spent >= (max * alertPercent) / 100 && status.state === 'ok') Object.assign(status, { state: 'warn', limit });
+  }
+  return status;
+}
+
+/** Thrown when the budget's hard stop refuses a request. */
+export class BudgetExceeded extends Error {
+  readonly status = 402;
+}
+
+export function budgetMessage(s: BudgetStatus): string {
+  const limit = s.limit === 'daily' ? `daily budget of $${s.daily!.toFixed(2)}` : `monthly budget of $${s.monthly!.toFixed(2)}`;
+  return `You've reached your ${limit}. Raise it in Settings → Usage & budget${s.limit === 'daily' ? ', or wait until tomorrow' : ', or wait until next month'}.`;
 }

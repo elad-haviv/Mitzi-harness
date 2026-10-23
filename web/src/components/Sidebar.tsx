@@ -1,4 +1,4 @@
-import { ArrowUpCircle, BarChart3, Bot, Brain, CalendarClock, Check, ChevronDown, ChevronRight, FolderOpen, GitBranch, KeyRound, Layers, ListTree, MoreHorizontal, PanelLeftClose, Pencil, Pin, PinOff, Plug, Puzzle, Search, Settings, SquarePen, Trash2, WandSparkles, Workflow as WorkflowIcon, X } from 'lucide-react';
+import { ArrowUpCircle, BarChart3, Wallet, Bot, Brain, CalendarClock, Check, ChevronDown, ChevronRight, FolderOpen, GitBranch, KeyRound, Layers, ListTree, MoreHorizontal, PanelLeftClose, Pencil, Pin, PinOff, Plug, Puzzle, Search, Settings, SquarePen, Trash2, WandSparkles, Workflow as WorkflowIcon, X } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ChatListItem } from '../api';
 import { href, navigate, Route } from '../router';
@@ -48,7 +48,7 @@ function groupLabel(iso: string): string {
 }
 
 export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collapsed: boolean; onCollapse(): void }) {
-  const { chats, projects, bots, models, settings, tasks, update, refreshChats, toast } = useApp();
+  const { chats, projects, bots, models, settings, tasks, update, budget, refreshChats, toast } = useApp();
   const unseen = tasks.reduce((n, t) => n + t.runs.filter((r) => !r.seen && r.status !== 'running').length, 0);
   const [query, setQuery] = useState('');
   const [groupBy, setGroupBy] = useStored<GroupBy>('mitzi.chatGroupBy', 'date');
@@ -311,6 +311,14 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
           <a className="key-warning" href={href({ page: 'settings', section: 'providers' })}>
             <KeyRound size={15} style={{ flexShrink: 0, marginTop: 1 }} />
             <span>Add an API key for OpenRouter or another provider to start chatting</span>
+          </a>
+        )}
+        {budget && budget.state !== 'ok' && (
+          <a className={`budget-pill ${budget.state}`} href={href({ page: 'settings', section: 'budget' })}>
+            <Wallet size={15} />
+            {budget.state === 'over'
+              ? `${budget.limit === 'daily' ? 'Daily' : 'Monthly'} budget reached${budget.hardStop ? ': paused' : ''}`
+              : `${Math.round(((budget.limit === 'daily' ? budget.spentToday / budget.daily! : budget.spentMonth / budget.monthly!) || 0) * 100)}% of ${budget.limit === 'daily' ? 'today’s' : 'this month’s'} budget used`}
           </a>
         )}
         {update?.supported && update.behind > 0 && (

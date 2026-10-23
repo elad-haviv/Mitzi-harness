@@ -695,6 +695,35 @@ test('search finds messages, artifacts and memories, and points at the message',
   assert.deepEqual((await call('GET', '/api/search?q=')).data.hits, []);
 });
 
+test('budgets warn, and the hard stop refuses requests once a limit is reached', async () => {
+  reply = () => textChunks('Fine.');
+  const chat = (await call('POST', '/api/chats', {})).data;
+  await stream(`/api/chats/${chat.id}/messages`, { content: 'Spend a little' });
+  // Memory jobs after the answer cost a little too; let them finish.
+  await new Promise((r) => setTimeout(r, 500));
+  const spent = (await call('GET', '/api/budget')).data.spentMonth;
+  assert.ok(spent > 0);
+
+  // 85% of the limit spent: past the 80% alert.
+  await call('PUT', '/api/settings', { budget: { monthly: spent / 0.85, alertPercent: 80, hardStop: true } });
+  let b = (await call('GET', '/api/budget')).data;
+  assert.equal(b.state, 'warn');
+  assert.equal(b.limit, 'monthly');
+
+  await call('PUT', '/api/settings', { budget: { monthly: 0.001, daily: 1000, alertPercent: 80, hardStop: false } });
+  b = (await call('GET', '/api/budget')).data;
+  assert.equal(b.state, 'over');
+  // Without the hard stop, an exceeded budget only warns.
+  let events = await stream(`/api/chats/${chat.id}/messages`, { content: 'Still allowed' });
+  assert.ok(!events.some((e) => e.type === 'error'));
+
+  await call('PUT', '/api/settings', { budget: { monthly: 0.001, alertPercent: 80, hardStop: true } });
+  events = await stream(`/api/chats/${chat.id}/messages`, { content: 'Refused' });
+  assert.match(events.find((e) => e.type === 'error').message, /monthly budget of \$0\.00[\s\S]*Settings → Usage & budget/);
+  await call('PUT', '/api/settings', { budget: { alertPercent: 80, hardStop: false } });
+  assert.equal((await call('GET', '/api/budget')).data.state, 'ok');
+});
+
 /** Polls until a server reaches a status. */
 async function waitFor(id: string, status: string) {
   for (let i = 0; i < 200; i++) {

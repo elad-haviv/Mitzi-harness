@@ -30,6 +30,8 @@ export interface UiSettings {
   autoCheckUpdates: boolean;
   /** Show the browser window while bots use it (otherwise it runs out of sight). */
   browserHeaded?: boolean;
+  /** Spending limits, in US dollars. */
+  budget?: BudgetSettings;
 }
 
 export interface PublicSettings extends UiSettings {
@@ -312,6 +314,31 @@ export interface SearchHit {
   projectId?: string;
   /** Other messages in the same chat that matched too. */
   more?: number;
+}
+
+// ---------- Budgets ----------
+
+export interface BudgetSettings {
+  /** 0 or absent: no limit. */
+  daily?: number;
+  monthly?: number;
+  /** Warn when this share of a limit (percent) is spent. */
+  alertPercent: number;
+  /** Refuse new requests once a limit is reached. */
+  hardStop: boolean;
+}
+
+export interface BudgetStatus {
+  daily?: number;
+  monthly?: number;
+  spentToday: number;
+  spentMonth: number;
+  alertPercent: number;
+  hardStop: boolean;
+  /** ok, warn (past the alert share of a limit) or over (a limit reached). */
+  state: 'ok' | 'warn' | 'over';
+  /** Which limit the state is about. */
+  limit?: 'daily' | 'monthly';
 }
 
 // ---------- Usage ----------

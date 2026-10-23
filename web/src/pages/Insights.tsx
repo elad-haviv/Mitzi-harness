@@ -2,7 +2,7 @@
 // bots are learning from feedback loops (attempts needed and first-try ratings over time).
 import { BarChart3, GraduationCap, Loader2, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { api, FeedbackLoop, LearningCurve, UsageGroup, UsageReport } from '../api';
+import { api, BudgetStatus, FeedbackLoop, LearningCurve, UsageGroup, UsageReport } from '../api';
 import { Breakdown, Chart, movingAverage } from '../components/Charts';
 import { Stars } from '../components/Feedback';
 import { Kpi, money } from '../components/Work';
@@ -47,7 +47,7 @@ export function InsightsPage({ tab }: { tab?: string }) {
 // ---------- Usage ----------
 
 export function UsageView({ projectId: fixedProject, compact }: { projectId?: string; compact?: boolean }) {
-  const { projects, bots, toast } = useApp();
+  const { projects, bots, toast, budget } = useApp();
   const [days, setDays] = useState(30);
   const [projectId, setProjectId] = useState(fixedProject ?? '');
   const [botId, setBotId] = useState('');
@@ -97,6 +97,14 @@ export function UsageView({ projectId: fixedProject, compact }: { projectId?: st
           ))}
         </select>
       </div>
+      {budget && !fixedProject && (budget.daily || budget.monthly) ? (
+        <section className="card chart-card">
+          <h2>
+            Budget <a className="small" href={href({ page: 'settings', section: 'budget' })} style={{ fontWeight: 400, marginLeft: 6 }}>Change</a>
+          </h2>
+          <BudgetMeters budget={budget} />
+        </section>
+      ) : null}
       <div className="kpis">
         <Kpi label={`Cost, last ${days} days`} value={money(t.cost)} hint={`All time: ${money(data.allTime.cost)}`} />
         <Kpi label="Tokens" value={formatTokens(t.prompt + t.completion)} hint={`${t.prompt.toLocaleString()} in · ${t.completion.toLocaleString()} out`} />
@@ -340,6 +348,37 @@ export function ProjectUsage({ projectId }: { projectId: string }) {
       <p className="muted small" style={{ margin: '6px 0 0' }}>
         All time: {money(data.allTime.cost)} · {formatTokens(data.allTime.prompt + data.allTime.completion)} tokens. <a href={href({ page: 'insights' })}>Details</a>
       </p>
+    </div>
+  );
+}
+
+/** Spending against the daily and monthly limits. */
+export function BudgetMeters({ budget }: { budget: BudgetStatus }) {
+  const rows = [
+    { label: 'Today', spent: budget.spentToday, max: budget.daily },
+    { label: 'This month', spent: budget.spentMonth, max: budget.monthly },
+  ].filter((r) => r.max);
+  if (!rows.length) return null;
+  return (
+    <div className="budget-meters">
+      {rows.map((r) => {
+        const pct = Math.min(100, (r.spent / r.max!) * 100);
+        const tone = pct >= 100 ? 'over' : pct >= budget.alertPercent ? 'warn' : 'ok';
+        return (
+          <div key={r.label} className="budget-meter">
+            <div className="budget-meter-head">
+              <span>{r.label}</span>
+              <span className={`budget-meter-value ${tone}`}>
+                {money(r.spent)} of {money(r.max!)}
+              </span>
+            </div>
+            <div className="budget-bar" role="meter" aria-valuemin={0} aria-valuemax={r.max} aria-valuenow={r.spent} aria-label={`${r.label}: ${money(r.spent)} of ${money(r.max!)}`}>
+              <div className={tone} style={{ width: `${pct}%` }} />
+              <i style={{ left: `${budget.alertPercent}%` }} title={`Alert at ${budget.alertPercent}%`} />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
