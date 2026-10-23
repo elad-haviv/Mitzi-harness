@@ -115,7 +115,7 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
       </div>
       <div className="sidebar-bottom">
         {settings && !settings.hasApiKey && (
-          <a className="key-warning" href={href({ page: 'settings' })}>
+          <a className="key-warning" href={href({ page: 'settings', section: 'providers' })}>
             <KeyRound size={15} style={{ flexShrink: 0, marginTop: 1 }} />
             <span>Add an API key for OpenRouter or another provider to start chatting</span>
           </a>

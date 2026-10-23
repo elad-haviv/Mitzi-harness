@@ -11,6 +11,9 @@ export function ProjectsPage() {
   const { projects, refreshProjects, toast } = useApp();
   const [creating, setCreating] = useState(false);
   const [dialog, setDialog] = useState<'folder' | 'repo' | null>(null);
+  const [deleting, setDeleting] = useState<ProjectView | null>(null);
+  // Chat counts change as you chat; show current ones.
+  useEffect(() => void refreshProjects(), [refreshProjects]);
   const opened = async (p: ProjectView) => {
     await refreshProjects();
     setDialog(null);
@@ -51,6 +54,7 @@ export function ProjectsPage() {
           />
         )}
         {dialog === 'repo' && <CloneRepoModal onClose={() => setDialog(null)} onCloned={(p) => void opened(p)} />}
+        {deleting && <DeleteProjectModal project={deleting} onClose={() => setDeleting(null)} />}
         {projects.length === 0 ? (
           <Empty
             icon={<FolderOpen size={22} />}
@@ -67,6 +71,19 @@ export function ProjectsPage() {
           <div className="grid">
             {projects.map((p) => (
               <a key={p.id} className="tile" href={href({ page: 'project', id: p.id })}>
+                <div className="tile-actions">
+                  <button
+                    className="icon-btn sm"
+                    aria-label={`Delete ${p.name}`}
+                    title="Delete project"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setDeleting(p);
+                    }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
                 <div className="row" style={{ gap: 10 }}>
                   <div className="artifact-icon" style={{ width: 36, height: 36, borderRadius: 10 }}>
                     {p.repo ? <FolderGit2 size={17} /> : p.folder ? <Terminal size={17} /> : <FolderOpen size={17} />}
@@ -167,6 +184,7 @@ export function ProjectPage({ id }: { id: string }) {
   const [chats, setChats] = useState<ChatListItem[]>([]);
   const [artifacts, setArtifacts] = useState<ArtifactListItem[]>([]);
   const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [instructionsOpen, setInstructionsOpen] = useState(false);
   const [folder, setFolder] = useState(project?.folder ?? '');
   const [browsing, setBrowsing] = useState(false);
@@ -237,17 +255,7 @@ export function ProjectPage({ id }: { id: string }) {
                   <Pencil size={15} /> Edit details
                 </button>
                 <hr />
-                <button
-                  className="danger"
-                  onClick={async () => {
-                    close();
-                    if (!(await confirm(`This deletes “${project.name}”, its ${project.chatCount} chats and their artifacts.`, { title: 'Delete project?' }))) return;
-                    await api.deleteProject(project.id).catch((err) => toast(err.message));
-                    void refreshProjects();
-                    void refreshChats();
-                    navigate({ page: 'projects' });
-                  }}
-                >
+                <button className="danger" onClick={() => (close(), setDeleting(true))}>
                   <Trash2 size={15} /> Delete project
                 </button>
               </>
@@ -421,6 +429,7 @@ export function ProjectPage({ id }: { id: string }) {
       {editing && <ProjectForm project={project} onClose={() => setEditing(false)} onSaved={() => void refreshProjects()} />}
       {instructionsOpen && <InstructionsModal initial={project.instructions} onClose={() => setInstructionsOpen(false)} onSave={(text) => update({ instructions: text })} />}
       {confirmNode}
+      {deleting && <DeleteProjectModal project={project} onClose={() => setDeleting(false)} onDeleted={() => navigate({ page: 'projects' })} />}
     </div>
   );
 }
@@ -510,5 +519,73 @@ function RepoPanel({ project }: { project: ProjectView }) {
         </button>
       )}
     </div>
+  );
+}
+
+/** Deletes a project; its chats move out of it unless the user chooses to delete them too. */
+function DeleteProjectModal({ project: initial, onClose, onDeleted }: { project: ProjectView; onClose(): void; onDeleted?(): void }) {
+  const { refreshProjects, refreshChats, toast } = useApp();
+  const [project, setProject] = useState(initial);
+  useEffect(() => {
+    api.project(initial.id).then(setProject, () => {});
+  }, [initial.id]);
+  const [withChats, setWithChats] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const del = async () => {
+    setBusy(true);
+    try {
+      await api.deleteProject(project.id, withChats);
+      await Promise.all([refreshProjects(), refreshChats()]);
+      toast(`Deleted “${project.name}”`, 'info');
+      onClose();
+      onDeleted?.();
+    } catch (err) {
+      toast((err as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title={`Delete “${project.name}”?`}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn btn-primary btn-danger-fill" disabled={busy} onClick={() => void del()} autoFocus>
+            {busy ? <Loader2 size={14} className="spin" /> : <Trash2 size={14} />} Delete project
+          </button>
+        </>
+      }
+    >
+      <p style={{ marginTop: 0 }}>
+        The project’s instructions and knowledge files will be deleted.
+        {project.folder && (
+          <>
+            {' '}
+            Files in <code>{project.folder}</code> stay on your computer.
+          </>
+        )}
+      </p>
+      {project.chatCount > 0 && (
+        <div className="choice-list">
+          <label className="choice">
+            <input type="radio" name="chats" checked={!withChats} onChange={() => setWithChats(false)} />
+            <span>
+              <strong>Keep its {project.chatCount} chat{project.chatCount === 1 ? '' : 's'}</strong>
+              <span className="muted small">They move out of the project, into your chat list.</span>
+            </span>
+          </label>
+          <label className="choice">
+            <input type="radio" name="chats" checked={withChats} onChange={() => setWithChats(true)} />
+            <span>
+              <strong>Delete the chats too</strong>
+              <span className="muted small">Including their artifacts. This can’t be undone.</span>
+            </span>
+          </label>
+        </div>
+      )}
+    </Modal>
   );
 }

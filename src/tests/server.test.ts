@@ -379,7 +379,7 @@ test('auto-compaction triggers when the last request was near the limit', async 
   }
 });
 
-test('bots shape new chats and deleting a project removes its chats', async () => {
+test('bots shape new chats; deleting a project keeps or deletes its chats', async () => {
   const bot = (await call('POST', '/api/bots', { name: 'Pirate', emoji: '🏴‍☠️', systemPrompt: 'Talk like a pirate.', model: 'test/model', tools: { web: false } })).data;
   assert.deepEqual(bot.tools, { artifacts: true, web: false, memory: true, skills: true, connectors: true, media: true });
   reply = () => textChunks('Arr');
@@ -389,9 +389,18 @@ test('bots shape new chats and deleting a project removes its chats', async () =
   assert.match(JSON.stringify(last.messages[0]), /Talk like a pirate/);
   assert.ok(!last.tools.some((t: any) => t.function.name === 'WebFetch'));
 
-  const project = (await call('POST', '/api/projects', { name: 'Temp' })).data;
+  // By default the chats move out of the project.
+  const kept = (await call('POST', '/api/projects', { name: 'Temp' })).data;
+  const keptChat = (await call('POST', '/api/chats', { projectId: kept.id })).data;
+  assert.equal((await call('DELETE', `/api/projects/${kept.id}`)).status, 200);
+  assert.equal((await call('GET', `/api/projects/${kept.id}`)).status, 404);
+  const moved = (await call('GET', `/api/chats/${keptChat.id}`)).data;
+  assert.equal(moved.projectId, undefined);
+
+  // Or they're deleted with it.
+  const project = (await call('POST', '/api/projects', { name: 'Temp 2' })).data;
   const inProject = (await call('POST', '/api/chats', { projectId: project.id })).data;
-  await call('DELETE', `/api/projects/${project.id}`);
+  await call('DELETE', `/api/projects/${project.id}?chats=delete`);
   assert.equal((await call('GET', `/api/chats/${inProject.id}`)).status, 404);
 });
 

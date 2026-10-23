@@ -4,7 +4,7 @@ import { Sidebar } from './components/Sidebar';
 import { Toasts } from './components/ui';
 import { BotsPage } from './pages/Bots';
 import { ChatView } from './pages/ChatView';
-import { SettingsPage } from './pages/Library';
+import { SettingsPage } from './pages/Settings';
 import { MemoryPage } from './pages/Memory';
 import { ConnectorsPage } from './pages/Connectors';
 import { PluginsPage } from './pages/Plugins';
@@ -89,7 +89,7 @@ export function App() {
       page = <MemoryPage botId={route.botId} />;
       break;
     case 'settings':
-      page = <SettingsPage />;
+      page = <SettingsPage section={route.section} />;
       break;
     case 'connectors':
       page = <ConnectorsPage />;

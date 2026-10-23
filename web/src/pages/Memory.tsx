@@ -82,7 +82,7 @@ export function MemoryPage({ botId }: { botId?: string }) {
 
         {settings?.memoryBackend === 'hindsight' && (
           <div className="card small" style={{ marginBottom: 18, padding: '10px 14px' }}>
-            Memories are stored on your Hindsight server at <code>{settings.hindsightUrl}</code>. <a href={href({ page: 'settings' })}>Change</a>
+            Memories are stored on your Hindsight server at <code>{settings.hindsightUrl}</code>. <a href={href({ page: 'settings', section: 'memory' })}>Change</a>
           </div>
         )}
 

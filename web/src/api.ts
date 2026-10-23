@@ -165,7 +165,7 @@ export const api = {
   createProject: (body: { name: string; description?: string }) => request<ProjectView>('POST', '/api/projects', body),
   updateProject: (id: string, body: Partial<{ name: string; description: string; instructions: string; folder: string | null; permissionMode: string }>) =>
     request<ProjectView>('PATCH', `/api/projects/${id}`, body),
-  deleteProject: (id: string) => request('DELETE', `/api/projects/${id}`),
+  deleteProject: (id: string, deleteChats = false) => request('DELETE', `/api/projects/${id}${deleteChats ? '?chats=delete' : ''}`),
   addProjectFile: (id: string, name: string, content: string) => request<ProjectView>('POST', `/api/projects/${id}/files`, { name, content }),
   removeProjectFile: (id: string, fileId: string) => request<ProjectView>('DELETE', `/api/projects/${id}/files/${fileId}`),
 

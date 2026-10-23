@@ -33,7 +33,7 @@ import { ContextPanel } from '../components/ContextPanel';
 import { Markdown } from '../components/Markdown';
 import { AssistantTurn, Avatar, buildTurns, messageText, Reasoning, CompactDivider, MemoryRecall, PermissionCard, PermissionRequest, ToolBlock, UserTurn } from '../components/Messages';
 import { Menu, useConfirm } from '../components/ui';
-import { href, navigate } from '../router';
+import { href, navigate, parseRoute } from '../router';
 import { LOGO, relativeTime, useApp } from '../state';
 
 type LiveBlock =
@@ -300,7 +300,8 @@ export function ChatView({
         setChat(fresh);
         setChatId(fresh.id);
         id = fresh.id;
-        navigate({ page: 'chat', id }, true);
+        // Unless the user already went elsewhere while the chat was being created.
+        if (parseRoute(location.hash).page === 'new') navigate({ page: 'chat', id }, true);
       } catch (err) {
         toast((err as Error).message);
         return undefined;
@@ -542,7 +543,7 @@ export function ChatView({
           <div className="error-box" style={{ marginBottom: 16, background: 'var(--warn-soft)', color: 'var(--warn)' }}>
             <KeyRound size={18} />
             <span style={{ flex: 1 }}>
-              Add an API key for OpenRouter or another provider to start chatting. <a href={href({ page: 'settings' })}>Open settings →</a>
+              Add an API key for OpenRouter or another provider to start chatting. <a href={href({ page: 'settings', section: 'providers' })}>Add a provider →</a>
             </span>
           </div>
         )}

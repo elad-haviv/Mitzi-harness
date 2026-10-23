@@ -13,7 +13,7 @@ export type Route =
   | { page: 'skills' }
   | { page: 'plugins' }
   | { page: 'tasks' }
-  | { page: 'settings' };
+  | { page: 'settings'; section?: string };
 
 export function parseRoute(hash: string): Route {
   const [path, query = ''] = hash.replace(/^#/, '').split('?');
@@ -34,7 +34,7 @@ export function parseRoute(hash: string): Route {
     case 'memory':
       return { page: 'memory', botId: parts[1] };
     case 'settings':
-      return { page: 'settings' };
+      return { page: 'settings', section: parts[1] };
     case 'tasks':
       return { page: 'tasks' };
     case 'connectors':
@@ -60,6 +60,8 @@ export function href(route: Route): string {
       return `#/projects/${route.id}`;
     case 'artifact':
       return `#/artifacts/${route.id}`;
+    case 'settings':
+      return `#/settings${route.section ? `/${route.section}` : ''}`;
     case 'memory':
       return `#/memory${route.botId ? `/${route.botId}` : ''}`;
     default:

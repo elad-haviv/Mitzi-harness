@@ -52,18 +52,15 @@ export function ProvidersSection() {
 
   return (
     <section className="settings-section card">
-      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
-        <h2 className="row" style={{ gap: 8, margin: 0 }}>
-          <KeyRound size={17} /> Providers
-        </h2>
-        <button className="btn btn-sm" onClick={() => setAdding('pick')}>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 12 }}>
+        <p className="muted small" style={{ margin: 0 }}>
+          Connect OpenRouter for hundreds of models with one key, and add providers directly to use their models with your own keys. Their models appear in
+          the model picker as <code>provider:model</code>.
+        </p>
+        <button className="btn btn-sm" style={{ flexShrink: 0 }} onClick={() => setAdding('pick')}>
           <Plus size={14} /> Add provider
         </button>
       </div>
-      <p className="muted small" style={{ marginTop: 0 }}>
-        Connect OpenRouter for hundreds of models with one key, and add providers directly to use their models with your own keys. Their models appear in the
-        model picker as <code>provider:model</code>.
-      </p>
       {!providers ? (
         <div className="muted small">Loading…</div>
       ) : (
@@ -293,9 +290,6 @@ export function MediaSettingsSection() {
 
   return (
     <section className="settings-section card">
-      <h2 className="row" style={{ gap: 8 }}>
-        <Volume2 size={17} /> Media & voice
-      </h2>
       <p className="muted small" style={{ marginTop: 0 }}>
         Pick models for each kind of media. They use the providers above (OpenAI, Google, OpenRouter, ElevenLabs). Any <code>provider:model</code> id works.
       </p>

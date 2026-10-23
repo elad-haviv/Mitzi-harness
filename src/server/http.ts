@@ -1,5 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
-import { createReadStream, existsSync, readFileSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync, rmSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { homedir } from 'node:os';
 import { extname, join, normalize, resolve, sep } from 'node:path';
@@ -32,6 +32,7 @@ export { HttpError } from './util.js';
 
 
 const MAX_BODY = 25 * 1024 * 1024;
+const VERSION = (JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string }).version;
 const MAX_FILE = 2 * 1024 * 1024;
 
 const MIME: Record<string, string> = {
@@ -140,6 +141,8 @@ export function createApp(opts: AppOptions) {
       apiKeySource: process.env.OPENROUTER_API_KEY ? 'env' : c.apiKey ? 'config' : null,
       defaultModel: c.model,
       smallModel: c.smallModel,
+      version: VERSION,
+      home: MITZI_HOME,
     };
   };
 
@@ -427,10 +430,19 @@ export function createApp(opts: AppOptions) {
     p.updatedAt = now();
     return projectView(store.projects.put(p));
   });
-  route('DELETE', '/api/projects/:id', ({ params }) => {
+  // Chats move out of the project unless ?chats=delete. Files in a linked folder are never touched.
+  route('DELETE', '/api/projects/:id', ({ params, query }) => {
     getProject(params.id);
-    for (const c of store.chats.all()) if (c.projectId === params.id) deleteChat(c.id);
+    const removeChats = query.get('chats') === 'delete';
+    for (const c of store.chats.all()) {
+      if (c.projectId !== params.id) continue;
+      if (removeChats) deleteChat(c.id);
+      else store.chats.put({ ...c, projectId: undefined });
+    }
+    for (const a of store.artifacts.all()) if (a.projectId === params.id && store.artifacts.get(a.id)) store.artifacts.put({ ...a, projectId: undefined });
+    for (const t of store.tasks.all()) if (t.projectId === params.id) store.tasks.put({ ...t, projectId: undefined });
     store.projects.delete(params.id);
+    rmSync(join(opts.dataDir, 'repo-tokens', `${params.id}.json`), { force: true });
     return { ok: true };
   });
   route('POST', '/api/projects/:id/files', ({ params, body }) => {

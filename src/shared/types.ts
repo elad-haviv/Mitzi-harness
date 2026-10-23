@@ -35,6 +35,9 @@ export interface PublicSettings extends UiSettings {
   apiKeySource: 'env' | 'config' | null;
   defaultModel: string;
   smallModel?: string;
+  version: string;
+  /** Where Mitzi keeps its settings and data. */
+  home: string;
 }
 
 export interface SettingsUpdate extends Partial<UiSettings> {

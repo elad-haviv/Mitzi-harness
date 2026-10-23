@@ -90,7 +90,7 @@ export function ContextPanel({ chatId, refreshKey, onClose, onChanged }: { chatI
               </div>
               {data.autoCompactAt && (
                 <div className="muted small" style={{ marginTop: 6 }}>
-                  Auto-compacts at {formatTokens(data.autoCompactAt)} (<a href={href({ page: 'settings' })}>change</a>)
+                  Auto-compacts at {formatTokens(data.autoCompactAt)} (<a href={href({ page: 'settings', section: 'general' })}>change</a>)
                 </div>
               )}
             </div>
