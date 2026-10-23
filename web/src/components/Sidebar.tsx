@@ -50,6 +50,14 @@ function groupLabel(iso: string): string {
 export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collapsed: boolean; onCollapse(): void }) {
   const { chats, projects, bots, models, settings, tasks, update, budget, refreshChats, toast } = useApp();
   const unseen = tasks.reduce((n, t) => n + t.runs.filter((r) => !r.seen && r.status !== 'running').length, 0);
+  // Workflow runs paused at an approval step (they may have been started by a trigger or a schedule).
+  const [approvals, setApprovals] = useState(0);
+  useEffect(() => {
+    const check = () => document.visibilityState === 'visible' && api.workflows().then((list) => setApprovals(list.filter((w) => w.runs[0]?.status === 'waiting').length), () => {});
+    check();
+    const timer = setInterval(check, 20_000);
+    return () => clearInterval(timer);
+  }, [route.page]);
   const [query, setQuery] = useState('');
   const [groupBy, setGroupBy] = useStored<GroupBy>('mitzi.chatGroupBy', 'date');
   const [collapsedGroups, setCollapsedGroups] = useStored<string[]>('mitzi.collapsedGroups', []);
@@ -139,7 +147,7 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
     { route: { page: 'bots' } as Route, icon: <Bot size={17} />, label: 'Bots', count: bots.length, match: ['bots'] },
     { route: { page: 'artifacts' } as Route, icon: <Layers size={17} />, label: 'Artifacts', match: ['artifacts', 'artifact'] },
     { route: { page: 'tasks' } as Route, icon: <CalendarClock size={17} />, label: 'Scheduled', match: ['tasks'], badge: unseen },
-    { route: { page: 'workflows' } as Route, icon: <WorkflowIcon size={17} />, label: 'Workflows', match: ['workflows', 'workflow'] },
+    { route: { page: 'workflows' } as Route, icon: <WorkflowIcon size={17} />, label: 'Workflows', match: ['workflows', 'workflow'], badge: approvals },
     { route: { page: 'memory' } as Route, icon: <Brain size={17} />, label: 'Memory', match: ['memory'] },
     { route: { page: 'insights' } as Route, icon: <BarChart3 size={17} />, label: 'Insights', match: ['insights'] },
   ];

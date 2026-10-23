@@ -6707,3 +6707,28 @@ button.todo-check:not(:disabled):hover {
   color: var(--muted);
   margin-bottom: 6px;
 }
+
+/* Workflow triggers */
+.trigger-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+.trigger-card .tool-toggle {
+  align-items: flex-start;
+  gap: 12px;
+}
+.trigger-example {
+  margin: 10px 0 6px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.dot-on {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: inline-block;
+}

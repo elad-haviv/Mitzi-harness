@@ -1008,6 +1008,49 @@ test('workflow gallery, and building a workflow from a description', async () =>
   assert.equal((await call('GET', `/api/workflows/${built.id}`)).data.emoji, '😹');
 });
 
+test('workflow triggers: a secret webhook, and a watched folder', { timeout: 30_000 }, async () => {
+  reply = (body) => textChunks(`Got: ${body.messages.at(-1).content}`);
+  const wf = (await call('POST', '/api/workflows', { template: 'blank' })).data;
+  // The blank workflow's bot step passes its input straight on.
+  const hook = (await call('PATCH', `/api/workflows/${wf.id}`, { triggers: { webhook: { enabled: true } } })).data.triggers.webhook;
+  assert.equal(hook.enabled, true);
+  assert.ok(hook.token.length >= 20);
+
+  // No Mitzi token needed: the address is the secret.
+  let res = await fetch(`${base}/hooks/${hook.token}?wait=1`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ input: 'ping' }) });
+  assert.equal(res.status, 200);
+  const out = await res.json();
+  assert.equal(out.status, 'done');
+  assert.match(out.output, /Got: [\s\S]*ping/);
+  assert.equal((await call('GET', `/api/workflows/${wf.id}`)).data.runs[0].trigger, 'webhook');
+  assert.equal((await fetch(`${base}/hooks/wrong-token`, { method: 'POST', body: 'x' })).status, 404);
+  // A new token replaces the old address.
+  const fresh = (await call('PATCH', `/api/workflows/${wf.id}`, { triggers: { webhook: { enabled: true, regenerate: true } } })).data.triggers.webhook;
+  assert.notEqual(fresh.token, hook.token);
+  assert.equal((await fetch(`${base}/hooks/${hook.token}`, { method: 'POST', body: 'x' })).status, 404);
+  await call('PATCH', `/api/workflows/${wf.id}`, { triggers: { webhook: { enabled: false } } });
+  assert.equal((await fetch(`${base}/hooks/${fresh.token}`, { method: 'POST', body: 'x' })).status, 404);
+
+  // A watched folder: files already there don't count; new ones run the workflow.
+  const dir = tempDir();
+  writeFileSync(join(dir, 'old.txt'), 'old news');
+  const folder = (await call('PATCH', `/api/workflows/${wf.id}`, { triggers: { folder: { path: dir, pattern: '*.txt', enabled: true } } })).data.triggers.folder;
+  assert.equal(folder.enabled, true);
+  writeFileSync(join(dir, 'skip.md'), 'not matched');
+  writeFileSync(join(dir, 'new.txt'), 'fresh report');
+  let run: any;
+  for (let i = 0; i < 100 && !(run?.trigger === 'folder' && run.status === 'done'); i++) {
+    await new Promise((r) => setTimeout(r, 100));
+    run = (await call('GET', `/api/workflows/${wf.id}`)).data.runs[0];
+  }
+  assert.equal(run.trigger, 'folder');
+  assert.equal(run.source, 'new.txt');
+  assert.equal(run.input, 'fresh report');
+  const runs = (await call('GET', `/api/workflows/${wf.id}`)).data.runs;
+  assert.ok(!runs.some((r: any) => r.source === 'old.txt' || r.source === 'skip.md'));
+  await call('PATCH', `/api/workflows/${wf.id}`, { triggers: { folder: { path: dir, pattern: '*.txt', enabled: false } } });
+});
+
 /** Polls until a server reaches a status. */
 async function waitFor(id: string, status: string) {
   for (let i = 0; i < 200; i++) {

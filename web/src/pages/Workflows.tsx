@@ -30,10 +30,14 @@ import {
   Timer,
   Hand,
   Sparkles,
+  Zap,
+  FolderOpen,
+  FolderSearch,
 } from 'lucide-react';
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, GalleryItem, NodeSpec, WorkflowEdge, WorkflowNode, WorkflowNodeType, WorkflowRun, WorkflowStep, WorkflowView } from '../api';
 import { ModelPicker } from '../components/ModelPicker';
+import { FolderPicker } from '../components/Folders';
 import { Markdown } from '../components/Markdown';
 import { Empty, Modal, Toggle, useConfirm } from '../components/ui';
 import { duration, money } from '../components/Work';
@@ -263,6 +267,7 @@ export function WorkflowEditor({ id }: { id: string }) {
   const [run, setRun] = useState<WorkflowRun>();
   const [runOpen, setRunOpen] = useState(true);
   const [scheduling, setScheduling] = useState(false);
+  const [triggering, setTriggering] = useState(false);
   const [confirmNode, confirm] = useConfirm();
   const canvas = useRef<HTMLDivElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -489,6 +494,10 @@ export function WorkflowEditor({ id }: { id: string }) {
           <Toggle label="Use in chats" on={wf.exposeToChat} onChange={(v) => change({ exposeToChat: v })} />
           <span>Use in chats</span>
         </label>
+        <button className={`btn btn-sm${wf.triggers?.webhook?.enabled || wf.triggers?.folder?.enabled ? ' on' : ''}`} onClick={() => setTriggering(true)}>
+          <Zap size={14} /> Triggers
+          {(wf.triggers?.webhook?.enabled || wf.triggers?.folder?.enabled) && <span className="dot-on" aria-label="on" />}
+        </button>
         <button className="btn btn-sm" onClick={() => setScheduling(true)}>
           <CalendarClock size={14} /> Schedule
         </button>
@@ -677,6 +686,7 @@ export function WorkflowEditor({ id }: { id: string }) {
         </aside>
       </div>
       {scheduling && <ScheduleModal wf={wf} input={input} onClose={() => setScheduling(false)} />}
+      {triggering && <TriggersModal wf={wf} onClose={() => setTriggering(false)} onSaved={(w) => setWf((cur) => (cur ? { ...cur, triggers: w.triggers } : w))} />}
       {confirmNode}
     </div>
   );
@@ -974,7 +984,7 @@ function RunLog({ run, wf, onClose, onPick, onDecide }: { run: WorkflowRun; wf: 
             {wf.runs.slice(0, 10).map((r) => (
               <li key={r.id}>
                 <button className={`link-btn small${r.id === run.id ? ' on' : ''}`} onClick={() => onPick(r)}>
-                  {r.status === 'error' ? '⚠︎' : '✓'} {relativeTime(r.startedAt)} · {r.trigger === 'schedule' ? 'scheduled' : r.trigger === 'chat' ? 'from a chat' : 'manual'}
+                  {r.status === 'error' ? '⚠︎' : '✓'} {relativeTime(r.startedAt)} · {r.trigger === 'schedule' ? 'scheduled' : r.trigger === 'chat' ? 'from a chat' : r.trigger === 'webhook' ? 'webhook' : r.trigger === 'folder' ? `file ${r.source ?? ''}` : 'manual'}
                 </button>
               </li>
             ))}
@@ -991,6 +1001,109 @@ function StepOutput({ text }: { text: string }) {
     <div className="wf-step-output">
       <Markdown text={text.length > 4000 ? `${text.slice(0, 4000)}\n\n…` : text} />
     </div>
+  );
+}
+
+/** Webhook and watched-folder triggers. */
+function TriggersModal({ wf, onClose, onSaved }: { wf: WorkflowView; onClose(): void; onSaved(w: WorkflowView): void }) {
+  const { toast } = useApp();
+  const [folder, setFolder] = useState(wf.triggers?.folder ?? { path: '', pattern: '*.txt, *.md', enabled: false });
+  const [browsing, setBrowsing] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const hook = wf.triggers?.webhook;
+  const url = hook ? `${location.origin}/hooks/${hook.token}` : '';
+  const save = async (triggers: Parameters<typeof api.updateWorkflow>[1]['triggers'], message?: string) => {
+    try {
+      onSaved(await api.updateWorkflow(wf.id, { triggers }));
+      if (message) toast(message, 'info');
+    } catch (err) {
+      toast((err as Error).message);
+    }
+  };
+  return (
+    <Modal title="Triggers" onClose={onClose} wide>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        Start “{wf.name}” by itself, besides running it here, from a chat, or on a schedule.
+      </p>
+      <section className="trigger-card">
+        <div className="tool-toggle" style={{ padding: 0, border: 0 }}>
+          <Webhook size={18} className="muted" />
+          <div className="grow">
+            <div className="t">Webhook</div>
+            <div className="s">Anything sent to a secret address runs the workflow, with what was sent as its input. Use it from other apps, scripts, or email services that forward mail to a webhook.</div>
+          </div>
+          <Toggle label="Webhook" on={!!hook?.enabled} onChange={(v) => void save({ webhook: { enabled: v } }, v ? 'Webhook on' : 'Webhook off')} />
+        </div>
+        {hook?.enabled && (
+          <>
+            <div className="row" style={{ gap: 6, marginTop: 10 }}>
+              <input className="input mono" readOnly value={url} onFocus={(e) => e.target.select()} />
+              <button
+                className="btn btn-sm"
+                onClick={() => {
+                  void navigator.clipboard.writeText(url);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                }}
+              >
+                {copied ? <Check size={14} /> : null} {copied ? 'Copied' : 'Copy'}
+              </button>
+              <button className="btn btn-sm btn-ghost" title="Make a new address; the old one stops working" onClick={() => void save({ webhook: { enabled: true, regenerate: true } }, 'New address made; the old one no longer works')}>
+                New address
+              </button>
+            </div>
+            <pre className="trigger-example">{`curl -X POST ${url} -d 'text to work on'\n# or JSON: -H 'content-type: application/json' -d '{"input": "…"}'\n# add ?wait=1 to get the result back`}</pre>
+            <p className="muted small">Keep the address private: anyone who has it can run the workflow. Other services can reach it only if Mitzi is reachable from where they run (on your network, or through a tunnel).</p>
+          </>
+        )}
+      </section>
+      <section className="trigger-card">
+        <div className="tool-toggle" style={{ padding: 0, border: 0 }}>
+          <FolderOpen size={18} className="muted" />
+          <div className="grow">
+            <div className="t">Watch a folder</div>
+            <div className="s">Each new or changed text file in the folder runs the workflow, with the file’s text as its input. Files already there when you start watching don’t count.</div>
+          </div>
+          <Toggle
+            label="Watch a folder"
+            on={!!wf.triggers?.folder?.enabled}
+            onChange={(v) => {
+              if (v && !folder.path) return setBrowsing(true);
+              void save({ folder: { ...folder, enabled: v } }, v ? `Watching ${folder.path}` : 'Stopped watching');
+            }}
+          />
+        </div>
+        <div className="row" style={{ gap: 6, marginTop: 10 }}>
+          <input className="input mono" placeholder="Choose a folder" value={folder.path} readOnly onClick={() => setBrowsing(true)} />
+          <button className="btn btn-sm" onClick={() => setBrowsing(true)}>
+            <FolderSearch size={14} /> Choose…
+          </button>
+        </div>
+        <label className="field" style={{ marginTop: 10, marginBottom: 0 }}>
+          <span className="field-label">Files</span>
+          <input
+            className="input"
+            value={folder.pattern}
+            placeholder="*.txt, *.md"
+            onChange={(e) => setFolder((f) => ({ ...f, pattern: e.target.value }))}
+            onBlur={() => wf.triggers?.folder?.enabled && void save({ folder: { ...folder, enabled: true } })}
+          />
+        </label>
+        {browsing && (
+          <FolderPicker
+            title="Watch a folder"
+            action="Watch this folder"
+            start={folder.path || undefined}
+            onClose={() => setBrowsing(false)}
+            onPick={(path) => {
+              setBrowsing(false);
+              setFolder((f) => ({ ...f, path }));
+              void save({ folder: { ...folder, path, enabled: true } }, `Watching ${path}`);
+            }}
+          />
+        )}
+      </section>
+    </Modal>
   );
 }
 

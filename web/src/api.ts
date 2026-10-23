@@ -268,7 +268,12 @@ export const api = {
   workflowGallery: () => request<GalleryItem[]>('GET', '/api/workflows/gallery'),
   /** Has a model draft a workflow from a description; resolves to the saved workflow. */
   draftWorkflow: (description: string) => request<WorkflowView>('POST', '/api/workflows/draft', { description }),
-  updateWorkflow: (id: string, body: Partial<Pick<Workflow, 'name' | 'description' | 'emoji' | 'nodes' | 'edges' | 'exposeToChat'>>) => request<WorkflowView>('PATCH', `/api/workflows/${id}`, body),
+  updateWorkflow: (
+    id: string,
+    body: Partial<Pick<Workflow, 'name' | 'description' | 'emoji' | 'nodes' | 'edges' | 'exposeToChat'>> & {
+      triggers?: { webhook?: { enabled: boolean; regenerate?: boolean }; folder?: { path: string; pattern: string; enabled: boolean } };
+    },
+  ) => request<WorkflowView>('PATCH', `/api/workflows/${id}`, body),
   deleteWorkflow: (id: string) => request('DELETE', `/api/workflows/${id}`),
   runWorkflow: (id: string, input: string, onEvent: (e: WorkflowEvent) => void) => stream<WorkflowEvent>(`/api/workflows/${id}/run`, { input }, onEvent),
   stopWorkflow: (id: string) => request('POST', `/api/workflows/${id}/stop`, {}),

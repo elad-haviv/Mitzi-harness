@@ -191,13 +191,13 @@ export class WorkflowEngine {
   }
 
   /** Runs a workflow to the end; `onEvent` hears about each step. */
-  async run(workflow: Workflow, input: string, trigger: WorkflowRun['trigger'], onEvent: (e: WorkflowEvent) => void = () => {}, outer?: AbortSignal): Promise<WorkflowRun> {
+  async run(workflow: Workflow, input: string, trigger: WorkflowRun['trigger'], onEvent: (e: WorkflowEvent) => void = () => {}, outer?: AbortSignal, source?: string): Promise<WorkflowRun> {
     const { store } = this.deps;
     if (this.active.has(workflow.id)) throw new Error(`"${workflow.name}" is already running`);
     const controller = new AbortController();
     const signal = outer ? AbortSignal.any([outer, controller.signal]) : controller.signal;
     this.active.set(workflow.id, controller);
-    const run: WorkflowRun = { id: newId(), trigger, input, status: 'running', steps: [], startedAt: now() };
+    const run: WorkflowRun = { id: newId(), trigger, ...(source ? { source } : {}), input, status: 'running', steps: [], startedAt: now() };
     const save = () => {
       const fresh = store.workflows.get(workflow.id);
       if (!fresh) return;

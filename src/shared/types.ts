@@ -488,7 +488,9 @@ export interface WorkflowStep {
 
 export interface WorkflowRun {
   id: string;
-  trigger: 'manual' | 'schedule' | 'chat';
+  trigger: 'manual' | 'schedule' | 'chat' | 'webhook' | 'folder';
+  /** What set it off, when a trigger did: the file's name, or the webhook. */
+  source?: string;
   input: string;
   /** `waiting`: paused at an approval step until the user decides. */
   status: 'running' | 'waiting' | 'done' | 'error';
@@ -509,10 +511,19 @@ export interface Workflow {
   edges: WorkflowEdge[];
   /** Bots can run it from chat (as the Workflow tool, or with /workflow). */
   exposeToChat: boolean;
+  /** Ways it starts by itself, besides schedules. */
+  triggers?: WorkflowTriggers;
   /** Most recent runs, newest first. */
   runs: WorkflowRun[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface WorkflowTriggers {
+  /** POSTing to /hooks/<token> runs the workflow with the request body as input. */
+  webhook?: { token: string; enabled: boolean };
+  /** New or changed text files in a folder each run the workflow, with the file's text as input. */
+  folder?: { path: string; pattern: string; enabled: boolean };
 }
 
 export type WorkflowEvent = { type: 'step'; runId: string; step: WorkflowStep } | { type: 'run'; run: WorkflowRun };

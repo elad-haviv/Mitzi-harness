@@ -29,6 +29,7 @@ import { mediaUpdate, registerFeatureRoutes } from './routes-features.js';
 import { newId, now, Store } from './store.js';
 import { INLINE_LIMIT, KnowledgeIndex } from './knowledge.js';
 import { PythonSandbox } from './python.js';
+import { WorkflowTriggers } from './workflow-triggers.js';
 import { budgetMessage, BudgetExceeded, budgetStatus, UsageLog } from './usage.js';
 import { SearchIndex } from './search.js';
 import { BrowserService } from './browser.js';
@@ -662,7 +663,9 @@ export function createApp(opts: AppOptions) {
     const tool = workflowTool(store, workflows);
     return tool ? [tool] : [];
   };
-  registerWorkflowRoutes(route, { store, engine: workflows, client, config });
+  const triggers = new WorkflowTriggers(store, workflows);
+  triggers.start();
+  registerWorkflowRoutes(route, { store, engine: workflows, client, config, triggers, validateFolder });
   const { scheduler } = registerFeatureRoutes(route, { store, runner, client, config, memory, media, newChat, workflows });
   registerWorkRoutes(route, { store, runner, client, config, memory, usage });
 
@@ -698,6 +701,8 @@ export function createApp(opts: AppOptions) {
 
   const handle = async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? '/', 'http://localhost');
+    // Webhooks come from other services (through a tunnel or proxy, so any host); the secret in the address authenticates them.
+    if (url.pathname.startsWith('/hooks/')) return triggers.webhook(decodeURIComponent(url.pathname.slice(7)), req, res);
     if (!opts.allowedHosts.includes((req.headers.host ?? '').toLowerCase())) {
       return sendJson(res, 403, { error: 'Forbidden host' });
     }
@@ -733,6 +738,7 @@ export function createApp(opts: AppOptions) {
   return Object.assign(handle, {
     dispose: () => {
       scheduler.stop();
+      triggers.stop();
       void browser.close();
       python.close();
       updates.dispose();

@@ -7,6 +7,7 @@ import { draftWorkflow, fromGallery, GALLERY } from './workflow-gallery.js';
 import type { RoutingClient } from '../providers.js';
 import type { Config } from '../config.js';
 import { withUsage } from './usage.js';
+import { cleanTriggers, WorkflowTriggers } from './workflow-triggers.js';
 
 const TYPES = Object.keys(NODE_SPECS) as WorkflowNodeType[];
 
@@ -44,7 +45,10 @@ function cleanEdges(raw: unknown, nodes: WorkflowNode[]): WorkflowEdge[] {
   return out;
 }
 
-export function registerWorkflowRoutes(route: Route, deps: { store: Store; engine: WorkflowEngine; client: () => RoutingClient; config: () => Config }): void {
+export function registerWorkflowRoutes(
+  route: Route,
+  deps: { store: Store; engine: WorkflowEngine; client: () => RoutingClient; config: () => Config; triggers: WorkflowTriggers; validateFolder: (path: string) => string },
+): void {
   const { store, engine } = deps;
   const get = (id: string) => store.workflows.get(id) ?? fail(404, 'Workflow not found');
   const view = (w: Workflow) => ({ ...w, running: engine.isRunning(w.id) });
@@ -79,6 +83,7 @@ export function registerWorkflowRoutes(route: Route, deps: { store: Store; engin
     if (typeof body?.description === 'string') w.description = body.description.slice(0, 500);
     if (typeof body?.emoji === 'string' && body.emoji.trim()) w.emoji = body.emoji.trim().slice(0, 8);
     if (typeof body?.exposeToChat === 'boolean') w.exposeToChat = body.exposeToChat;
+    if (body?.triggers && typeof body.triggers === 'object') w.triggers = cleanTriggers(body.triggers, w.triggers, deps.validateFolder);
     if (body?.nodes !== undefined) {
       const nodes = cleanNodes(body.nodes);
       const edges = cleanEdges(body.edges ?? w.edges, nodes);
@@ -91,12 +96,15 @@ export function registerWorkflowRoutes(route: Route, deps: { store: Store; engin
       w.edges = edges;
     }
     w.updatedAt = now();
-    return view(store.workflows.put(w));
+    store.workflows.put(w);
+    deps.triggers.refresh();
+    return view(w);
   });
   route('DELETE', '/api/workflows/:id', ({ params }) => {
     const w = get(params.id);
     engine.stop(w.id);
     store.workflows.delete(w.id);
+    deps.triggers.refresh();
     // Scheduled tasks that ran it go back to being prompts.
     for (const t of store.tasks.all().filter((t) => t.workflowId === w.id)) store.tasks.put({ ...t, workflowId: undefined, enabled: false });
     return { ok: true };
