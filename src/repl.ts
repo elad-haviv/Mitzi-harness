@@ -195,7 +195,7 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
     await runAgent(opts.initialPrompt);
   }
 
-  const promptLabel = () => `\n${color.bold(color.magenta('>'))} `;
+  const promptLabel = () => `\n${color.bold(color.orange('>'))} `;
   for (;;) {
     let line: string;
     try {

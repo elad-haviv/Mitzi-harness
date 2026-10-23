@@ -8,7 +8,7 @@ BRANCH="${MITZI_BRANCH:-feature/web-ui}"
 DIR="${MITZI_DIR:-$HOME/.mitzi/app}"
 BIN="${MITZI_BIN:-$HOME/.local/bin}"
 
-say() { printf '\033[35m🐱\033[0m %s\n' "$*"; }
+say() { printf '\033[38;5;208m🐱\033[0m %s\n' "$*"; }
 die() { printf '\033[31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 
 command -v git >/dev/null || die "git is required. Install it from https://git-scm.com and run this again."

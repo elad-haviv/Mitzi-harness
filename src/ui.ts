@@ -13,6 +13,8 @@ export const color = {
   yellow: wrap('33'),
   blue: wrap('34'),
   magenta: wrap('35'),
+  /** Mitzi's brand color (256-color ginger). */
+  orange: wrap('38;5;208'),
   cyan: wrap('36'),
   gray: wrap('90'),
 };
@@ -53,7 +55,7 @@ export class TerminalUI implements UI {
     if (!this.log.isTTY || this.spinner) return;
     let i = 0;
     this.spinner = setInterval(() => {
-      this.log.write(`\r${color.magenta(SPINNER[i++ % SPINNER.length])} ${color.dim('Thinking…')}`);
+      this.log.write(`\r${color.orange(SPINNER[i++ % SPINNER.length])} ${color.dim('Thinking…')}`);
     }, 80);
   }
 

@@ -7,7 +7,7 @@ $Branch = if ($env:MITZI_BRANCH) { $env:MITZI_BRANCH } else { 'feature/web-ui' }
 $Dir = if ($env:MITZI_DIR) { $env:MITZI_DIR } else { Join-Path $HOME '.mitzi\app' }
 $Bin = Join-Path $HOME '.mitzi\bin'
 
-function Say($msg) { Write-Host "* $msg" -ForegroundColor Magenta }
+function Say($msg) { Write-Host "* $msg" -ForegroundColor DarkYellow }
 function Die($msg) { Write-Host "x $msg" -ForegroundColor Red; exit 1 }
 
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Die 'git is required. Install it from https://git-scm.com and run this again.' }

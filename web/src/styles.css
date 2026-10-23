@@ -10,12 +10,12 @@
   --text: #1d1b18;
   --text-2: #4a463f;
   --muted: #7b756b;
-  --accent: #7a3fd1;
-  --accent-hover: #6930bd;
-  --accent-soft: #f0e9fb;
+  --accent: #ba5a08;
+  --accent-hover: #9f4c06;
+  --accent-soft: #fdefdd;
   --accent-text: #ffffff;
-  --danger: #c2410c;
-  --danger-soft: #fdeee6;
+  --danger: #c62828;
+  --danger-soft: #fdecec;
   --warn: #a16207;
   --warn-soft: #fdf5dc;
   --ok: #15803d;
@@ -32,9 +32,9 @@
   --sidebar-w: 272px;
 
   /* Context-meter section colors */
-  --c-system: #7a3fd1;
+  --c-system: #ba5a08;
   --c-project: #0e9f8d;
-  --c-memory: #d97706;
+  --c-memory: #7c4dcc;
   --c-summary: #db2777;
   --c-history: #2563eb;
   --c-tools: #64748b;
@@ -63,12 +63,12 @@
     --text: #ece9e3;
     --text-2: #cdc8bf;
     --muted: #9a948a;
-    --accent: #a98bf0;
-    --accent-hover: #bba2f5;
-    --accent-soft: #2e2640;
-    --accent-text: #1a1424;
-    --danger: #f2865a;
-    --danger-soft: #3a2219;
+    --accent: #f59e3b;
+    --accent-hover: #f8b464;
+    --accent-soft: #3a2a17;
+    --accent-text: #1f1305;
+    --danger: #f87171;
+    --danger-soft: #3a1c1c;
     --warn: #e8b74d;
     --warn-soft: #362c14;
     --ok: #5fcf89;
@@ -77,9 +77,9 @@
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.25);
     --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
-    --c-system: #a98bf0;
+    --c-system: #f59e3b;
     --c-project: #2dd4bf;
-    --c-memory: #f59e0b;
+    --c-memory: #a78bfa;
     --c-summary: #f472b6;
     --c-history: #60a5fa;
     --c-tools: #94a3b8;
@@ -106,12 +106,12 @@
   --text: #ece9e3;
   --text-2: #cdc8bf;
   --muted: #9a948a;
-  --accent: #a98bf0;
-  --accent-hover: #bba2f5;
-  --accent-soft: #2e2640;
-  --accent-text: #1a1424;
-  --danger: #f2865a;
-  --danger-soft: #3a2219;
+  --accent: #f59e3b;
+  --accent-hover: #f8b464;
+  --accent-soft: #3a2a17;
+  --accent-text: #1f1305;
+  --danger: #f87171;
+  --danger-soft: #3a1c1c;
   --warn: #e8b74d;
   --warn-soft: #362c14;
   --ok: #5fcf89;
@@ -120,9 +120,9 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.25);
   --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
-  --c-system: #a98bf0;
+  --c-system: #f59e3b;
   --c-project: #2dd4bf;
-  --c-memory: #f59e0b;
+  --c-memory: #a78bfa;
   --c-summary: #f472b6;
   --c-history: #60a5fa;
   --c-tools: #94a3b8;
@@ -2956,7 +2956,7 @@ button.memory-chip:hover {
   width: 180px;
   height: 180px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #fff8, transparent 45%), conic-gradient(from 0deg, var(--accent), #db2777, #2563eb, var(--accent));
+  background: radial-gradient(circle at 35% 30%, #fff8, transparent 45%), conic-gradient(from 0deg, var(--accent), #fbbf24, #f43f5e, var(--accent));
   box-shadow: 0 0 60px color-mix(in srgb, var(--accent) 45%, transparent);
   transition: transform 0.1s linear;
   display: grid;
@@ -3667,7 +3667,7 @@ mark.doc-mark.hot {
 .slide h2 {
   font-size: 1.6em;
   margin: 0 0 0.6em;
-  color: #6930bd;
+  color: #9f4c06;
   letter-spacing: -0.01em;
 }
 .slide p,
@@ -3683,7 +3683,7 @@ mark.doc-mark.hot {
 }
 .slide.title-slide {
   justify-content: center;
-  background: linear-gradient(135deg, #f0e9fb, #fff 60%);
+  background: linear-gradient(135deg, #fdefdd, #fff 60%);
 }
 .slide.title-slide h1 {
   font-size: 3em;
