@@ -59,6 +59,14 @@ export { AUTO_MODEL, DEFAULT_BOT_ID, TEXT_ARTIFACT_TYPES } from '../../src/share
 /** `knowledge.searched`: too big to send whole, so each message gets the relevant excerpts. */
 export type ProjectView = Project & { chatCount: number; knowledge?: { chars: number; docs: number; searched: boolean } };
 export type WorkflowView = Workflow & { running: boolean };
+export interface GalleryItem {
+  id: string;
+  category: string;
+  emoji: string;
+  name: string;
+  description: string;
+  steps: number;
+}
 export interface NodeSpec {
   label: string;
   description: string;
@@ -257,6 +265,9 @@ export const api = {
   workflow: (id: string) => request<WorkflowView>('GET', `/api/workflows/${id}`),
   workflowNodeTypes: () => request<Record<WorkflowNodeType, NodeSpec>>('GET', '/api/workflows/node-types'),
   createWorkflow: (template?: string) => request<WorkflowView>('POST', '/api/workflows', { template }),
+  workflowGallery: () => request<GalleryItem[]>('GET', '/api/workflows/gallery'),
+  /** Has a model draft a workflow from a description; resolves to the saved workflow. */
+  draftWorkflow: (description: string) => request<WorkflowView>('POST', '/api/workflows/draft', { description }),
   updateWorkflow: (id: string, body: Partial<Pick<Workflow, 'name' | 'description' | 'emoji' | 'nodes' | 'edges' | 'exposeToChat'>>) => request<WorkflowView>('PATCH', `/api/workflows/${id}`, body),
   deleteWorkflow: (id: string) => request('DELETE', `/api/workflows/${id}`),
   runWorkflow: (id: string, input: string, onEvent: (e: WorkflowEvent) => void) => stream<WorkflowEvent>(`/api/workflows/${id}/run`, { input }, onEvent),

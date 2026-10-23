@@ -29,9 +29,10 @@ import {
   Code2,
   Timer,
   Hand,
+  Sparkles,
 } from 'lucide-react';
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, NodeSpec, WorkflowEdge, WorkflowNode, WorkflowNodeType, WorkflowRun, WorkflowStep, WorkflowView } from '../api';
+import { api, GalleryItem, NodeSpec, WorkflowEdge, WorkflowNode, WorkflowNodeType, WorkflowRun, WorkflowStep, WorkflowView } from '../api';
 import { ModelPicker } from '../components/ModelPicker';
 import { Markdown } from '../components/Markdown';
 import { Empty, Modal, Toggle, useConfirm } from '../components/ui';
@@ -139,24 +140,95 @@ export function WorkflowsPage() {
           })}
         </div>
       )}
-      {creating && (
-        <Modal title="New workflow" onClose={() => setCreating(false)} wide>
-          <div className="template-grid">
-            {[
-              { id: 'blank', emoji: '⚡', name: 'Blank', desc: 'Start → ask Mitzi → result. Build from there.' },
-              { id: 'digest', emoji: '📰', name: 'Web page digest', desc: 'Read a page, summarize it, save the summary as a document.' },
-              { id: 'triage', emoji: '📬', name: 'Message triage', desc: 'Decide if a message is urgent and draft the right reply.' },
-            ].map((t) => (
-              <button key={t.id} className="template-card" onClick={() => void create(t.id)}>
-                <span className="workflow-tile-emoji">{t.emoji}</span>
-                <strong>{t.name}</strong>
-                <span className="muted small">{t.desc}</span>
-              </button>
-            ))}
-          </div>
-        </Modal>
-      )}
+      {creating && <NewWorkflow onClose={() => setCreating(false)} onCreate={(t) => void create(t)} />}
     </div>
+  );
+}
+
+/** Describe a workflow for Mitzi to build, or start from the gallery. */
+function NewWorkflow({ onClose, onCreate }: { onClose(): void; onCreate(template: string): void }) {
+  const { toast } = useApp();
+  const [gallery, setGallery] = useState<GalleryItem[]>();
+  const [description, setDescription] = useState('');
+  const [building, setBuilding] = useState(false);
+  useEffect(() => {
+    api.workflowGallery().then(setGallery, (err) => toast(err.message));
+  }, [toast]);
+  const build = async () => {
+    setBuilding(true);
+    try {
+      const w = await api.draftWorkflow(description.trim());
+      toast(`Built “${w.name}”. Check each step before you run it.`, 'info');
+      navigate({ page: 'workflow', id: w.id });
+    } catch (err) {
+      toast((err as Error).message);
+      setBuilding(false);
+    }
+  };
+  const categories = [...new Set((gallery ?? []).map((g) => g.category))];
+  return (
+    <Modal title="New workflow" onClose={onClose} wide>
+      <form
+        className="wf-builder"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (description.trim() && !building) void build();
+        }}
+      >
+        <label className="field" style={{ marginBottom: 8 }}>
+          <span className="field-label">
+            <Sparkles size={14} className="accent" style={{ verticalAlign: -2 }} /> Describe it, and Mitzi builds it
+          </span>
+          <textarea
+            className="textarea"
+            rows={3}
+            dir="auto"
+            value={description}
+            disabled={building}
+            placeholder="e.g. Every morning, read the Hacker News front page, pick the 5 stories about AI, summarize each in two lines and save a digest"
+            onChange={(e) => setDescription(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) (e.currentTarget.form as HTMLFormElement).requestSubmit();
+            }}
+          />
+        </label>
+        <button className="btn btn-primary" disabled={!description.trim() || building}>
+          {building ? (
+            <>
+              <Loader2 size={15} className="spin" /> Building…
+            </>
+          ) : (
+            <>
+              <Sparkles size={15} /> Build workflow
+            </>
+          )}
+        </button>
+      </form>
+      <div className="panel-subhead" style={{ marginTop: 18 }}>
+        Or start from the gallery
+      </div>
+      {!gallery ? (
+        <Loader2 className="spin muted" size={18} />
+      ) : (
+        categories.map((c) => (
+          <div key={c} className="gallery-group">
+            <div className="gallery-category">{c}</div>
+            <div className="template-grid">
+              {gallery
+                .filter((g) => g.category === c)
+                .map((t) => (
+                  <button key={t.id} className="template-card" onClick={() => onCreate(t.id)} disabled={building}>
+                    <span className="workflow-tile-emoji">{t.emoji}</span>
+                    <strong>{t.name}</strong>
+                    <span className="muted small">{t.description}</span>
+                    <span className="muted small">{t.steps} steps</span>
+                  </button>
+                ))}
+            </div>
+          </div>
+        ))
+      )}
+    </Modal>
   );
 }
 

@@ -662,7 +662,7 @@ export function createApp(opts: AppOptions) {
     const tool = workflowTool(store, workflows);
     return tool ? [tool] : [];
   };
-  registerWorkflowRoutes(route, { store, engine: workflows });
+  registerWorkflowRoutes(route, { store, engine: workflows, client, config });
   const { scheduler } = registerFeatureRoutes(route, { store, runner, client, config, memory, media, newChat, workflows });
   registerWorkRoutes(route, { store, runner, client, config, memory, usage });
 

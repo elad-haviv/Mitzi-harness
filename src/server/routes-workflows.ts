@@ -2,7 +2,11 @@
 import { Workflow, WorkflowEdge, WorkflowEvent, WorkflowNode, WorkflowNodeType } from '../shared/types.js';
 import { newId, now, Store } from './store.js';
 import { fail, HttpError, Route, STREAMED, str } from './util.js';
-import { NODE_SPECS, order, WorkflowEngine, workflowTemplate } from './workflows.js';
+import { NODE_SPECS, order, WorkflowEngine } from './workflows.js';
+import { draftWorkflow, fromGallery, GALLERY } from './workflow-gallery.js';
+import type { RoutingClient } from '../providers.js';
+import type { Config } from '../config.js';
+import { withUsage } from './usage.js';
 
 const TYPES = Object.keys(NODE_SPECS) as WorkflowNodeType[];
 
@@ -40,7 +44,7 @@ function cleanEdges(raw: unknown, nodes: WorkflowNode[]): WorkflowEdge[] {
   return out;
 }
 
-export function registerWorkflowRoutes(route: Route, deps: { store: Store; engine: WorkflowEngine }): void {
+export function registerWorkflowRoutes(route: Route, deps: { store: Store; engine: WorkflowEngine; client: () => RoutingClient; config: () => Config }): void {
   const { store, engine } = deps;
   const get = (id: string) => store.workflows.get(id) ?? fail(404, 'Workflow not found');
   const view = (w: Workflow) => ({ ...w, running: engine.isRunning(w.id) });
@@ -52,8 +56,18 @@ export function registerWorkflowRoutes(route: Route, deps: { store: Store; engin
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .map((w) => ({ ...view(w), runs: w.runs.slice(0, 1) })),
   );
+  route('GET', '/api/workflows/gallery', () => GALLERY.map(({ steps, edges: _edges, ...g }) => ({ ...g, steps: steps.length })));
+  /** Drafts a workflow from a description and saves it. */
+  route('POST', '/api/workflows/draft', async ({ body }) => {
+    const description = str(body?.description).trim();
+    if (!description) throw new HttpError(400, 'Describe what the workflow should do');
+    const config = deps.config();
+    const draft = await withUsage({ kind: 'workflow' }, () => draftWorkflow(deps.client(), config.model === 'auto' ? (config.smallModel ?? config.model) : config.model, description.slice(0, 4000)));
+    const w: Workflow = { id: newId(), ...draft, exposeToChat: false, runs: [], createdAt: now(), updatedAt: now() };
+    return view(store.workflows.put(w));
+  });
   route('POST', '/api/workflows', ({ body }) => {
-    const template = workflowTemplate(str(body?.template));
+    const template = fromGallery(str(body?.template));
     const w: Workflow = { id: newId(), ...template, exposeToChat: false, runs: [], createdAt: now(), updatedAt: now() };
     if (str(body?.name).trim()) w.name = str(body.name).trim().slice(0, 80);
     return view(store.workflows.put(w));

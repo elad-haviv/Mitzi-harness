@@ -3,7 +3,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { chunk, KnowledgeIndex, scanFolder } from '../server/knowledge.js';
-import { runJavaScript, splitItems } from '../server/workflows.js';
+import { NODE_SPECS, order, runJavaScript, splitItems } from '../server/workflows.js';
+import { fromGallery, GALLERY, parseDraft } from '../server/workflow-gallery.js';
 import type { Project } from '../shared/types.js';
 import { tempDir } from './helpers.js';
 
@@ -73,4 +74,26 @@ test('workflow helpers: splitting items for a loop, and JavaScript code steps', 
   assert.throws(() => runJavaScript('while (true) {}', { input: '', trigger: '', steps: {} }, 200), /timed out/i);
   // No Node APIs inside.
   assert.throws(() => runJavaScript('return require("fs")', { input: '', trigger: '', steps: {} }), /require is not defined/);
+});
+
+test('every gallery workflow is valid and laid out without overlaps', () => {
+  for (const g of GALLERY) {
+    const w = fromGallery(g.id);
+    assert.doesNotThrow(() => order(w.nodes, w.edges), g.id);
+    assert.equal(w.nodes.filter((n) => n.type === 'trigger').length, 1, g.id);
+    for (const n of w.nodes) assert.ok(NODE_SPECS[n.type], `${g.id}: ${n.type}`);
+    // Two-way steps always say which output an edge leaves from.
+    for (const e of w.edges) if (['condition', 'approval'].includes(w.nodes.find((n) => n.id === e.from)!.type)) assert.ok(e.port, `${g.id}: ${e.id}`);
+    const spots = new Set(w.nodes.map((n) => `${n.x},${n.y}`));
+    assert.equal(spots.size, w.nodes.length, `${g.id} overlaps`);
+  }
+});
+
+test('the builder’s draft is checked: unknown steps, loops and missing ports', () => {
+  const ok = parseDraft(`Sure! {"name":"Check","emoji":"✅","description":"d","steps":[{"id":"s","type":"trigger","label":"Start"},{"id":"a","type":"approval","label":"OK?"},{"id":"o","type":"output","label":"Done"}],"edges":[{"from":"s","to":"a"},{"from":"a","to":"o"}]}`);
+  assert.equal(ok.edges.find((e) => e.from === 'a')!.port, 'true');
+  assert.ok(ok.nodes.every((n) => n.x > 0));
+  assert.throws(() => parseDraft('{"steps":[{"id":"s","type":"magic"}]}'), /unknown type "magic"/);
+  assert.throws(() => parseDraft('{"steps":[{"id":"s","type":"trigger"},{"id":"o","type":"output"}],"edges":[{"from":"s","to":"o"},{"from":"o","to":"s"}]}'), /loop/);
+  assert.throws(() => parseDraft('no json here'), /valid JSON/);
 });

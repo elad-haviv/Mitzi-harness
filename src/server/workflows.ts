@@ -429,57 +429,6 @@ export class WorkflowEngine {
   }
 }
 
-/** Starter workflows offered when creating one. */
-export function workflowTemplate(kind: string): Pick<Workflow, 'name' | 'description' | 'emoji' | 'nodes' | 'edges'> {
-  const node = (id: string, type: WorkflowNodeType, x: number, y: number, label?: string, config: Record<string, unknown> = {}): WorkflowNode => ({
-    id,
-    type,
-    label: label ?? NODE_SPECS[type].label,
-    x,
-    y,
-    config: { ...NODE_SPECS[type].defaults, ...config },
-  });
-  const edge = (from: string, to: string, port?: string): WorkflowEdge => ({ id: `${from}-${to}${port ? `-${port}` : ''}`, from, to, ...(port ? { port } : {}) });
-  if (kind === 'digest') {
-    return {
-      name: 'Web page digest',
-      description: 'Reads a page and summarizes it into a saved document.',
-      emoji: '📰',
-      nodes: [
-        node('start', 'trigger', 60, 60, 'Start', { inputHint: 'A web address' }),
-        node('read', 'browse', 330, 60, 'Read page'),
-        node('sum', 'ai', 600, 60, 'Summarize', { prompt: 'Summarize this page in 5 bullet points, then one line on why it matters:\n\n{{input}}' }),
-        node('save', 'artifact', 330, 200, 'Save digest', { title: 'Digest: {{trigger}}' }),
-        node('out', 'output', 600, 200, 'Result'),
-      ],
-      edges: [edge('start', 'read'), edge('read', 'sum'), edge('sum', 'save'), edge('save', 'out')],
-    };
-  }
-  if (kind === 'triage') {
-    return {
-      name: 'Message triage',
-      description: 'Decides whether a message is urgent and drafts the right reply.',
-      emoji: '📬',
-      nodes: [
-        node('start', 'trigger', 60, 200, 'Start', { inputHint: 'A message to triage' }),
-        node('classify', 'ai', 300, 200, 'Classify', { prompt: 'Is this message urgent? Answer with one word, URGENT or ROUTINE.\n\n{{input}}' }),
-        node('if', 'condition', 540, 200, 'Urgent?', { test: 'contains', value: 'urgent' }),
-        node('urgent', 'ai', 780, 110, 'Urgent reply', { prompt: 'Draft a short reply that acknowledges this urgent message and gives a time for a full answer:\n\n{{trigger}}' }),
-        node('routine', 'ai', 780, 290, 'Routine reply', { prompt: 'Draft a friendly reply to this message:\n\n{{trigger}}' }),
-        node('out', 'output', 1020, 200, 'Result'),
-      ],
-      edges: [edge('start', 'classify'), edge('classify', 'if'), edge('if', 'urgent', 'true'), edge('if', 'routine', 'false'), edge('urgent', 'out'), edge('routine', 'out')],
-    };
-  }
-  return {
-    name: 'New workflow',
-    description: '',
-    emoji: '⚡',
-    nodes: [node('start', 'trigger', 80, 180, 'Start'), node('ask', 'ai', 360, 180, 'Ask Mitzi'), node('out', 'output', 640, 180, 'Result')],
-    edges: [edge('start', 'ask'), edge('ask', 'out')],
-  };
-}
-
 /** The Workflow tool: lets a bot run the workflows the user made available to chats. */
 export function workflowTool(store: Store, engine: WorkflowEngine): Tool<{ workflow: string; input?: string }> | undefined {
   const list = store.workflows.all().filter((w) => w.exposeToChat);

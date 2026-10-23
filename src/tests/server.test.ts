@@ -986,6 +986,28 @@ test('workflow steps: code, for each, wait and approval', async () => {
   assert.ok(!run.steps.some((s: any) => s.nodeId === 'no'), 'the rejected branch didn’t run');
 });
 
+test('workflow gallery, and building a workflow from a description', async () => {
+  const gallery = (await call('GET', '/api/workflows/gallery')).data;
+  assert.ok(gallery.length >= 8 && gallery.every((g: any) => g.steps > 1 && g.category));
+  const research = (await call('POST', '/api/workflows', { template: 'research' })).data;
+  assert.ok(research.nodes.some((n: any) => n.type === 'loop'));
+
+  // The first draft is broken; the builder says why and the model fixes it.
+  let attempts = 0;
+  reply = (body) => {
+    assert.match(body.messages[0].content, /You design workflows/);
+    attempts++;
+    if (attempts === 1) return textChunks('{"steps": [{"id": "x", "type": "teleport"}]}');
+    assert.match(body.messages.at(-1).content, /unknown type "teleport"/);
+    return textChunks('{"name": "Joke maker", "emoji": "😹", "description": "Tells a joke", "steps": [{"id": "s", "type": "trigger", "label": "Start"}, {"id": "j", "type": "ai", "label": "Joke", "config": {"prompt": "Tell a joke about {{input}}"}}, {"id": "o", "type": "output", "label": "Result"}], "edges": [{"from": "s", "to": "j"}, {"from": "j", "to": "o"}]}');
+  };
+  const built = (await call('POST', '/api/workflows/draft', { description: 'Tell a joke about a topic' })).data;
+  assert.equal(attempts, 2);
+  assert.equal(built.name, 'Joke maker');
+  assert.equal(built.nodes.find((n: any) => n.id === 'j').config.prompt, 'Tell a joke about {{input}}');
+  assert.equal((await call('GET', `/api/workflows/${built.id}`)).data.emoji, '😹');
+});
+
 /** Polls until a server reaches a status. */
 async function waitFor(id: string, status: string) {
   for (let i = 0; i < 200; i++) {
