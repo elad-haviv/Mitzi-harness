@@ -1136,13 +1136,26 @@ a:hover {
 .msg-actions {
   display: flex;
   gap: 2px;
-  opacity: 0;
-  transition: opacity 0.12s;
   align-items: center;
 }
-.turn:hover .msg-actions,
-.msg-actions:focus-within {
+/* The time always shows; the rest of the row on hover. */
+.msg-actions > *:not(.msg-time) {
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.turn:hover .msg-actions > *,
+.msg-actions:focus-within > * {
   opacity: 1;
+}
+.msg-time {
+  font-size: 11.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  padding: 0 6px 0 2px;
+  white-space: nowrap;
+}
+.turn-user .msg-actions {
+  justify-content: flex-end;
 }
 .msg-actions .meta {
   font-size: 12px;

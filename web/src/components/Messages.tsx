@@ -66,6 +66,23 @@ export function splitUserContent(content: ChatMessage['content']): { text: strin
   return { text: text.trim(), attachments };
 }
 
+/** When a message was sent: the time today, the date and time before. */
+export function MessageTime({ ts }: { ts?: number }) {
+  if (!ts) return null;
+  const d = new Date(ts);
+  const now = new Date();
+  const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  const label =
+    d.toDateString() === now.toDateString()
+      ? time
+      : `${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}) })}, ${time}`;
+  return (
+    <time className="msg-time" dateTime={d.toISOString()} title={d.toLocaleString()}>
+      {label}
+    </time>
+  );
+}
+
 export function messageText(m: ChatMessage): string {
   if (typeof m.content === 'string') return m.content;
   return (m.content ?? []).map((p) => (p.type === 'text' ? p.text : '')).join('');
@@ -236,6 +253,7 @@ function UserBubble({ message, onEdit, disabled }: { message: ChatMessage; onEdi
               <Pencil size={14} />
             </button>
           )}
+          <MessageTime ts={message.ts} />
         </div>
       )}
     </div>
@@ -330,6 +348,7 @@ export function AssistantTurn({
           <AssistantMessageBody key={i} message={m} results={results} artifacts={artifacts} activeArtifact={activeArtifact} onOpenArtifact={onOpenArtifact} />
         ))}
         <div className="msg-actions">
+          <MessageTime ts={messages.at(-1)?.ts} />
           {text && <CopyButton text={() => text} label="Copy response" />}
           {text && <ReadAloudButton id={id} text={text} />}
           {onRate && <RateButtons rating={rating} onRate={onRate} />}
