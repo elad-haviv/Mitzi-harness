@@ -1,4 +1,4 @@
-import { Brain, Globe, ImageIcon, Layers, MessageSquare, Pencil, Plug, Plus, ThumbsDown, ThumbsUp, Trash2, Users, WandSparkles, X } from 'lucide-react';
+import { Brain, Globe, ImageIcon, Layers, MessageSquare, Pencil, Plug, Plus, ThumbsDown, ThumbsUp, Trash2, Users, WandSparkles, X, Split } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, BankProfile, Bot, BotTools, Lesson } from '../api';
 import { ModelPicker } from '../components/ModelPicker';
@@ -208,6 +208,7 @@ function BotEditor({ bot, onClose, onSaved }: { bot?: Bot; onClose(): void; onSa
               ['connectors', <Plug size={18} key="c" />, 'Connectors', 'Use tools from your connectors (MCP servers)'],
               ['media', <ImageIcon size={18} key="i" />, 'Media', 'Generate images, video, speech, sounds and music (set up models in Settings)'],
               ['team', <Users size={18} key="t" />, 'Team', 'Hand parts of a task to your other bots, which work on them in parallel'],
+              ['subagents', <Split size={18} key="sa" />, 'Subagents', 'Split focused parts of a task off to copies of itself that work in parallel, each with a clean context'],
               ['browser', <Globe size={18} key="b" />, 'Browser', 'Use a real web browser to read and act on websites (asks before each step)'],
             ] as const
           ).map(([k, icon, t, s]) => (

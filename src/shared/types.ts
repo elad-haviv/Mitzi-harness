@@ -113,6 +113,8 @@ export interface BotTools {
   connectors: boolean;
   /** Hand parts of a task to other bots and combine their results. */
   team?: boolean;
+  /** Split focused parts of a task off to subagents (copies of the bot) that work in parallel. */
+  subagents?: boolean;
   /** Use a real web browser (asks before each action unless allowed for the chat). */
   browser?: boolean;
 }

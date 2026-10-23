@@ -388,7 +388,7 @@ test('auto-compaction triggers when the last request was near the limit', async 
 
 test('bots shape new chats; deleting a project keeps or deletes its chats', async () => {
   const bot = (await call('POST', '/api/bots', { name: 'Pirate', emoji: '🏴‍☠️', systemPrompt: 'Talk like a pirate.', model: 'test/model', tools: { web: false } })).data;
-  assert.deepEqual(bot.tools, { artifacts: true, web: false, memory: true, skills: true, connectors: true, media: true, team: true, browser: true });
+  assert.deepEqual(bot.tools, { artifacts: true, web: false, memory: true, skills: true, connectors: true, media: true, team: true, subagents: true, browser: true });
   reply = () => textChunks('Arr');
   const chat = (await call('POST', '/api/chats', { botId: bot.id })).data;
   await stream(`/api/chats/${chat.id}/messages`, { content: 'Ahoy' });
@@ -873,6 +873,54 @@ test('messages sent while the bot works are queued and sent in order; "now" inte
     assert.deepEqual((await call('DELETE', `/api/chats/${chat.id}/queue/${q[0].id}`)).data.queue, []);
     await third;
     assert.ok(!(await idle(chat.id)).messages.some((m: any) => m.content === 'Never mind'));
+  } finally {
+    chunkDelay = 0;
+  }
+});
+
+test('a bot splits work off to subagents that run in parallel and report back', async () => {
+  let lead = 0;
+  let inFlight = 0;
+  let maxInFlight = 0;
+  reply = (body) => {
+    const system = JSON.stringify(body.messages[0]);
+    if (/Working as a subagent/.test(system)) {
+      assert.ok(!body.tools?.some((t: any) => t.function.name === 'Subagents'), 'subagents can’t spawn more');
+      // A clean context: only its task.
+      assert.equal(body.messages.length, 2);
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      setTimeout(() => inFlight--, 60);
+      return textChunks(`Done: ${body.messages[1].content}`);
+    }
+    assert.ok(body.tools?.some((t: any) => t.function.name === 'Subagents'));
+    return lead++ === 0
+      ? toolCallChunks('call_sub', 'Subagents', {
+          tasks: [
+            { title: 'Cat breeds', task: 'List two cat breeds' },
+            { title: 'Cat food', task: 'Name a cat food' },
+          ],
+        })
+      : textChunks('Combined the subagents’ work.');
+  };
+  chunkDelay = 20;
+  try {
+    const chat = (await call('POST', '/api/chats', {})).data;
+    const events = await stream(`/api/chats/${chat.id}/messages`, { content: 'Research cats' });
+    const progress = events.filter((e) => e.type === 'delegate');
+    assert.deepEqual([...new Set(progress.map((e) => e.botId))].sort(), ['subagent-1', 'subagent-2']);
+    assert.ok(progress.every((e) => e.callId === 'call_sub'));
+    assert.equal(maxInFlight, 2, 'both subagents worked at the same time');
+    const result = events.find((e) => e.type === 'tool_result' && e.id === 'call_sub');
+    assert.equal(result.output, '## Cat breeds\nDone: List two cat breeds\n\n## Cat food\nDone: Name a cat food');
+    assert.equal((await call('GET', `/api/chats/${chat.id}`)).data.messages.at(-1).content, 'Combined the subagents’ work.');
+
+    // The capability can be turned off per bot.
+    await call('PATCH', '/api/bots/mitzi', { tools: { subagents: false } });
+    reply = () => textChunks('Solo.');
+    await stream(`/api/chats/${chat.id}/messages`, { content: 'Again' });
+    assert.ok(!lastMain().tools?.some((t: any) => t.function.name === 'Subagents'));
+    await call('PATCH', '/api/bots/mitzi', { tools: { subagents: true } });
   } finally {
     chunkDelay = 0;
   }

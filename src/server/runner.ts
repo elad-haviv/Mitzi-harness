@@ -19,6 +19,7 @@ import { artifactTool } from './tools.js';
 import { commentTool } from './workspace.js';
 import { MediaService, mediaTools } from './media.js';
 import { delegateTool } from './team.js';
+import { subagentId, subagentsTool } from './subagents.js';
 import { checkGoal, goalTool, newGoal, parseBuiltin, submitPlanTool } from './agentic.js';
 import { CompareInsightsStore, parseCompareArgs, runCompareRace, tallyFor, CompareOutcome } from './compare.js';
 import { todoTool } from '../tools/todo.js';
@@ -420,13 +421,14 @@ export class ChatRunner {
     lead: Bot,
     mate: Bot,
     task: string,
-    run: { callId: string; permissions: Permissions; emit: (e: StreamEvent) => void; signal?: AbortSignal; model: string },
+    run: { callId: string; permissions: Permissions; emit: (e: StreamEvent) => void; signal?: AbortSignal; model: string; subagent?: string },
   ): Promise<string> {
     const { store, catalog } = this.deps;
     const project = chat.projectId ? store.projects.get(chat.projectId) : undefined;
     const { model } = await this.pick(mate.model ?? run.model, { content: task, working: true, planning: false });
     const virtual: Chat = { ...chat, botId: mate.id, model, webSearch: false, messages: [], contextStart: 0, summary: undefined, focusArtifactId: undefined };
-    const send = (event: 'start' | 'text' | 'tool' | 'done' | 'error', text: string) => run.emit({ type: 'delegate', callId: run.callId, botId: mate.id, event, text });
+    // A subagent's progress is told apart from its lead (the same bot) by its own id.
+    const send = (event: 'start' | 'text' | 'tool' | 'done' | 'error', text: string) => run.emit({ type: 'delegate', callId: run.callId, botId: run.subagent ?? mate.id, event, text });
     send('start', task);
     const recalled = this.memoryOn(mate) ? await this.recall(mate, task, () => {}) : [];
     const { tools } = await this.allTools(virtual, (artifact) => run.emit({ type: 'artifact', artifact }));
@@ -439,8 +441,12 @@ export class ChatRunner {
       ui: new TeammateUI(send),
       cwd: project?.folder ?? homedir(),
       systemPrompt: () =>
-        `${systemPrompt({ ...this.setup(virtual), recalled, team: [] })}\n\n# Working with ${lead.name}\n${lead.name} handed you this task as part of a larger request from the user. ` +
-        `The user won't see your reply directly: ${lead.name} will use it. Do the task and reply with the finished result, without small talk.`,
+        `${systemPrompt({ ...this.setup(virtual), recalled, team: [] })}\n\n` +
+        (run.subagent
+          ? `# Working as a subagent\nYou are a subagent: the main ${lead.name} split this focused task off a larger request from the user and works on other parts meanwhile. ` +
+            `The user won't see your reply directly: the main ${lead.name} will use it. Stay on this task, do it thoroughly, and reply with the finished result, without small talk.`
+          : `# Working with ${lead.name}\n${lead.name} handed you this task as part of a larger request from the user. ` +
+            `The user won't see your reply directly: ${lead.name} will use it. Do the task and reply with the finished result, without small talk.`),
     });
     agent.messages = [{ role: 'user', content: task }];
     try {
@@ -696,6 +702,13 @@ export class ChatRunner {
     const permissions = new Permissions(this.permissionMode(chat), chat.allowedRules, approver);
     if (team.length && !planRequest) {
       tools.push(delegateTool(team, (mate, task, callId, toolSignal) => this.runTeammate(chat, bot, mate, task, { callId, permissions, emit, signal: toolSignal ?? signal, model })));
+    }
+    if (bot.tools.subagents !== false && !planRequest) {
+      tools.push(
+        subagentsTool((t, i, callId, toolSignal) =>
+          this.runTeammate(chat, bot, bot, t.task, { callId, permissions, emit, signal: toolSignal ?? signal, model, subagent: subagentId(i) }),
+        ),
+      );
     }
     if (working && !tools.some((t) => t.name === 'TodoWrite')) tools.push(todoTool);
     if (chat.goal?.status === 'active') {

@@ -43,7 +43,7 @@ import { LOGO, modelLabel, useApp } from '../state';
 import { ArtifactIcon, TYPE_LABEL } from './Artifacts';
 import { CopyButton, Markdown } from './Markdown';
 import { Diff, useAutoResize } from './ui';
-import { TeamCard, TeamProgress } from './Team';
+import { SubagentsCard, TeamCard, TeamProgress } from './Team';
 import { AutoMessage, LoopBadge, ReviewBox } from './Feedback';
 import { clock, PlanCard, StatsLine, useChatActions, useElapsed } from './Work';
 
@@ -662,6 +662,7 @@ export function ToolBlock({
   const [open, setOpen] = useState(false);
 
   if (name === 'Delegate' && Array.isArray(args?.assignments)) return <TeamCard args={args} result={result} running={running} progress={team} />;
+  if (name === 'Subagents' && Array.isArray(args?.tasks)) return <SubagentsCard args={args} result={result} running={running} progress={team} />;
 
   if (name === 'Artifact') {
     const artifact = artifacts.find((a) => a.versions.some((v) => v.callId === id));

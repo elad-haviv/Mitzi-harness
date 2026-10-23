@@ -868,6 +868,7 @@ function applyBot(bot: Bot, body: any, creating: boolean): Bot {
     connectors: tools.connectors ?? bot.tools?.connectors ?? true,
     media: tools.media ?? bot.tools?.media ?? true,
     team: tools.team ?? bot.tools?.team ?? true,
+    subagents: tools.subagents ?? bot.tools?.subagents ?? true,
     browser: tools.browser ?? bot.tools?.browser ?? true,
   };
   if (creating || Array.isArray(body?.starters)) {
