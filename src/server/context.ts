@@ -173,7 +173,8 @@ export function systemPrompt(setup: ChatSetup): string {
 export function contextMessages(chat: Chat): Message[] {
   const tail = chat.messages
     .slice(chat.contextStart)
-    .map(({ ts: _ts, model: _model, memories: _memories, command: _command, rating: _rating, reasoning: _reasoning, stats: _stats, feedbackLoopId: _loop, auto: _auto, ...m }) => m as Message);
+    // Only what the API takes: display fields (ratings, stats, routes…) stay out.
+    .map(({ role, content, tool_calls, tool_call_id }): Message => ({ role, content, ...(tool_calls ? { tool_calls } : {}), ...(tool_call_id ? { tool_call_id } : {}) }));
   if (!chat.summary) return tail;
   return [
     { role: 'user', content: `Earlier parts of this conversation were summarized to save context:\n\n${chat.summary}` },

@@ -743,6 +743,8 @@ test('Auto routes quick messages to the fast model and in-depth ones to the stro
   // A short follow-up to in-depth work stays on the strong model.
   await stream(`/api/chats/${chat.id}/messages`, { content: 'continue' });
   assert.equal(lastMain().model, 'test/strong');
+  // Display fields never reach the API.
+  assert.ok(!JSON.stringify(lastMain().messages).includes('"route"'));
 
   const saved = (await call('GET', `/api/chats/${chat.id}`)).data;
   assert.equal(saved.model, 'auto');
