@@ -62,10 +62,10 @@ export function BotsPage() {
                 </div>
                 <div className={`bot-emoji${b.builtIn ? ' builtin' : ''}`}>{b.emoji}</div>
                 <div className="tile-title row" style={{ gap: 8 }}>
-                  {b.name} {b.builtIn && <span className="badge accent">{tr('Default')}</span>}
+                  {tr(b.name)} {b.builtIn && <span className="badge accent">{tr('Default')}</span>}
                   {b.pluginId && <span className="badge">{tr('Plugin')}</span>}
                 </div>
-                <div className="tile-desc">{b.description || <span className="muted">{tr('No description')}</span>}</div>
+                <div className="tile-desc">{(b.description && tr(b.description)) || <span className="muted">{tr('No description')}</span>}</div>
                 <div className="tile-foot">
                   <span className="badge">{b.model ? modelLabel(b.model, models) : tr('Default model')}</span>
                   {b.tools.web && <Globe size={13} aria-label={tr('Web')} />}

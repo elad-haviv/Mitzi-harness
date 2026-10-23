@@ -384,7 +384,7 @@ export function AssistantTurn({
         {reviewing && reviewIndex !== undefined && <ReviewBox index={reviewIndex} loop={loop} onDone={() => setReviewing(false)} />}
         {rating?.lesson && (
           <div className="lesson-note" title={tr('Saved to this bot\'s lessons; you can remove it on the Bots page')}>
-            <Brain size={13} /> {tr('Learned:')}{' '}{rating.lesson}
+            <Brain size={13} />{' '}{tr('Learned: {0}', rating.lesson)}
           </div>
         )}
       </div>
@@ -399,7 +399,7 @@ export function RouteBadge({ route }: { route: RouteChoice }) {
   return (
     <span className={`route-badge ${route.tier}`} title={tr('Auto picked {0} ({1}): {2}', name, route.model, route.reason.toLowerCase())}>
       {route.tier === 'fast' ? <Zap size={11} /> : <Sparkles size={11} />}
-      {tr('Auto ·')}{' '}{name}
+      {tr('Auto · {0}', name)}
     </span>
   );
 }
@@ -747,7 +747,7 @@ export function ToolBlock({
       <div className="media-card pending">
         <Loader2 size={18} className="spin" />
         <span>
-          {name === 'GenerateVideo' ? tr('Generating video (this can take a few minutes)…') : tr('Generating {0}…', name.slice(8).toLowerCase())}
+          {name === 'GenerateVideo' ? tr('Generating video (this can take a few minutes)…') : ({ GenerateImage: tr('Generating an image…'), GenerateSpeech: tr('Generating speech…'), GenerateSound: tr('Generating a sound…'), GenerateMusic: tr('Generating music…') } as Record<string, string>)[name] ?? tr('Generating…')}
           <div className="muted small">{args.prompt ?? args.text}</div>
         </span>
       </div>
@@ -805,7 +805,7 @@ function TodoChip({ todos }: { todos: Todo[] }) {
       <button className="todo-chip" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <CircleCheck size={14} />
         <span>
-          {tr('Task list ·')}{' '}{done} of {todos.length} done{current ? <> {tr('· now:')}{' '}<strong>{current.content}</strong></> : done === todos.length ? tr(' · all done') : ''}
+          {tr('Task list · {0} of {1} done', done, todos.length)}{current ? <> {tr('· now:')}{' '}<strong>{current.content}</strong></> : done === todos.length ? tr(' · all done') : ''}
         </span>
         {open ? <ChevronDown size={14} className="muted" /> : <ChevronRight size={14} className="muted" />}
       </button>
@@ -857,8 +857,8 @@ export function PermissionCard({ req, onAnswer }: { req: PermissionRequest; onAn
       <div className="permission-head">
         <ShieldCheck size={18} />
         <span>
-          <strong>{tr('Allow')}{' '}{req.tool}?</strong> <code>{req.summary}</code>
-          {req.why && <span className="permission-why">{tr('🐈 Asking because it')}{' '}{req.why}</span>}
+          <strong>{tr('Allow {0}?', req.tool)}</strong> <code>{req.summary}</code>
+          {req.why && <span className="permission-why">{tr('🐈 Asking because it {0}', req.why)}</span>}
         </span>
       </div>
       {req.preview && (

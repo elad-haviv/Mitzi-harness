@@ -368,7 +368,7 @@ export const api = {
   createBot: (body: Partial<Bot>) => request<Bot>('POST', '/api/bots', body),
   updateBot: (id: string, body: Partial<Bot>) => request<Bot>('PATCH', `/api/bots/${id}`, body),
   deleteBot: (id: string) => request('DELETE', `/api/bots/${id}`),
-  starters: (id: string, refresh = false) => request<{ starters: string[]; personalized: boolean }>('GET', `/api/bots/${id}/starters${refresh ? '?refresh=1' : ''}`),
+  starters: (id: string, refresh = false, lang = 'en') => request<{ starters: string[]; personalized: boolean }>('GET', `/api/bots/${id}/starters?lang=${lang}${refresh ? '&refresh=1' : ''}`),
 
   artifacts: (filter: { chatId?: string; projectId?: string } = {}) => {
     const q = new URLSearchParams(Object.entries(filter).filter(([, v]) => v) as [string, string][]).toString();

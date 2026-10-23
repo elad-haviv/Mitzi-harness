@@ -47,7 +47,7 @@ const Ctx = createContext<AppState | null>(null);
 
 export function useApp(): AppState {
   const ctx = useContext(Ctx);
-  if (!ctx) throw new Error(tr('useApp outside provider'));
+  if (!ctx) throw new Error('useApp outside provider');
   return ctx;
 }
 

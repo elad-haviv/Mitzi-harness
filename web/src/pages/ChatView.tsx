@@ -62,7 +62,7 @@ import { href, navigate, parseRoute } from '../router';
 import { LOGO, relativeTime, useApp } from '../state';
 import { applyDelegateEvent, TeamProgress } from '../components/Team';
 import { applyCompareEvent, CompareState, CompareView } from '../components/Compare';
-import { plural, tr } from '../i18n';
+import { lang, plural, rtl, tr } from '../i18n';
 
 type LiveBlock =
   | { kind: 'text'; text: string }
@@ -729,7 +729,7 @@ export function ChatView({
                 .slice(0, 6)
                 .map((p) => (
                   <button key={p.id} onClick={() => (close(), void updateChat({ projectId: p.id }))}>
-                    <FolderOpen size={15} /> {tr('Move to')}{' '}{p.name}
+                    <FolderOpen size={15} />{' '}{tr('Move to {0}', p.name)}
                   </button>
                 ))}
               {chat.projectId && (
@@ -756,7 +756,7 @@ export function ChatView({
         {customBot ? <div className="welcome-mark emoji">{customBot.emoji}</div> : <div className="welcome-mark">{LOGO}</div>}
         <h1 className="welcome-title">{customBot ? customBot.name : project ? project.name : `${greeting()}`}</h1>
         <p className="welcome-sub">
-          {customBot ? customBot.description || tr('How can I help?') : project ? project.description || tr('Start a new chat in this project.') : tr('How can I help you today?')}
+          {customBot ? (customBot.description && tr(customBot.description)) || tr('How can I help?') : project ? project.description || tr('Start a new chat in this project.') : tr('How can I help you today?')}
         </p>
         <div className="context-chips">
           {project && (
@@ -767,7 +767,7 @@ export function ChatView({
           )}
           {project?.folder && (
             <span className="badge ok" title={project.folder}>
-              <Terminal size={12} /> {tr('Coding agent in')}{' '}{project.folder.split(/[\\/]/).slice(-2).join('/')}
+              <Terminal size={12} />{' '}{tr('Coding agent in {0}', project.folder.split(/[\\/]/).slice(-2).join('/'))}
             </span>
           )}
           {project?.folder && <RepoBadge projectId={project.id} />}
@@ -830,7 +830,7 @@ export function ChatView({
             if (b.kind === 'goal') {
               return (
                 <div key={`g${i}`} className="auto-divider">
-                  {b.goal.status === 'complete' ? <>{tr('🎯 Goal achieved:')}{' '}{b.goal.lastCheck}</> : b.goal.status === 'active' ? <>{tr('Goal not met yet:')}{' '}{b.goal.lastCheck} {tr('· continuing')}</> : <>{tr('Goal')}{' '}{b.goal.status === 'budget' ? tr('out of turns') : b.goal.status}</>}
+                  {b.goal.status === 'complete' ? <>{tr('🎯 Goal achieved: {0}', b.goal.lastCheck)}</> : b.goal.status === 'active' ? <>{tr('Goal not met yet: {0} · continuing', b.goal.lastCheck)}</> : <>{tr('Goal')}{' '}{b.goal.status === 'budget' ? tr('out of turns') : b.goal.status}</>}
                 </div>
               );
             }
@@ -971,7 +971,7 @@ export function ChatView({
           <div className="error-box budget-banner">
             <Wallet size={16} />
             <span style={{ flex: 1 }}>
-              {tr('You’ve reached your')}{' '}{app.budget.limit === 'daily' ? tr('daily') : tr('monthly')} {tr('budget, so Mitzi is paused.')}{' '}<a href={href({ page: 'settings', section: 'budget' })}>{tr('Change the budget')}</a>
+              {app.budget.limit === 'daily' ? tr('You’ve reached your daily budget, so Mitzi is paused.') : tr('You’ve reached your monthly budget, so Mitzi is paused.')}{' '}<a href={href({ page: 'settings', section: 'budget' })}>{tr('Change the budget')}</a>
             </span>
           </div>
         )}
@@ -1156,7 +1156,7 @@ function Starters({ botId, onPick }: { botId: string; onPick(text: string): void
   const load = useCallback(
     (refresh = false) => {
       setState('loading');
-      api.starters(botId, refresh).then(setState, () => setState({ starters: fixed, personalized: false }));
+      api.starters(botId, refresh, lang).then(setState, () => setState({ starters: fixed, personalized: false }));
     },
     [botId], // eslint-disable-line react-hooks/exhaustive-deps
   );
@@ -1176,9 +1176,10 @@ function Starters({ botId, onPick }: { botId: string; onPick(text: string): void
     <>
       <div className="starters">
         {state.starters.map((s) => (
-          <button key={s} className="starter" onClick={() => onPick(s)}>
+          // Built-in starters are shown (and sent) in the interface language.
+          <button key={s} className="starter" onClick={() => onPick(state.personalized ? s : tr(s))}>
             {state.personalized ? <Sparkles size={15} /> : <Lightbulb size={15} />}
-            <span>{s}</span>
+            <span dir="auto">{state.personalized ? s : tr(s)}</span>
           </button>
         ))}
       </div>
@@ -1223,7 +1224,8 @@ function ResizeHandle({ width, onChange }: { width: number; onChange(w: number):
         const startX = e.clientX;
         const startW = width;
         setDragging(true);
-        const move = (ev: PointerEvent) => onChange(Math.min(Math.max(startW + (startX - ev.clientX), 340), window.innerWidth - 420));
+        // The panel sits on the right (on the left in right-to-left layouts): dragging away from it widens it.
+        const move = (ev: PointerEvent) => onChange(Math.min(Math.max(startW + (rtl ? ev.clientX - startX : startX - ev.clientX), 340), window.innerWidth - 420));
         const up = () => {
           setDragging(false);
           window.removeEventListener('pointermove', move);

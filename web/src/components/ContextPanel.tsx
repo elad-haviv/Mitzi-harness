@@ -76,7 +76,7 @@ export function ContextPanel({ chatId, refreshKey, onClose, onChanged, bare }: {
             <div>
               <div className="ctx-big">
                 <strong>{formatTokens(used)}</strong>
-                <span className="muted">of {formatTokens(window)} tokens</span>
+                <span className="muted">{tr('of {0} tokens', formatTokens(window))}</span>
               </div>
               <div className="muted small">
                 {data.lastPromptTokens
@@ -94,7 +94,7 @@ export function ContextPanel({ chatId, refreshKey, onClose, onChanged, bare }: {
               </div>
               {data.autoCompactAt && (
                 <div className="muted small" style={{ marginTop: 6 }}>
-                  {tr('Auto-compacts at')}{' '}{formatTokens(data.autoCompactAt)} (<a href={href({ page: 'settings', section: 'general' })}>change</a>)
+                  {tr('Auto-compacts at {0} (', formatTokens(data.autoCompactAt))}<a href={href({ page: 'settings', section: 'general' })}>{tr('change')}</a>)
                 </div>
               )}
             </div>
@@ -131,7 +131,7 @@ export function ContextPanel({ chatId, refreshKey, onClose, onChanged, bare }: {
             {data.summary && (
               <div>
                 <div className="card-title" style={{ marginBottom: 8 }}>
-                  <History size={15} /> {tr('Summary of')}{' '}{data.compactedMessages} {tr('earlier messages')}
+                  <History size={15} />{' '}{tr('Summary of {0} earlier messages', data.compactedMessages)}
                 </div>
                 <div className="summary-box">{data.summary}</div>
               </div>
@@ -180,7 +180,7 @@ export function ContextButton({ chatId, used, total, refreshKey, onDetails }: { 
             <strong>{pct}%</strong> {tr('of the context window')}
           </div>
           <div className="muted small">
-            {formatTokens(now)} of {formatTokens(window)} tokens{data?.autoCompactAt ? tr(' · compacts at {0}', formatTokens(data.autoCompactAt)) : ''}
+            {tr('{0} of {1} tokens', formatTokens(now), formatTokens(window))}{data?.autoCompactAt ? tr(' · compacts at {0}', formatTokens(data.autoCompactAt)) : ''}
           </div>
           <div className="ctx-bar" aria-hidden style={{ margin: '10px 0 8px' }}>
             {[...byKind].map(([k, n]) => (
@@ -200,7 +200,7 @@ export function ContextButton({ chatId, used, total, refreshKey, onDetails }: { 
                 </div>
               ))}
           </div>
-          {!!data?.compactedMessages && <div className="muted small">{data.compactedMessages} {tr('earlier messages are summarized.')}</div>}
+          {!!data?.compactedMessages && <div className="muted small">{tr('{0} earlier messages are summarized.', data.compactedMessages)}</div>}
           <button
             className="btn btn-sm ctx-pop-more"
             onClick={() => {

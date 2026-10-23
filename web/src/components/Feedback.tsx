@@ -119,7 +119,7 @@ export function LoopBadge({ loop, index }: { loop: FeedbackLoop; index: number }
     <div className={`loop-badge ${loop.status}`}>
       <Target size={13} />
       <span>
-        {tr('Attempt')}{' '}{attempt}
+        {tr('Attempt {0}', attempt)}
         {it ? <> {tr('· rated')}{' '}<Stars value={it.rating} size={11} /></> : loop.status === 'open' ? tr(' · waiting for your review') : ''}
         {loop.status === 'accepted' && loop.iterations.at(-1)?.messageIndex === index && tr(' · accepted')}
       </span>

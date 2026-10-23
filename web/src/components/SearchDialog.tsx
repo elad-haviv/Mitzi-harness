@@ -139,7 +139,7 @@ export function SearchDialog({ initial = '', onClose }: { initial?: string; onCl
               ))}
             </>
           )}
-          {q.trim() && !busy && !hits.length && <div className="search-empty muted">{tr('Nothing found for “')}{q.trim()}”.</div>}
+          {q.trim() && !busy && !hits.length && <div className="search-empty muted">{tr('Nothing found for “{0}”.', q.trim())}</div>}
           {sections.map((s) => (
             <div key={s.kind}>
               <div className="search-section">{SECTION[s.kind]}</div>
@@ -165,7 +165,7 @@ export function SearchDialog({ initial = '', onClose }: { initial?: string; onCl
                     </span>
                     <span className="search-hit-meta muted small">
                       {relativeTime(h.ts)}
-                      {!!h.more && <span>+{h.more} more</span>}
+                      {!!h.more && <span>{tr('+{0} more', h.more)}</span>}
                     </span>
                   </button>
                 );

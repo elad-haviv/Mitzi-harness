@@ -78,7 +78,7 @@ export function UsageView({ projectId: fixedProject, compact }: { projectId?: st
         <div className="segmented">
           {[7, 30, 90].map((d) => (
             <button key={d} className={days === d ? 'active' : ''} onClick={() => setDays(d)}>
-              {d} days
+              {tr('{0} days', d)}
             </button>
           ))}
         </div>
@@ -120,7 +120,7 @@ export function UsageView({ projectId: fixedProject, compact }: { projectId?: st
         <h2>{priced ? tr('Cost per day') : tr('Tokens per day')}</h2>
         {!priced && t.requests > 0 && <p className="muted small">{tr('Your providers didn’t report prices, so this shows tokens.')}</p>}
         <Chart
-          title={tr('{0} per day over the last {1} days', priced ? 'Cost' : 'Tokens', days)}
+          title={priced ? tr('Cost per day over the last {0} days', days) : tr('Tokens per day over the last {0} days', days)}
           points={data.daily.map((d) => ({ label: label(d.day), value: metric(d), tip: tr('{0} · {1} tokens · {2} requests', money(d.cost), formatTokens(d.prompt + d.completion), d.requests) }))}
           format={fmt}
         />
@@ -161,12 +161,12 @@ export function UsageView({ projectId: fixedProject, compact }: { projectId?: st
         {!fixedProject && (
           <section className="card">
             <h2>{tr('By project')}</h2>
-            <Breakdown rows={rows(data.byProject, (g) => (g.key ? <a href={href({ page: 'project', id: g.key })}>{g.name}</a> : g.name))} format={fmt} empty={tr('No requests in this period.')} />
+            <Breakdown rows={rows(data.byProject, (g) => (g.key ? <a href={href({ page: 'project', id: g.key })}>{g.name}</a> : tr(g.name ?? '')))} format={fmt} empty={tr('No requests in this period.')} />
           </section>
         )}
         <section className="card">
           <h2>{tr('By bot')}</h2>
-          <Breakdown rows={rows(data.byBot)} format={fmt} empty={tr('No requests in this period.')} />
+          <Breakdown rows={rows(data.byBot, (g) => (g.name === 'Deleted bot' ? tr('Deleted bot') : (g.name ?? g.key)))} format={fmt} empty={tr('No requests in this period.')} />
         </section>
         <section className="card">
           <h2>{tr('By activity')}</h2>
@@ -248,7 +248,7 @@ function LearningView() {
                   <i className="key bar" /> {tr('Attempts')}
                 </span>
                 <span>
-                  <i className="key line" /> {tr('Average of the last')}{' '}{window}
+                  <i className="key line" />{' '}{tr('Average of the last {0}', window)}
                 </span>
               </div>
               <Chart
@@ -265,7 +265,7 @@ function LearningView() {
                   <i className="key dot" /> {tr('Rating of the first attempt')}
                 </span>
                 <span>
-                  <i className="key line" /> {tr('Average of the last')}{' '}{window}
+                  <i className="key line" />{' '}{tr('Average of the last {0}', window)}
                 </span>
               </div>
               <Chart
@@ -300,7 +300,7 @@ function LearningView() {
                           </span>
                         ))}
                       </div>
-                      {l.lesson && <div className="loop-lesson">{tr('Learned:')}{' '}{l.lesson}</div>}
+                      {l.lesson && <div className="loop-lesson">{tr('Learned: {0}', l.lesson)}</div>}
                     </div>
                     <button
                       className="icon-btn sm"
@@ -337,19 +337,19 @@ export function ProjectUsage({ projectId }: { projectId: string }) {
       <div className="project-usage-row">
         <div>
           <strong>{money(t.cost)}</strong>
-          <span className="muted small">cost</span>
+          <span className="muted small">{tr('cost')}</span>
         </div>
         <div>
           <strong>{formatTokens(t.prompt + t.completion)}</strong>
-          <span className="muted small">tokens</span>
+          <span className="muted small">{tr('tokens')}</span>
         </div>
         <div>
           <strong>{t.requests}</strong>
-          <span className="muted small">requests</span>
+          <span className="muted small">{tr('requests')}</span>
         </div>
       </div>
       <p className="muted small" style={{ margin: '6px 0 0' }}>
-        {tr('All time:')}{' '}{money(data.allTime.cost)} · {formatTokens(data.allTime.prompt + data.allTime.completion)} tokens. <a href={href({ page: 'insights' })}>{tr('Details')}</a>
+        {tr('All time: {0} · {1} tokens.', money(data.allTime.cost), formatTokens(data.allTime.prompt + data.allTime.completion))}{' '}<a href={href({ page: 'insights' })}>{tr('Details')}</a>
       </p>
     </div>
   );
@@ -372,7 +372,7 @@ export function BudgetMeters({ budget }: { budget: BudgetStatus }) {
             <div className="budget-meter-head">
               <span>{r.label}</span>
               <span className={`budget-meter-value ${tone}`}>
-                {money(r.spent)} of {money(r.max!)}
+                {tr('{0} of {1}', money(r.spent), money(r.max!))}
               </span>
             </div>
             <div className="budget-bar" role="meter" aria-valuemin={0} aria-valuemax={r.max} aria-valuenow={r.spent} aria-label={tr('{0}: {1} of {2}', r.label, money(r.spent), money(r.max!))}>
@@ -400,13 +400,13 @@ function AutoCard({ auto }: { auto: NonNullable<UsageReport['auto']> }) {
         <div>
           <div className="v">{share(auto.fast.requests)}</div>
           <div className="muted small">
-            {tr('to the quick model ·')}{' '}{money(auto.fast.cost)}
+            {tr('to the quick model · {0}', money(auto.fast.cost))}
           </div>
         </div>
         <div>
           <div className="v">{share(auto.strong.requests)}</div>
           <div className="muted small">
-            {tr('to the in-depth model ·')}{' '}{money(auto.strong.cost)}
+            {tr('to the in-depth model · {0}', money(auto.strong.cost))}
           </div>
         </div>
         <div>

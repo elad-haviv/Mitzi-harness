@@ -610,7 +610,7 @@ export function createApp(opts: AppOptions) {
   route('GET', '/api/bots', () => store.bots.all().sort((a, b) => Number(!!b.builtIn) - Number(!!a.builtIn) || a.name.localeCompare(b.name)));
   route('POST', '/api/bots', ({ body }) => store.bots.put(applyBot({ id: newId(), createdAt: now() } as Bot, body, true)));
   route('GET', '/api/bots/:id', ({ params }) => getBot(params.id));
-  route('GET', '/api/bots/:id/starters', ({ params, query }) => starters.get(getBot(params.id), query.get('refresh') === '1'));
+  route('GET', '/api/bots/:id/starters', ({ params, query }) => starters.get(getBot(params.id), query.get('refresh') === '1', query.get('lang') === 'he' ? 'Hebrew' : ''));
   route('PATCH', '/api/bots/:id', ({ params, body }) => store.bots.put(applyBot(getBot(params.id), body, false)));
   route('DELETE', '/api/bots/:id', async ({ params }) => {
     const bot = getBot(params.id);

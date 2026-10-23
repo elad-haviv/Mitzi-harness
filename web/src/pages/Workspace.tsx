@@ -433,7 +433,7 @@ export function ArtifactPage({ id }: { id: string }) {
   } else if (!draft.trim()) {
     body = (
       <div className="muted doc-empty">
-        {tr('This')}{' '}{kind} {tr('is empty. Switch to')}{' '}<button className="link-btn" onClick={() => setMode('edit')}>{modes?.[1]}</button> {tr('or ask')}{' '}{botName} {tr('for a first version.')}
+        {tr('This {0} is empty. Switch to', kind)}{' '}<button className="link-btn" onClick={() => setMode('edit')}>{modes?.[1]}</button>{' '}{tr('or ask {0} for a first version.', botName)}
       </div>
     );
   } else if (artifact.type === 'slides') {
@@ -696,7 +696,7 @@ function SelectionPopover({
     return (
       <div ref={(el) => void (ref.current = el)} className="sel-pop compact" style={style} onMouseDown={(e) => e.preventDefault()}>
         <button className="btn btn-sm btn-ghost" onClick={() => setExpanded(true)}>
-          <MessageSquarePlus size={14} /> {tr('Comment or ask')}{' '}{botName}
+          <MessageSquarePlus size={14} />{' '}{tr('Comment or ask {0}', botName)}
         </button>
       </div>
     );
@@ -731,7 +731,7 @@ function SelectionPopover({
           {tr('Add comment')}
         </button>
         <button className="btn btn-sm btn-primary" disabled={!text.trim()}>
-          <Sparkles size={13} /> {tr('Ask')}{' '}{botName}
+          <Sparkles size={13} />{' '}{tr('Ask {0}', botName)}
         </button>
       </div>
     </form>
@@ -777,7 +777,7 @@ function CommentsPanel({
       ))}
       {resolved.length > 0 && (
         <button className="link-btn small" onClick={() => setShowResolved((v) => !v)}>
-          {showResolved ? tr('Hide') : tr('Show')} {resolved.length} resolved
+          {showResolved ? tr('Hide') : tr('Show')}{' '}{tr('{0} resolved', resolved.length)}
         </button>
       )}
     </>
@@ -832,7 +832,7 @@ function CommentCard({
       <div className="comment-actions">
         {!c.resolved && c.author === 'user' && (
           <button className="btn btn-xs btn-ghost" onClick={() => onAsk(c)}>
-            <Sparkles size={12} /> {tr('Ask')}{' '}{botName}
+            <Sparkles size={12} />{' '}{tr('Ask {0}', botName)}
           </button>
         )}
         <button className="btn btn-xs btn-ghost" onClick={() => void onResolve(c, !c.resolved)}>

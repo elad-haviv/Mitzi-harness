@@ -170,7 +170,7 @@ export function SkillsPage() {
           </div>
           {viewing.files.length > 1 && (
             <p className="muted small">
-              {tr('Files:')}{' '}{viewing.files.slice(0, 30).join(', ')}
+              {tr('Files: {0}', viewing.files.slice(0, 30).join(', '))}
               {viewing.files.length > 30 ? ` … +${viewing.files.length - 30}` : ''}
             </p>
           )}

@@ -125,7 +125,7 @@ export function ConnectorsPage() {
                           <span className={`status-dot ${s.status}`} />
                           <span className="muted">{STATUS_LABEL[s.status]}</span>
                         </span>
-                        {s.source === 'plugin' && <span className="badge">{tr('Plugin:')}{' '}{s.pluginId}</span>}
+                        {s.source === 'plugin' && <span className="badge">{tr('Plugin: {0}', s.pluginId)}</span>}
                       </div>
                       <div className="s" title={s.error}>
                         {s.status === 'connected'
@@ -233,7 +233,7 @@ export function ConnectorsPage() {
                                 }
                               >
                                 {t.name}
-                                {t.readOnly && <span className="muted">ro</span>}
+                                {t.readOnly && <span className="muted">{tr('ro')}</span>}
                               </button>
                             ))}
                           </div>
@@ -343,10 +343,10 @@ function PresetModal({ preset, onClose, onAdded }: { preset: Preset; onClose(): 
       </div>
       {preset.requires && (
         <div className="warning-note" style={{ marginBottom: 14 }}>
-          {tr('This connector runs on your computer and needs')}{' '}{preset.requires} installed.
+          {tr('This connector runs on your computer and needs {0} installed.', preset.requires)}
         </div>
       )}
-      {preset.oauth && <p className="small muted">{tr('You’ll be sent to')}{' '}{preset.name} {tr('to sign in and approve access. Mitzi stores the sign-in on this computer only.')}</p>}
+      {preset.oauth && <p className="small muted">{tr('You’ll be sent to {0} to sign in and approve access. Mitzi stores the sign-in on this computer only.', preset.name)}</p>}
       {preset.fields.map((f) => (
         <label key={f.key} className="field">
           <span className="field-label">
@@ -474,7 +474,7 @@ function ServerEditor({ server, onClose, onSaved }: { server?: McpServerView; on
           </label>
           <label className="field">
             <span className="field-label">{tr('Arguments')}</span>
-            <input className="input mono" value={args} onChange={(e) => setArgs(e.target.value)} placeholder={tr('-y @modelcontextprotocol/server-filesystem ~/Documents')} />
+            <input className="input mono" value={args} onChange={(e) => setArgs(e.target.value)} placeholder={'-y @modelcontextprotocol/server-filesystem ~/Documents'} />
           </label>
           <div className="field">
             <span className="field-label">{tr('Environment variables')}</span>

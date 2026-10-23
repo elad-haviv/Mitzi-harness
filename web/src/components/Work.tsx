@@ -88,7 +88,7 @@ export function StatsLine({ stats }: { stats: ResponseStats }) {
       title={tr('{0} · {1} tokens in, {2} out · {3} · {4}', duration(stats.durationMs), stats.promptTokens.toLocaleString(), stats.completionTokens.toLocaleString(), plural(stats.requests, '{0} request', '{0} requests'), money(stats.cost))}
     >
       <Timer size={12} /> {duration(stats.durationMs)}
-      {tokens > 0 && <> · {formatTokens(tokens)} tokens</>}
+      {tokens > 0 && <>{' '}{tr('· {0} tokens', formatTokens(tokens))}</>}
       {stats.cost > 0 && <> · {money(stats.cost)}</>}
     </span>
   );
@@ -214,7 +214,7 @@ export function TasksPanel({ chat, running, onCommand, onApprove, onRevise }: { 
           </div>
           <p className="goal-text">{goal.text}</p>
           <div className="muted small">
-            {tr('Turn')}{' '}{goal.turns} of {goal.maxTurns}
+            {tr('Turn {0} of {1}', goal.turns, goal.maxTurns)}
             {goal.subgoals.length > 0 && tr(' · {0}/{1} milestones', goal.subgoals.filter((s) => s.done).length, goal.subgoals.length)}
           </div>
           {goal.subgoals.length > 0 && (
@@ -242,7 +242,7 @@ export function TasksPanel({ chat, running, onCommand, onApprove, onRevise }: { 
               <Plus size={15} />
             </button>
           </form>
-          {goal.lastCheck && <div className="goal-check">{tr('Last check:')}{' '}{goal.lastCheck}</div>}
+          {goal.lastCheck && <div className="goal-check">{tr('Last check: {0}', goal.lastCheck)}</div>}
           <div className="row" style={{ gap: 6, marginTop: 8 }}>
             {goal.status === 'active' ? (
               <button className="btn btn-sm" onClick={() => onCommand('/goal pause')}>
@@ -354,7 +354,7 @@ export function UsagePanel({ chat }: { chat?: Chat }) {
                 <div style={{ width: `${Math.max(2, (value / max) * 100)}%` }} />
               </div>
               <div className="response-usage-meta">
-                {duration(r.stats.durationMs)} · {formatTokens(r.stats.promptTokens + r.stats.completionTokens)} {tr('tokens ·')}{' '}{money(r.stats.cost)}
+                {tr('{0} · {1} tokens · {2}', duration(r.stats.durationMs), formatTokens(r.stats.promptTokens + r.stats.completionTokens), money(r.stats.cost))}
               </div>
             </li>
           );

@@ -55,7 +55,7 @@ function Side({ label, model, text, done, error, winner }: { label: string; mode
         ) : text ? (
           <Markdown text={text} />
         ) : (
-          <span className="muted small">{tr('Waiting for')}{' '}{model}…</span>
+          <span className="muted small">{tr('Waiting for {0}…', model)}</span>
         )}
       </div>
     </div>
@@ -96,7 +96,7 @@ export function CompareView({ chatId, state, onPicked }: { chatId: string; state
             B {state.errorB === undefined ? tr('wins') : ''}
           </button>
           <button className="pill-btn" disabled={busy} onClick={() => void pick('skip')}>
-            skip
+            {tr('skip')}
           </button>
         </div>
       )}

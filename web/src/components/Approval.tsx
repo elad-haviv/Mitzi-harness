@@ -8,19 +8,19 @@ export const APPROVAL: Record<ApprovalLevel, { emoji: string; name: string; shor
   kitten: {
     emoji: '🐱',
     name: tr('Kitten'),
-    short: 'Asks before every change',
+    short: tr('Asks before every change'),
     description: tr('Asks before every command, file edit, web request and action in a connected app.'),
   },
   housecat: {
     emoji: '🐈',
-    name: 'House cat',
-    short: 'Asks only before risky actions',
+    name: tr('House cat'),
+    short: tr('Asks only before risky actions'),
     description: tr('Works on its own, but asks before deleting, installing, pushing, changing the system, writing outside the project or acting in connected apps.'),
   },
   alleycat: {
     emoji: '🐈‍⬛',
-    name: 'Alley cat',
-    short: 'Never asks',
+    name: tr('Alley cat'),
+    short: tr('Never asks'),
     description: tr('Fully autonomous: runs commands, edits files and acts in connected apps without asking. Use it for work you trust.'),
   },
 };

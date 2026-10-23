@@ -98,7 +98,7 @@ export function MemoryPage({ botId }: { botId?: string }) {
               >
                 <span className={`bank-emoji${b.bot.builtIn ? ' builtin' : ''}`}>{b.bot.builtIn ? LOGO : b.bot.emoji}</span>
                 <span className="grow">
-                  <span className="t">{b.bot.name}</span>
+                  <span className="t">{tr(b.bot.name)}</span>
                   <span className="s">{!b.enabled ? tr('Memory off') : b.error ? tr('Unavailable') : tr('{0} memories', total(b))}</span>
                 </span>
                 {!!b.stats?.pending && <Loader2 size={14} className="spin muted" aria-label={tr('Learning')} />}
@@ -131,9 +131,9 @@ function BankDetail({ bank, onChanged }: { bank: BankSummary; onChanged(): void 
         <div className="row" style={{ alignItems: 'flex-start', gap: 14 }}>
           <span className={`bank-emoji lg${bot.builtIn ? ' builtin' : ''}`}>{bot.builtIn ? LOGO : bot.emoji}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <h2 className="bank-title">{bot.name}{tr('\'s memory bank')}</h2>
+            <h2 className="bank-title">{tr('{0}\'s memory bank', bot.name)}</h2>
             <p className="muted small" style={{ margin: '2px 0 0' }}>
-              {bot.memory.mission || tr('No mission set: it remembers whatever seems useful later.')}
+              {(bot.memory.mission && tr(bot.memory.mission)) || tr('No mission set: it remembers whatever seems useful later.')}
             </p>
           </div>
           <a className="btn btn-sm" href={href({ page: 'bots' })} title={tr('Edit mission and disposition on the Bots page')}>
@@ -177,7 +177,7 @@ function BankDetail({ bank, onChanged }: { bank: BankSummary; onChanged(): void 
               <Loader2 size={13} className="spin" /> {tr('Learning from a recent conversation…')}
             </span>
           ) : s?.lastRetainAt ? (
-            tr('Last learned {0} · {1}', relativeTime(s.lastRetainAt), bot.memory.autoRetain ? 'learns from every conversation' : 'automatic learning is off')
+            tr('Last learned {0} · {1}', relativeTime(s.lastRetainAt), bot.memory.autoRetain ? tr('learns from every conversation') : tr('automatic learning is off'))
           ) : bot.memory.autoRetain ? (
             tr('Learns from every conversation with this bot.')
           ) : (
@@ -332,7 +332,7 @@ function Browse({ botId, name, refreshKey, onChanged }: { botId: string; name: s
                   <>
                     {m.text}
                     <div className="meta">
-                      {m.occurredAt && <span>{tr('Happened')}{' '}{new Date(m.occurredAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
+                      {m.occurredAt && <span>{tr('Happened {0}', new Date(m.occurredAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }))}</span>}
                       <span>
                         {m.type === 'observation' ? tr('Updated') : m.source === 'user' ? tr('Added by you') : tr('Learned')} {relativeTime(m.updatedAt ?? m.mentionedAt)}
                       </span>
@@ -376,7 +376,7 @@ function Browse({ botId, name, refreshKey, onChanged }: { botId: string; name: s
       )}
       {items && items.length < totalCount && (
         <button className="btn btn-ghost" style={{ marginTop: 12 }} onClick={() => void load(items.length)}>
-          {tr('Show more (')}{totalCount - items.length} {tr('left)')}
+          {tr('Show more ({0} left)', totalCount - items.length)}
         </button>
       )}
       {confirmNode}
@@ -452,7 +452,7 @@ function ReflectTab({ botId, name }: { botId: string; name: string }) {
   return (
     <>
       <p className="muted small" style={{ marginTop: 0 }}>
-        {tr('Ask')}{' '}{name} {tr('a question about everything it remembers. Reflection reasons over many memories at once, shaped by the bank\'s disposition.')}
+        {tr('Ask {0} a question about everything it remembers. Reflection reasons over many memories at once, shaped by the bank\'s disposition.', name)}
       </p>
       <form
         className="row"
@@ -479,7 +479,7 @@ function ReflectTab({ botId, name }: { botId: string; name: string }) {
       {result && (
         <div className="card">
           <Markdown text={result.text} />
-          {result.basedOn.length > 0 && <p className="muted small" style={{ margin: '12px 0 0' }}>{tr('Based on')}{' '}{result.basedOn.length} memories.</p>}
+          {result.basedOn.length > 0 && <p className="muted small" style={{ margin: '12px 0 0' }}>{tr('Based on {0} memories.', result.basedOn.length)}</p>}
         </div>
       )}
     </>

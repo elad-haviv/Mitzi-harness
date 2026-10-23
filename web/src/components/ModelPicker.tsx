@@ -158,7 +158,7 @@ export function ModelPicker({
             />
           </div>
           <div className="picker-list" ref={listRef}>
-            {modelsError && !models.length && <div className="picker-section" style={{ textTransform: 'none' }}>{modelsError} {tr('You can also type a model id.')}</div>}
+            {modelsError && !models.length && <div className="picker-section" style={{ textTransform: 'none' }}>{tr('{0} You can also type a model id.', modelsError)}</div>}
             {items.map((item, idx) => {
               if (item.section) return <div key={`s${idx}`} className="picker-section">{item.section}</div>;
               const index = selectable.indexOf(item);
@@ -178,7 +178,7 @@ export function ModelPicker({
                     </span>
                     <span className="picker-meta">
                       <span>
-                        {tr('Picks for each message:')}{' '}{modelLabel(pair.fast, models)} {tr('for quick ones,')}{' '}{modelLabel(pair.strong, models)} {tr('for in-depth work')}
+                        {tr('Picks for each message: {0} for quick ones, {1} for in-depth work', modelLabel(pair.fast, models), modelLabel(pair.strong, models))}
                       </span>
                     </span>
                   </button>
@@ -187,7 +187,7 @@ export function ModelPicker({
               if (item.custom)
                 return (
                   <button key="custom" className={cls} onMouseEnter={() => setFocus(index)} onClick={() => choose(item)}>
-                    <span className="picker-name">{tr('Use “')}{item.custom}”</span>
+                    <span className="picker-name">{tr('Use “{0}”', item.custom)}</span>
                     <span className="picker-meta">{item.custom.includes(':') && !item.custom.includes('/') ? tr('Model id for a connected provider') : tr('Custom OpenRouter model id')}</span>
                   </button>
                 );
@@ -201,7 +201,7 @@ export function ModelPicker({
                   </span>
                   <span className="picker-meta">
                     <span>{m.id}</span>
-                    {m.contextLength && <span>{formatTokens(m.contextLength)} context</span>}
+                    {m.contextLength && <span>{tr('{0} context', formatTokens(m.contextLength))}</span>}
                     {price(m) && <span>{price(m)}</span>}
                   </span>
                 </button>

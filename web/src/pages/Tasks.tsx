@@ -122,19 +122,19 @@ export function TasksPage() {
                         </span>
                         {last.workflowRunId && t.workflowId && last.status !== 'running' && (
                           <a href={href({ page: 'workflow', id: t.workflowId })} className="small">
-                            {tr('Open ·')}{' '}{relativeTime(last.finishedAt ?? last.startedAt)}
+                            {tr('Open · {0}', relativeTime(last.finishedAt ?? last.startedAt))}
                           </a>
                         )}
                         {last.chatId && last.status !== 'running' && (
                           <a href={href({ page: 'chat', id: last.chatId })} className="small">
-                            {tr('Open ·')}{' '}{relativeTime(last.finishedAt ?? last.startedAt)}
+                            {tr('Open · {0}', relativeTime(last.finishedAt ?? last.startedAt))}
                           </a>
                         )}
                       </div>
                     )}
                     {t.runs.length > 1 && (
                       <details className="task-history">
-                        <summary className="small muted">{t.runs.length} runs</summary>
+                        <summary className="small muted">{tr('{0} runs', t.runs.length)}</summary>
                         {[...t.runs].reverse().slice(1, 15).map((r) => (
                           <div key={r.id} className="small row" style={{ gap: 8 }}>
                             <span className={`dot ${r.status}`} />

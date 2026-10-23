@@ -430,7 +430,7 @@ function PhoneSettings() {
                 </li>
               </ol>
               <code className="phone-url">{url}</code>
-              {phone.urls.length > 1 && <p className="muted small">{tr('Other addresses of this computer:')}{' '}{phone.urls.slice(1).map((u) => new URL(u).host).join(', ')}</p>}
+              {phone.urls.length > 1 && <p className="muted small">{tr('Other addresses of this computer: {0}', phone.urls.slice(1).map((u) => new URL(u).host).join(', '))}</p>}
               <p className="muted small">{tr('The address includes your private access token: anyone on this network who has it can use Mitzi as you.')}</p>
             </div>
           </div>
@@ -594,7 +594,7 @@ function MemorySettings() {
             <span className="field-hint">
               {tr('Run one with')}{' '}<code>docker run -p 8888:8888 -p 9999:9999 -e HINDSIGHT_API_LLM_API_KEY=… ghcr.io/vectorize-io/hindsight:latest</code>{tr('. See')}{' '}
               <a href="https://github.com/vectorize-io/hindsight" target="_blank" rel="noreferrer">
-                github.com/vectorize-io/hindsight
+                {tr('github.com/vectorize-io/hindsight')}
               </a>
               .
             </span>
@@ -648,7 +648,7 @@ function MemorySettings() {
         <select className="select" style={{ maxWidth: 260 }} value={settings.recallTokens} onChange={(e) => void save({ recallTokens: Number(e.target.value) })}>
           {[600, 1200, 2000, 4000].map((n) => (
             <option key={n} value={n}>
-              {tr('Up to ~')}{n.toLocaleString()} tokens{n === 1200 ? tr(' (default)') : ''}
+              {tr('Up to ~{0} tokens', n.toLocaleString())}{n === 1200 ? tr(' (default)') : ''}
             </option>
           ))}
         </select>
@@ -772,7 +772,7 @@ function UpdateSettings() {
                   <Check size={13} /> {tr('You have the latest version')}
                 </span>
               )}
-              {u && <span className="muted"> {tr('· checked')}{' '}{new Date(u.checkedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</span>}
+              {u && <span className="muted">{' '}{tr('· checked {0}', new Date(u.checkedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }))}</span>}
             </div>
           </div>
           <button className="btn btn-sm" disabled={checking || phase === 'updating'} onClick={() => void check()}>
@@ -792,7 +792,7 @@ function UpdateSettings() {
                     {c.subject} <span className="muted small">{date(c.date)}</span>
                   </li>
                 ))}
-                {u.commits.length > 12 && <li className="muted">{tr('…and')}{' '}{u.behind - 12} more</li>}
+                {u.commits.length > 12 && <li className="muted">{tr('…and')}{' '}{u.behind - 12}{' '}{tr('more')}</li>}
               </ul>
             </div>
             <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>

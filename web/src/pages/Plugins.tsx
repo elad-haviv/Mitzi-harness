@@ -237,7 +237,7 @@ function Marketplace({
         <div className="grow">
           <div className="t">{market.name}</div>
           <div className="s">
-            {market.plugins.length} {tr('plugins ·')}{' '}{market.source}
+            {tr('{0} plugins · {1}', market.plugins.length, market.source)}
             {market.description ? ` — ${market.description}` : ''}
           </div>
         </div>
@@ -277,7 +277,7 @@ function Marketplace({
           ))}
           {shown.length > limit && (
             <button className="btn btn-ghost btn-sm" style={{ marginTop: 8 }} onClick={() => setLimit((l) => l + 50)}>
-              {tr('Show more (')}{shown.length - limit})
+              {tr('Show more ({0})', shown.length - limit)}
             </button>
           )}
           {!shown.length && <div className="muted small">{tr('No plugins match.')}</div>}

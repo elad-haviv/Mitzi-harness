@@ -165,7 +165,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
             {reading.map((name) => (
               <span key={name} className="chip reading" title={tr('Reading the document')}>
                 <Loader2 size={13} className="spin" />
-                <span>{tr('Reading')}{' '}{name}…</span>
+                <span>{tr('Reading {0}…', name)}</span>
               </span>
             ))}
             {images.map(({ a, i }) => (

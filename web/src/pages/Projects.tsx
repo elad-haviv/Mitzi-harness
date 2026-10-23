@@ -273,7 +273,7 @@ export function ProjectPage({ id }: { id: string }) {
         <div className="project-layout">
           <div>
             <a className="big-composer-link" href={href({ page: 'new', projectId: project.id })}>
-              <SquarePen size={18} /> {tr('Start a new chat in')}{' '}{project.name}
+              <SquarePen size={18} />{' '}{tr('Start a new chat in {0}', project.name)}
             </a>
             <h2 className="card-title" style={{ marginBottom: 10 }}>
               {tr('Chats')}
@@ -292,7 +292,7 @@ export function ProjectPage({ id }: { id: string }) {
                       <div className="grow">
                         <div className="t">{c.title}</div>
                         <div className="s">
-                          {c.messageCount} {tr('messages ·')}{' '}{relativeTime(c.updatedAt)}
+                          {tr('{0} messages · {1}', c.messageCount, relativeTime(c.updatedAt))}
                         </div>
                       </div>
                     </a>
@@ -363,7 +363,7 @@ export function ProjectPage({ id }: { id: string }) {
               <p className="muted small" style={{ margin: '6px 0 8px' }}>
                 {project.knowledge?.searched ? (
                   <>
-                    <b>{project.knowledge.docs.toLocaleString()} {tr('documents, ~')}{formatTokens(knowledgeTokens)} tokens</b>{tr(': too much to send whole, so each message gets the passages most relevant to it, and Mitzi can search for more.')}
+                    <b>{tr('{0} documents, ~{1} tokens', project.knowledge.docs.toLocaleString(), formatTokens(knowledgeTokens))}</b>{tr(': too much to send whole, so each message gets the passages most relevant to it, and Mitzi can search for more.')}
                   </>
                 ) : (
                   <>
@@ -540,8 +540,8 @@ function RepoPanel({ project }: { project: ProjectView }) {
       </div>
       <div className="repo-stats small">
         <span>{status.changed ? plural(status.changed, '1 changed file', '{0} changed files') : tr('No local changes')}</span>
-        {status.ahead > 0 && <span>{status.ahead} {tr('to push')}</span>}
-        {status.behind > 0 && <span>{status.behind} {tr('to pull')}</span>}
+        {status.ahead > 0 && <span>{tr('{0} to push', status.ahead)}</span>}
+        {status.behind > 0 && <span>{tr('{0} to pull', status.behind)}</span>}
       </div>
       {status.remote && (
         <button

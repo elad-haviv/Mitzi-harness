@@ -308,10 +308,10 @@ function ChatImport({ onDone }: { onDone?(): void }) {
               <option value={0}>{tr('No conversations')}</option>
               {[25, 50, 100, 250].filter((n) => n < found.conversations.length).map((n) => (
                 <option key={n} value={n}>
-                  {tr('The')}{' '}{n} {tr('most recent')}
+                  {tr('The {0} most recent', n)}
                 </option>
               ))}
-              <option value={found.conversations.length}>{tr('All')}{' '}{found.conversations.length.toLocaleString()} conversations</option>
+              <option value={found.conversations.length}>{tr('All {0} conversations', found.conversations.length.toLocaleString())}</option>
             </select>
           </label>
           <p className="muted small" style={{ margin: 0 }}>
@@ -329,10 +329,10 @@ function ChatImport({ onDone }: { onDone?(): void }) {
         <button className="btn btn-primary" disabled={!found || !!progress} onClick={() => void run()}>
           {progress ? (
             <>
-              <Loader2 size={14} className="spin" /> {tr('Importing')}{' '}{progress.done}/{progress.total}
+              <Loader2 size={14} className="spin" />{' '}{tr('Importing {0}/{1}', progress.done, progress.total)}
             </>
           ) : (
-            <>{tr('Import')}{' '}{found ? found.conversations.length.toLocaleString() : ''} conversations</>
+            <>{tr('Import {0} conversations', found ? found.conversations.length.toLocaleString() : '')}</>
           )}
         </button>
       </div>

@@ -195,7 +195,7 @@ export function LiveMode({
             )}
             {phase === 'listening' && !detecting && !heard && (
               <p className="muted small live-lang-hint">
-                {tr('Listening in')}{' '}{languageName(listeningIn)}{tr('. Speaking another language? Choose it above')}{canTranscribe ? '' : tr(', or set a transcription model in Settings → Media & voice to detect it automatically')}.
+                {tr('Listening in {0}. Speaking another language? Choose it above', languageName(listeningIn))}{canTranscribe ? '' : tr(', or set a transcription model in Settings → Media & voice to detect it automatically')}.
               </p>
             )}
             {phase === 'paused' && <p className="muted small">{tr('Tap the microphone to keep talking.')}</p>}

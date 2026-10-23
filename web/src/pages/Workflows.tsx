@@ -129,7 +129,7 @@ export function WorkflowsPage() {
                     </>
                   ) : last ? (
                     <>
-                      {last.status === 'error' ? <AlertTriangle size={12} /> : <Check size={12} />} {tr('Last run')}{' '}{relativeTime(last.startedAt)}
+                      {last.status === 'error' ? <AlertTriangle size={12} /> : <Check size={12} />}{' '}{tr('Last run {0}', relativeTime(last.startedAt))}
                     </>
                   ) : (
                     tr('Never run')
@@ -217,16 +217,16 @@ function NewWorkflow({ onClose, onCreate }: { onClose(): void; onCreate(template
       ) : (
         categories.map((c) => (
           <div key={c} className="gallery-group">
-            <div className="gallery-category">{c}</div>
+            <div className="gallery-category">{tr(c)}</div>
             <div className="template-grid">
               {gallery
                 .filter((g) => g.category === c)
                 .map((t) => (
                   <button key={t.id} className="template-card" onClick={() => onCreate(t.id)} disabled={building}>
                     <span className="workflow-tile-emoji">{t.emoji}</span>
-                    <strong>{t.name}</strong>
-                    <span className="muted small">{t.description}</span>
-                    <span className="muted small">{t.steps} steps</span>
+                    <strong>{tr(t.name)}</strong>
+                    <span className="muted small">{tr(t.description)}</span>
+                    <span className="muted small">{tr('{0} steps', t.steps)}</span>
                   </button>
                 ))}
             </div>
@@ -709,7 +709,7 @@ function nodeSummary(n: WorkflowNode, bots: { id: string; name: string; emoji: s
     case 'artifact':
       return String(c.title || tr('Untitled'));
     case 'loop':
-      return tr('each {0} · {1}', c.split === 'json' ? 'JSON item' : c.split === 'paragraphs' ? 'paragraph' : c.split === 'separator' ? `“${c.separator}”-separated item` : 'line', c.mode === 'template' ? 'text' : 'ask a bot');
+      return tr('each {0} · {1}', c.split === 'json' ? tr('JSON item') : c.split === 'paragraphs' ? tr('paragraph') : c.split === 'separator' ? tr('“{0}”-separated item', c.separator) : tr('line'), c.mode === 'template' ? tr('text') : tr('ask a bot'));
     case 'code':
       return c.language === 'python' ? tr('Python') : tr('JavaScript');
     case 'delay': {
@@ -809,8 +809,8 @@ function NodeConfig({ node, spec, onLabel, onConfig, onDelete }: { node: Workflo
           <label className="field">
             <span className="field-label">{tr('Test')}</span>
             <select className="select" value={c.test ?? 'contains'} onChange={(e) => onConfig('test', e.target.value)}>
-              <option value="contains">contains</option>
-              <option value="equals">equals</option>
+              <option value="contains">{tr('contains')}</option>
+              <option value="equals">{tr('equals')}</option>
               <option value="regex">{tr('matches pattern')}</option>
               <option value="number">{tr('number is (e.g. &gt; 10)')}</option>
               <option value="empty">{tr('is empty')}</option>
@@ -1023,7 +1023,7 @@ function TriggersModal({ wf, onClose, onSaved }: { wf: WorkflowView; onClose(): 
   return (
     <Modal title={tr('Triggers')} onClose={onClose} wide>
       <p className="muted small" style={{ marginTop: 0 }}>
-        {tr('Start “')}{wf.name}{tr('” by itself, besides running it here, from a chat, or on a schedule.')}
+        {tr('Start “{0}” by itself, besides running it here, from a chat, or on a schedule.', wf.name)}
       </p>
       <section className="trigger-card">
         <div className="tool-toggle" style={{ padding: 0, border: 0 }}>
@@ -1084,7 +1084,7 @@ function TriggersModal({ wf, onClose, onSaved }: { wf: WorkflowView; onClose(): 
           <input
             className="input"
             value={folder.pattern}
-            placeholder={tr('*.txt, *.md')}
+            placeholder={'*.txt, *.md'}
             onChange={(e) => setFolder((f) => ({ ...f, pattern: e.target.value }))}
             onBlur={() => wf.triggers?.folder?.enabled && void save({ folder: { ...folder, enabled: true } })}
           />

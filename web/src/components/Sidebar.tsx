@@ -306,7 +306,7 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
             </div>
           );
         })}
-        {query && !filtered.length && <div className="muted small" style={{ padding: '12px 10px' }}>{tr('No chats match “')}{query}”.</div>}
+        {query && !filtered.length && <div className="muted small" style={{ padding: '12px 10px' }}>{tr('No chats match “{0}”.', query)}</div>}
         {!query && !groups.length && <div className="muted small" style={{ padding: '12px 10px' }}>{tr('Your conversations will appear here.')}</div>}
       </div>
       {menu && (
@@ -323,7 +323,7 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
             .slice(0, 6)
             .map((p) => (
               <button key={p.id} onClick={() => (setMenu(undefined), void updateChat(menu.chat.id, { projectId: p.id }))}>
-                <FolderOpen size={15} /> {tr('Move to')}{' '}{p.name}
+                <FolderOpen size={15} />{' '}{tr('Move to {0}', p.name)}
               </button>
             ))}
           {menu.chat.projectId && (
@@ -349,8 +349,8 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
           <a className={`budget-pill ${budget.state}`} href={href({ page: 'settings', section: 'budget' })}>
             <Wallet size={15} />
             {budget.state === 'over'
-              ? tr('{0} budget reached{1}', budget.limit === 'daily' ? 'Daily' : 'Monthly', budget.hardStop ? ': paused' : '')
-              : tr('{0}% of {1} budget used', Math.round(((budget.limit === 'daily' ? budget.spentToday / budget.daily! : budget.spentMonth / budget.monthly!) || 0) * 100), budget.limit === 'daily' ? 'today’s' : 'this month’s')}
+              ? budget.limit === 'daily' ? (budget.hardStop ? tr('Daily budget reached: paused') : tr('Daily budget reached')) : budget.hardStop ? tr('Monthly budget reached: paused') : tr('Monthly budget reached')
+              : tr(budget.limit === 'daily' ? '{0}% of today’s budget used' : '{0}% of this month’s budget used', Math.round(((budget.limit === 'daily' ? budget.spentToday / budget.daily! : budget.spentMonth / budget.monthly!) || 0) * 100))}
           </a>
         )}
         {update?.supported && update.behind > 0 && (

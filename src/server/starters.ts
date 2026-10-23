@@ -75,20 +75,23 @@ export class StarterService {
     }
   }
 
-  async get(bot: Bot, force = false): Promise<StartersResult> {
-    const running = this.pending.get(bot.id);
+  /** `language`: the interface's language name (e.g. "Hebrew"), for starters written in it. */
+  async get(bot: Bot, force = false, language = ''): Promise<StartersResult> {
+    const id = `${bot.id}:${language}`;
+    const running = this.pending.get(id);
     if (running) return running;
-    const job = this.compute(bot, force).finally(() => this.pending.delete(bot.id));
-    this.pending.set(bot.id, job);
+    const job = this.compute(bot, force, language).finally(() => this.pending.delete(id));
+    this.pending.set(id, job);
     return job;
   }
 
-  private async compute(bot: Bot, force: boolean): Promise<StartersResult> {
+  private async compute(bot: Bot, force: boolean, language: string): Promise<StartersResult> {
     const [memories, chats] = [await this.memories(bot), this.recentChats(bot)];
     if (!memories.length && !chats.length) return this.fixed(bot);
 
     const key = [...memories.slice(0, 12).map((m) => m.id), ...chats.map((c) => `${c.id}@${c.updatedAt}`)].join(',');
-    const cached = this.cache.get(bot.id);
+    const cacheId = `${bot.id}:${language}`;
+    const cached = this.cache.get(cacheId);
     const age = cached ? Date.now() - cached.at : Infinity;
     if (cached && !force && ((cached.key === key && age < MAX_AGE_MS) || age < MIN_REFRESH_MS)) return cached.result;
 
@@ -101,7 +104,7 @@ export class StarterService {
       .replace('{persona}', bot.builtIn ? '' : `The assistant is "${bot.name}": ${bot.description || bot.systemPrompt.slice(0, 300)}\n`)
       .replace('{memories}', memories.map((m) => `- ${m.text}${m.occurredAt ? ` (${m.occurredAt.slice(0, 10)})` : ''}`).join('\n') || '(nothing yet)')
       .replace('{chats}', chats.map((c) => `- "${c.title}" (${c.updatedAt.slice(0, 10)}): ${firstUser(c)}`).join('\n') || '(none yet)')
-      .replace('{count}', String(COUNT));
+      .replace('{count}', String(COUNT)) + (language ? `\nWrite them in ${language}.` : '');
 
     try {
       const config = this.deps.config();
@@ -114,7 +117,7 @@ export class StarterService {
         .slice(0, COUNT);
       if (!starters.length) throw new Error('no starters in the reply');
       const result = { starters, personalized: true };
-      this.cache.set(bot.id, { key, at: Date.now(), result });
+      this.cache.set(cacheId, { key, at: Date.now(), result });
       return result;
     } catch (err) {
       console.warn(`Starters: couldn't personalize for ${bot.name}: ${(err as Error).message}`);

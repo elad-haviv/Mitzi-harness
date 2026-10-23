@@ -31,7 +31,7 @@ function Inline({ text }: { text: string }) {
         const link = /^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/.exec(p);
         if (link) {
           return (
-            <a key={i} href={link[2]} target="_blank" rel="noreferrer">
+            <a key={i} href={link[2]} target="_blank" rel="noreferrer" dir="auto">
               {link[1]}
             </a>
           );
@@ -99,12 +99,12 @@ function ChannelSettingsView({ channel: c, onChange }: { channel: ChannelView; o
   return (
     <>
       <section className="settings-section card">
-        <h2>{tr('Set up')}{' '}{c.label}</h2>
+        <h2>{tr('Set up {0}', c.label)}</h2>
         {c.unsupported && <p className="danger-text small">{c.unsupported}</p>}
         <ol className="steps-list">
           {c.steps.map((s, i) => (
             <li key={i}>
-              <Inline text={s} />
+              <Inline text={tr(s)} />
             </li>
           ))}
         </ol>
@@ -119,7 +119,7 @@ function ChannelSettingsView({ channel: c, onChange }: { channel: ChannelView; o
                 <Copy size={13} /> {tr('Copy')}
               </button>
             </div>
-            <span className="muted small">{c.label} {tr('must be able to reach it: use your public address (a tunnel such as Cloudflare Tunnel or ngrok in front of Mitzi) in place of this one.')}</span>
+            <span className="muted small">{tr('{0} must be able to reach it: use your public address (a tunnel such as Cloudflare Tunnel or ngrok in front of Mitzi) in place of this one.', c.label)}</span>
           </div>
         )}
         <form
@@ -132,14 +132,14 @@ function ChannelSettingsView({ channel: c, onChange }: { channel: ChannelView; o
           {c.fields.map((f) => (
             <label key={f.key} className="field">
               <span className="field-label">
-                {f.label}
+                {tr(f.label)}
                 {f.optional && <span className="muted small"> {tr('· optional')}</span>}
               </span>
               <input
                 className={`input${f.secret ? ' mono' : ''}`}
                 type={f.secret ? 'password' : 'text'}
                 autoComplete="off"
-                placeholder={f.secret && c.values[f.key] ? tr('Saved · type a new one to replace it') : f.placeholder}
+                placeholder={f.secret && c.values[f.key] ? tr('Saved · type a new one to replace it') : f.placeholder && tr(f.placeholder)}
                 value={values[f.key] ?? ''}
                 onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
               />
@@ -154,7 +154,7 @@ function ChannelSettingsView({ channel: c, onChange }: { channel: ChannelView; o
         <div className="tool-toggle" style={{ padding: 0, border: 0, marginTop: 14 }}>
           <div className="grow">
             <div className="t">
-              {c.label} {c.running ? <span className="badge ok">on{c.username ? ` · ${c.username}` : ''}</span> : <span className="badge">off</span>}
+              {c.label} {c.running ? <span className="badge ok">{tr('on')}{c.username ? ` · ${c.username}` : ''}</span> : <span className="badge">{tr('off')}</span>}
             </div>
             <div className="s">{c.error ? <span className="danger-text">{c.error}</span> : tr('Mitzi answers while it’s running on this computer.')}</div>
           </div>
@@ -165,11 +165,11 @@ function ChannelSettingsView({ channel: c, onChange }: { channel: ChannelView; o
         <section className="settings-section card">
           <h2>{tr('Pair a conversation')}</h2>
           <p className="muted small" style={{ marginTop: 0 }}>
-            {tr('Send this to Mitzi on')}{' '}{c.label}
+            {tr('Send this to Mitzi on {0}', c.label)}
             {pairLink && (
               <>
                 {' '}
-                (<a href={pairLink} target="_blank" rel="noreferrer">{tr('open @')}{c.username}</a> {tr('with the message ready)')}
+                (<a href={pairLink} target="_blank" rel="noreferrer">{tr('open @{0}', c.username)}</a> {tr('with the message ready)')}
               </>
             )}
             {tr('. Each code works once; only paired conversations can use Mitzi.')}

@@ -63,7 +63,7 @@ export function ShareDialog({ kind, targetId, title, page, onClose }: { kind: 'c
   return (
     <Modal title={tr('Share “{0}”', title)} onClose={onClose}>
       <p className="muted small" style={{ marginTop: 0 }}>
-        {tr('A read-only page of the')}{' '}{kind} {tr('as it is now (later changes aren’t included). Anyone with the link can open it, as long as they can reach this computer: on your network (')}<code>mitzi web --lan</code>{tr(') or through a tunnel.')}
+        {tr('A read-only page of the {0} as it is now (later changes aren’t included). Anyone with the link can open it, as long as they can reach this computer: on your network (', kind)}<code>mitzi web --lan</code>{tr(') or through a tunnel.')}
       </p>
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
         <label className="row small" style={{ gap: 6 }}>

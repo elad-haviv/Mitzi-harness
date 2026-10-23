@@ -252,19 +252,20 @@ a:hover {
   width: var(--sidebar-w);
   flex-shrink: 0;
   background: var(--sidebar);
-  border-right: 1px solid var(--border);
+  border-inline-end: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   transition: margin-left 0.2s ease;
 }
 .sidebar.collapsed {
-  margin-left: calc(-1 * var(--sidebar-w));
+  margin-inline-start: calc(-1 * var(--sidebar-w));
 }
 .sidebar-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 12px 8px 16px;
+  padding-block: 14px 8px;
+  padding-inline: 16px 12px;
 }
 .brand {
   display: flex;
@@ -309,7 +310,7 @@ a:hover {
   border: 0;
   background: none;
   width: 100%;
-  text-align: left;
+  text-align: start;
 }
 .nav-item:hover {
   background: var(--surface-3);
@@ -322,7 +323,7 @@ a:hover {
   font-weight: 550;
 }
 .nav-item .count {
-  margin-left: auto;
+  margin-inline-start: auto;
   color: var(--muted);
   font-size: 12px;
 }
@@ -332,7 +333,8 @@ a:hover {
 }
 .sidebar-search input {
   width: 100%;
-  padding: 7px 52px 7px 32px;
+  padding-block: 7px 7px;
+  padding-inline: 32px 52px;
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
   background: var(--surface-3);
@@ -345,7 +347,7 @@ a:hover {
 }
 .sidebar-search svg {
   position: absolute;
-  left: 10px;
+  inset-inline-start: 10px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--muted);
@@ -360,7 +362,8 @@ a:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 12px 0 20px;
+  padding-block: 6px 0;
+  padding-inline: 20px 12px;
   margin-bottom: -6px;
   font-size: 11.5px;
   font-weight: 600;
@@ -373,7 +376,7 @@ a:hover {
   color: var(--text);
 }
 .chat-list-head .group-menu {
-  right: 12px;
+  inset-inline-end: 12px;
   top: calc(100% + 2px);
   text-transform: none;
   letter-spacing: 0;
@@ -393,7 +396,7 @@ a:hover {
   position: relative;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 .chat-group-label:hover {
@@ -412,7 +415,7 @@ a:hover {
 }
 .chat-group-label svg {
   position: absolute;
-  left: -4px;
+  inset-inline-start: -4px;
   opacity: 0;
   transition: opacity 0.12s;
 }
@@ -428,7 +431,8 @@ a:hover {
   background: none;
   color: var(--muted);
   padding: 2px;
-  margin: -2px -4px -2px 0;
+  margin-block: -2px -2px;
+  margin-inline: 0 -4px;
   border-radius: 5px;
   cursor: pointer;
 }
@@ -469,7 +473,8 @@ a:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px 6px 10px;
+  padding-block: 6px 6px;
+  padding-inline: 10px 8px;
   border-radius: var(--radius-sm);
   color: var(--text-2);
   font-size: 13.5px;
@@ -666,7 +671,7 @@ a:hover {
   content: '';
   position: absolute;
   top: 2.5px;
-  left: 2.5px;
+  inset-inline-start: 2.5px;
   width: 16px;
   height: 16px;
   border-radius: 50%;
@@ -779,7 +784,7 @@ a:hover {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  text-align: left;
+  text-align: start;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -819,7 +824,7 @@ a:hover {
 .tile-actions {
   position: absolute;
   top: 10px;
-  right: 10px;
+  inset-inline-end: 10px;
   display: flex;
   gap: 2px;
   opacity: 0;
@@ -886,7 +891,8 @@ a:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 18px 20px 6px 22px;
+  padding-block: 18px 6px;
+  padding-inline: 22px 20px;
 }
 .modal-header h2 {
   margin: 0;
@@ -930,7 +936,7 @@ a:hover {
   padding: 7px 10px;
   border-radius: 7px;
   font-size: 13.5px;
-  text-align: left;
+  text-align: start;
   color: var(--text-2);
 }
 .menu button:hover {
@@ -965,7 +971,8 @@ a:hover {
   background: var(--text);
   color: var(--bg);
   border-radius: var(--radius);
-  padding: 11px 12px 11px 14px;
+  padding-block: 11px 11px;
+  padding-inline: 14px 12px;
   box-shadow: var(--shadow-lg);
   font-size: 14px;
   animation: pop 0.16s ease;
@@ -1002,7 +1009,8 @@ a:hover {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 14px 10px 18px;
+  padding-block: 10px 10px;
+  padding-inline: 18px 14px;
   min-height: 56px;
   border-bottom: 1px solid transparent;
 }
@@ -1151,7 +1159,8 @@ a:hover {
   font-size: 11.5px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-  padding: 0 6px 0 2px;
+  padding-block: 0 0;
+  padding-inline: 2px 6px;
   white-space: nowrap;
 }
 .turn-user .msg-actions {
@@ -1160,7 +1169,7 @@ a:hover {
 .msg-actions .meta {
   font-size: 12px;
   color: var(--muted);
-  margin-left: 6px;
+  margin-inline-start: 6px;
 }
 .edit-box {
   width: 100%;
@@ -1247,7 +1256,7 @@ a:hover {
   border: 0;
   background: none;
   padding: 8px 12px;
-  text-align: left;
+  text-align: start;
   color: var(--text-2);
 }
 .tool-head:hover {
@@ -1473,9 +1482,10 @@ button.memory-chip:hover {
   gap: 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 10px 14px 10px 10px;
+  padding-block: 10px 10px;
+  padding-inline: 10px 14px;
   background: var(--surface);
-  text-align: left;
+  text-align: start;
   width: 100%;
   max-width: 440px;
   transition: border-color 0.12s, box-shadow 0.12s;
@@ -1574,7 +1584,7 @@ button.memory-chip:hover {
 .md td {
   border: 1px solid var(--border);
   padding: 6px 12px;
-  text-align: left;
+  text-align: start;
 }
 .md th {
   background: var(--surface-2);
@@ -1602,7 +1612,8 @@ button.memory-chip:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 6px 4px 14px;
+  padding-block: 4px 4px;
+  padding-inline: 14px 6px;
   font-size: 12px;
   color: var(--muted);
   border-bottom: 1px solid var(--border);
@@ -1627,7 +1638,7 @@ button.memory-chip:hover {
   height: 1.05em;
   background: var(--accent);
   vertical-align: text-bottom;
-  margin-left: 2px;
+  margin-inline-start: 2px;
   border-radius: 2px;
   animation: blink 1s steps(2) infinite;
 }
@@ -1731,7 +1742,7 @@ button.memory-chip:hover {
 .composer-attachments .thumb button {
   position: absolute;
   top: -6px;
-  right: -6px;
+  inset-inline-end: -6px;
   width: 20px;
   height: 20px;
   border-radius: 50%;
@@ -1745,7 +1756,8 @@ button.memory-chip:hover {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 8px 8px 10px;
+  padding-block: 6px 8px;
+  padding-inline: 10px 8px;
 }
 .send-btn {
   width: 34px;
@@ -1880,7 +1892,7 @@ button.memory-chip:hover {
   margin-top: 16px;
 }
 .starter {
-  text-align: left;
+  text-align: start;
   border: 1px solid var(--border);
   background: var(--surface);
   border-radius: var(--radius);
@@ -1912,7 +1924,7 @@ button.memory-chip:hover {
 
 /* ---------- Side panels (artifact, context) ---------- */
 .side-panel {
-  border-left: 1px solid var(--border);
+  border-inline-start: 1px solid var(--border);
   background: var(--surface);
   display: flex;
   flex-direction: column;
@@ -1921,13 +1933,13 @@ button.memory-chip:hover {
   animation: slide-in 0.18s ease;
 }
 .side-panel.full {
-  border-left: 0;
+  border-inline-start: 0;
   flex: 1;
   animation: none;
 }
 .resize-handle {
   position: absolute;
-  left: -4px;
+  inset-inline-start: -4px;
   top: 0;
   bottom: 0;
   width: 8px;
@@ -1942,7 +1954,8 @@ button.memory-chip:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 10px 10px 16px;
+  padding-block: 10px 10px;
+  padding-inline: 16px 10px;
   border-bottom: 1px solid var(--border);
   min-height: 56px;
 }
@@ -2049,7 +2062,7 @@ button.memory-chip:hover {
   flex-shrink: 0;
 }
 .ctx-row .n {
-  margin-left: auto;
+  margin-inline-start: auto;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
@@ -2101,7 +2114,7 @@ button.memory-chip:hover {
   flex-direction: column;
   gap: 2px;
   width: 100%;
-  text-align: left;
+  text-align: start;
   border: 0;
   background: none;
   padding: 7px 10px;
@@ -2226,7 +2239,7 @@ button.memory-chip:hover {
   font-size: 15px;
   box-shadow: var(--shadow-sm);
   margin-bottom: 24px;
-  text-align: left;
+  text-align: start;
 }
 .big-composer-link:hover {
   border-color: var(--accent);
@@ -2352,7 +2365,7 @@ button.memory-chip:hover {
 }
 .range-row .val {
   min-width: 64px;
-  text-align: right;
+  text-align: end;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
@@ -2452,7 +2465,8 @@ button.memory-chip:hover {
     font-size: 26px;
   }
   .chat-header {
-    padding: 8px 10px 8px 52px;
+    padding-block: 8px 8px;
+  padding-inline: 52px 10px;
   }
   .turn-assistant {
     grid-template-columns: 1fr;
@@ -2498,7 +2512,7 @@ button.memory-chip:hover {
   border: 1px solid transparent;
   border-radius: var(--radius);
   background: none;
-  text-align: left;
+  text-align: start;
   color: var(--text-2);
 }
 .bank-item:hover {
@@ -2573,7 +2587,7 @@ button.memory-chip:hover {
   font-variant-numeric: tabular-nums;
 }
 .traits {
-  margin-left: auto;
+  margin-inline-start: auto;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -2643,7 +2657,7 @@ button.memory-chip:hover {
     display: none;
   }
   .traits {
-    margin-left: 0;
+    margin-inline-start: 0;
   }
 }
 
@@ -2726,7 +2740,8 @@ button.memory-chip:hover {
   flex-shrink: 0;
 }
 .ext-body {
-  padding: 4px 16px 14px 64px;
+  padding-block: 4px 14px;
+  padding-inline: 64px 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -2764,7 +2779,7 @@ button.memory-chip:hover {
   display: flex;
   gap: 12px;
   align-items: flex-start;
-  text-align: left;
+  text-align: start;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
@@ -2807,8 +2822,8 @@ button.memory-chip:hover {
 .slash-menu {
   position: absolute;
   bottom: calc(100% + 6px);
-  left: 0;
-  right: 0;
+  inset-inline-start: 0;
+  inset-inline-end: 0;
   max-height: 280px;
   overflow-y: auto;
   background: var(--surface);
@@ -2825,7 +2840,7 @@ button.memory-chip:hover {
   width: 100%;
   border: 0;
   background: none;
-  text-align: left;
+  text-align: start;
   padding: 7px 10px;
   border-radius: 7px;
   font-size: 13.5px;
@@ -2877,7 +2892,7 @@ button.memory-chip:hover {
 .icon-badge {
   position: absolute;
   top: 1px;
-  right: 1px;
+  inset-inline-end: 1px;
   min-width: 15px;
   height: 15px;
   padding: 0 4px;
@@ -2889,7 +2904,7 @@ button.memory-chip:hover {
   line-height: 15px;
 }
 .badge-dot {
-  margin-left: auto;
+  margin-inline-start: auto;
   min-width: 18px;
   height: 18px;
   padding: 0 6px;
@@ -2961,7 +2976,7 @@ button.memory-chip:hover {
 .rate-pop {
   position: absolute;
   bottom: calc(100% + 6px);
-  left: 0;
+  inset-inline-start: 0;
   z-index: 30;
   width: 320px;
   padding: 12px;
@@ -3161,7 +3176,7 @@ button.memory-chip:hover {
 }
 .doc-save-state {
   white-space: nowrap;
-  margin-right: 6px;
+  margin-inline-end: 6px;
 }
 .doc-toolbar .segmented button {
   display: inline-flex;
@@ -3223,7 +3238,7 @@ mark.doc-mark.hot {
 .doc-side {
   width: 300px;
   flex-shrink: 0;
-  border-left: 1px solid var(--border);
+  border-inline-start: 1px solid var(--border);
   overflow: auto;
   padding: 14px;
   display: flex;
@@ -3250,8 +3265,8 @@ mark.doc-mark.hot {
   opacity: 0.6;
 }
 .comment-quote {
-  border-left: 3px solid #f59e0b;
-  padding-left: 8px;
+  border-inline-start: 3px solid #f59e0b;
+  padding-inline-start: 8px;
   color: var(--muted);
   font-size: 12.5px;
   overflow: hidden;
@@ -3260,12 +3275,12 @@ mark.doc-mark.hot {
   -webkit-box-orient: vertical;
 }
 .comment-msg.reply {
-  padding-left: 10px;
+  padding-inline-start: 10px;
 }
 .comment-who {
   font-weight: 600;
   font-size: 12px;
-  margin-right: 4px;
+  margin-inline-end: 4px;
 }
 .comment-who.assistant {
   color: var(--accent);
@@ -3280,7 +3295,7 @@ mark.doc-mark.hot {
   display: flex;
   gap: 10px;
   align-items: flex-start;
-  text-align: left;
+  text-align: start;
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
@@ -3320,7 +3335,7 @@ mark.doc-mark.hot {
 .doc-chat {
   width: 420px;
   flex-shrink: 0;
-  border-left: 1px solid var(--border);
+  border-inline-start: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -3330,7 +3345,8 @@ mark.doc-mark.hot {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 10px 0 16px;
+  padding-block: 0 0;
+  padding-inline: 16px 10px;
   min-height: 56px;
   border-bottom: 1px solid var(--border);
   font-weight: 600;
@@ -3340,8 +3356,8 @@ mark.doc-mark.hot {
   min-height: 0;
 }
 .chat-col.embedded .messages-inner {
-  padding-left: 14px;
-  padding-right: 14px;
+  padding-inline-start: 14px;
+  padding-inline-end: 14px;
 }
 .chat-col.embedded .turn-user .bubble {
   max-width: 92%;
@@ -3484,7 +3500,7 @@ mark.doc-mark.hot {
   gap: 10px;
   align-items: center;
   padding: 10px;
-  text-align: left;
+  text-align: start;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
@@ -3520,13 +3536,13 @@ mark.doc-mark.hot {
   }
   .doc-side {
     width: auto;
-    border-left: 0;
+    border-inline-start: 0;
     border-top: 1px solid var(--border);
     max-height: 40vh;
   }
   .doc-chat {
     width: auto;
-    border-left: 0;
+    border-inline-start: 0;
     border-top: 1px solid var(--border);
     height: 55vh;
   }
@@ -3565,7 +3581,7 @@ mark.doc-mark.hot {
 }
 .starters-note .link-btn {
   font-size: 12px;
-  margin-left: 4px;
+  margin-inline-start: 4px;
 }
 
 /* ---------- Artifact workspace ---------- */
@@ -3580,7 +3596,7 @@ mark.doc-mark.hot {
   gap: 10px;
   align-items: center;
   padding: 10px;
-  text-align: left;
+  text-align: start;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
@@ -3808,7 +3824,7 @@ mark.doc-mark.hot {
 .slide-thumb .slide {
   pointer-events: none;
   font-size: 2.4cqi;
-  text-align: left;
+  text-align: start;
 }
 
 /* ---------- Thinking ---------- */
@@ -3818,9 +3834,11 @@ mark.doc-mark.hot {
 .reasoning-body {
   max-height: 420px;
   overflow: auto;
-  border-left: 2px solid var(--border-strong);
-  margin: 0 0 4px 18px;
-  padding: 2px 0 2px 14px;
+  border-inline-start: 2px solid var(--border-strong);
+  margin-block: 0 4px;
+  margin-inline: 18px 0;
+  padding-block: 2px 2px;
+  padding-inline: 14px 0;
 }
 .reasoning-body .md {
   font-size: 13.5px;
@@ -3866,7 +3884,7 @@ mark.doc-mark.hot {
 }
 .menu-check {
   color: var(--accent);
-  margin-left: auto;
+  margin-inline-start: auto;
   flex-shrink: 0;
 }
 .menu .menu-link {
@@ -3906,7 +3924,7 @@ mark.doc-mark.hot {
 .folder-places {
   width: 170px;
   flex-shrink: 0;
-  border-right: 1px solid var(--border);
+  border-inline-end: 1px solid var(--border);
   background: var(--surface-2);
   padding: 6px;
   overflow: auto;
@@ -3922,7 +3940,7 @@ mark.doc-mark.hot {
   background: none;
   color: var(--text-2);
   font-size: 13px;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 .folder-place:hover,
@@ -3946,7 +3964,7 @@ mark.doc-mark.hot {
   background: none;
   color: var(--text);
   font-size: 13.5px;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 button.folder-row:hover {
@@ -3995,15 +4013,15 @@ button.folder-row:hover {
 @media (max-width: 640px) {
   .composer-bar {
     gap: 2px;
-    padding-left: 6px;
+    padding-inline-start: 6px;
   }
   .project-chip .project-chip-label {
     display: none;
   }
   .composer-bar .pill-btn {
     max-width: 100%;
-    padding-left: 8px;
-    padding-right: 8px;
+    padding-inline-start: 8px;
+    padding-inline-end: 8px;
   }
 }
 
@@ -4051,7 +4069,7 @@ button.folder-row:hover {
 .prompt-box .btn {
   position: absolute;
   top: 8px;
-  right: 8px;
+  inset-inline-end: 8px;
   background: var(--surface);
 }
 .import-actions {
@@ -4065,7 +4083,7 @@ button.folder-row:hover {
   gap: 6px;
   max-height: 46vh;
   overflow: auto;
-  padding-right: 4px;
+  padding-inline-end: 4px;
   margin-bottom: 10px;
 }
 .import-item {
@@ -4211,7 +4229,8 @@ button.folder-row:hover {
 }
 .settings-nav-title {
   font-size: 22px;
-  margin: 0 0 14px 10px;
+  margin-block: 0 14px;
+  margin-inline: 10px 0;
   letter-spacing: -0.01em;
 }
 .settings-nav-item {
@@ -4246,7 +4265,7 @@ button.folder-row:hover {
   height: 7px;
   border-radius: 50%;
   background: var(--danger);
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 .settings-content .page-header {
   margin-bottom: 18px;
@@ -4325,7 +4344,7 @@ button.folder-row:hover {
 }
 .update-changes ul {
   margin: 0;
-  padding-left: 18px;
+  padding-inline-start: 18px;
   font-size: 13.5px;
 }
 .update-changes li + li {
@@ -4425,7 +4444,7 @@ button.folder-row:hover {
   display: inline-block;
   width: 0.5em;
   height: 0.5em;
-  margin-left: 4px;
+  margin-inline-start: 4px;
   border-radius: 50%;
   background: var(--accent);
   vertical-align: 0.05em;
@@ -4469,7 +4488,7 @@ button.folder-row:hover {
 .team-error {
   color: var(--danger);
   font-weight: 400;
-  margin-left: auto;
+  margin-inline-start: auto;
   font-size: 12.5px;
 }
 .teammate + .teammate {
@@ -4483,7 +4502,7 @@ button.folder-row:hover {
   border: 0;
   background: none;
   padding: 10px 12px;
-  text-align: left;
+  text-align: start;
   color: inherit;
   cursor: pointer;
 }
@@ -4532,7 +4551,8 @@ button.folder-row:hover {
   color: var(--danger);
 }
 .teammate-live {
-  padding: 0 12px 10px 50px;
+  padding-block: 0 10px;
+  padding-inline: 50px 12px;
   font-size: 12.5px;
   color: var(--muted);
 }
@@ -4550,7 +4570,8 @@ button.folder-row:hover {
   white-space: nowrap;
 }
 .teammate-answer {
-  padding: 2px 14px 12px 50px;
+  padding-block: 2px 12px;
+  padding-inline: 50px 14px;
   font-size: 14px;
 }
 
@@ -4615,7 +4636,8 @@ button.folder-row:hover {
   font-weight: 560;
 }
 .mode-switch.compact {
-  margin: 0 4px 0 0;
+  margin-block: 0 0;
+  margin-inline: 0 4px;
 }
 .mode-switch.compact button {
   padding: 4px 10px;
@@ -4654,7 +4676,7 @@ button.folder-row:hover {
 }
 .turn > .auto-divider,
 .messages-inner > .auto-divider {
-  margin-left: 44px;
+  margin-inline-start: 44px;
 }
 
 /* ---------- Side panel tabs ---------- */
@@ -4696,7 +4718,7 @@ button.folder-row:hover {
   padding: 0 6px;
 }
 .side-tabs-close {
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 @media (max-width: 1100px) {
   .side-tabs button[role='tab'] span:not(.count) {
@@ -4712,7 +4734,7 @@ button.folder-row:hover {
 }
 .tasks-empty ul {
   margin: 0;
-  padding-left: 18px;
+  padding-inline-start: 18px;
   line-height: 1.9;
 }
 .task-section {
@@ -4731,7 +4753,7 @@ button.folder-row:hover {
 }
 .task-section-head .status-pill,
 .task-section-head .muted {
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 .status-pill {
   font-size: 11.5px;
@@ -4922,7 +4944,7 @@ button.todo-check:not(:disabled):hover {
 }
 .browser-history {
   margin: 0;
-  padding-left: 20px;
+  padding-inline-start: 20px;
   font-size: 13px;
   line-height: 1.8;
 }
@@ -4945,7 +4967,8 @@ button.todo-check:not(:disabled):hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 10px 7px 12px;
+  padding-block: 7px 7px;
+  padding-inline: 12px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
@@ -4964,7 +4987,7 @@ button.todo-check:not(:disabled):hover {
   min-width: 0;
   border: 0;
   background: none;
-  text-align: left;
+  text-align: start;
   color: var(--text);
   font-size: 13px;
   overflow: hidden;
@@ -4980,7 +5003,7 @@ button.todo-check:not(:disabled):hover {
 }
 .btw-card {
   border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
+  border-inline-start: 3px solid var(--accent);
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: var(--shadow);
@@ -5016,7 +5039,7 @@ button.todo-check:not(:disabled):hover {
 .ctx-pop {
   position: absolute;
   bottom: calc(100% + 10px);
-  right: -8px;
+  inset-inline-end: -8px;
   width: 290px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -5025,14 +5048,14 @@ button.todo-check:not(:disabled):hover {
   padding: 14px;
   z-index: 50;
   animation: pop 0.12s ease;
-  text-align: left;
+  text-align: start;
 }
 .ctx-pop-title {
   font-size: 14px;
 }
 .ctx-pop-title strong {
   font-size: 20px;
-  margin-right: 4px;
+  margin-inline-end: 4px;
 }
 .ctx-pop-rows {
   display: flex;
@@ -5065,7 +5088,7 @@ button.todo-check:not(:disabled):hover {
   border-bottom: 1px solid var(--border);
 }
 .plan-card-head .status-pill {
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 .plan-card-body {
   padding: 4px 14px;
@@ -5169,7 +5192,7 @@ button.todo-check:not(:disabled):hover {
   background: var(--accent-soft);
   padding: 10px 14px;
   max-width: 560px;
-  margin-left: auto;
+  margin-inline-start: auto;
   font-size: 13.5px;
 }
 .redo-head {
@@ -5296,7 +5319,7 @@ button.todo-check:not(:disabled):hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding-right: 10px !important;
+  padding-inline-end: 10px !important;
 }
 .breakdown-bar div {
   height: 8px;
@@ -5304,11 +5327,11 @@ button.todo-check:not(:disabled):hover {
   background: var(--viz-1);
 }
 .breakdown-value {
-  text-align: right;
+  text-align: end;
   width: 80px;
   font-variant-numeric: tabular-nums;
   color: var(--text-2);
-  padding-left: 10px !important;
+  padding-inline-start: 10px !important;
 }
 
 /* ---------- Insights ---------- */
@@ -5386,7 +5409,7 @@ button.todo-check:not(:disabled):hover {
 }
 .data-table th,
 .data-table td {
-  text-align: left;
+  text-align: start;
   padding: 4px 8px;
   border-bottom: 1px solid var(--border);
 }
@@ -5467,7 +5490,7 @@ button.todo-check:not(:disabled):hover {
   flex-direction: column;
   gap: 6px;
   align-items: flex-start;
-  text-align: left;
+  text-align: start;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
@@ -5554,7 +5577,7 @@ button.todo-check:not(:disabled):hover {
 }
 .wf-palette {
   width: 176px;
-  border-right: 1px solid var(--border);
+  border-inline-end: 1px solid var(--border);
   overflow-y: auto;
   padding: 12px 10px;
   background: var(--surface);
@@ -5586,7 +5609,7 @@ button.todo-check:not(:disabled):hover {
   width: 100%;
   border: 1px solid transparent;
   background: none;
-  text-align: left;
+  text-align: start;
   padding: 8px;
   border-radius: var(--radius-sm);
   cursor: grab;
@@ -5664,7 +5687,7 @@ button.todo-check:not(:disabled):hover {
 }
 .wf-surface {
   position: absolute;
-  left: 0;
+  inset-inline-start: 0;
   top: 0;
   width: 1px;
   height: 1px;
@@ -5778,11 +5801,11 @@ button.todo-check:not(:disabled):hover {
   box-sizing: border-box;
 }
 .wf-port.in {
-  left: -7px;
+  inset-inline-start: -7px;
   top: calc(50% - 6px);
 }
 .wf-port.out {
-  right: -7px;
+  inset-inline-end: -7px;
   top: calc(50% - 6px);
   cursor: crosshair;
 }
@@ -5799,7 +5822,7 @@ button.todo-check:not(:disabled):hover {
 }
 .wf-port-label {
   position: absolute;
-  left: 14px;
+  inset-inline-start: 14px;
   top: -4px;
   font-size: 10.5px;
   color: var(--muted);
@@ -5807,7 +5830,7 @@ button.todo-check:not(:disabled):hover {
 }
 .wf-zoom {
   position: absolute;
-  right: 12px;
+  inset-inline-end: 12px;
   bottom: 12px;
   display: flex;
   gap: 2px;
@@ -5819,13 +5842,13 @@ button.todo-check:not(:disabled):hover {
 }
 .wf-hint {
   position: absolute;
-  left: 12px;
+  inset-inline-start: 12px;
   top: 10px;
   pointer-events: none;
 }
 .wf-side {
   width: 340px;
-  border-left: 1px solid var(--border);
+  border-inline-start: 1px solid var(--border);
   overflow-y: auto;
   background: var(--surface);
   flex-shrink: 0;
@@ -5929,7 +5952,7 @@ button.todo-check:not(:disabled):hover {
   cursor: pointer;
   margin: 3px 0;
   max-width: 100%;
-  text-align: left;
+  text-align: start;
 }
 .todo-chip > svg:first-child {
   color: var(--ok);
@@ -5949,7 +5972,8 @@ button.todo-check:not(:disabled):hover {
   gap: 6px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 3px 4px 3px 10px;
+  padding-block: 3px 3px;
+  padding-inline: 10px 4px;
   background: var(--surface);
   color: var(--text-2);
   font-size: 13px;
@@ -5999,7 +6023,8 @@ button.todo-check:not(:disabled):hover {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 14px 14px 10px 18px;
+  padding-block: 14px 10px;
+  padding-inline: 18px 14px;
 }
 .search-input-row input {
   flex: 1;
@@ -6014,7 +6039,8 @@ button.todo-check:not(:disabled):hover {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 14px 10px 18px;
+  padding-block: 0 10px;
+  padding-inline: 18px 14px;
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
 }
@@ -6037,7 +6063,7 @@ button.todo-check:not(:disabled):hover {
   font-weight: 560;
 }
 .search-semantic {
-  margin-left: auto;
+  margin-inline-start: auto;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -6061,7 +6087,7 @@ button.todo-check:not(:disabled):hover {
   width: 100%;
   border: 0;
   background: none;
-  text-align: left;
+  text-align: start;
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   color: var(--text);
@@ -6136,7 +6162,7 @@ button.todo-check:not(:disabled):hover {
   min-width: 18px;
   height: 18px;
   padding: 0 4px;
-  margin-right: 2px;
+  margin-inline-end: 2px;
   border: 1px solid var(--border-strong);
   border-bottom-width: 2px;
   border-radius: 4px;
@@ -6145,7 +6171,7 @@ button.todo-check:not(:disabled):hover {
 }
 .sidebar-search kbd {
   position: absolute;
-  right: 8px;
+  inset-inline-end: 8px;
   top: 50%;
   transform: translateY(-50%);
   font: 10.5px var(--mono);
@@ -6330,10 +6356,10 @@ button.todo-check:not(:disabled):hover {
   padding: 10px 12px;
 }
 .compare-side:first-child {
-  border-right: 1px solid var(--border);
+  border-inline-end: 1px solid var(--border);
 }
 @media (max-width: 720px) {
-  .compare-side:first-child { border-right: 0; border-bottom: 1px solid var(--border); }
+  .compare-side:first-child { border-inline-end: 0; border-bottom: 1px solid var(--border); }
 }
 .compare-side.winner {
   background: color-mix(in srgb, var(--accent) 6%, transparent);
@@ -6379,7 +6405,7 @@ button.todo-check:not(:disabled):hover {
   padding: 10px 12px;
   border-top: 1px solid var(--border);
 }
-.compare-pick .small { color: var(--muted); margin-right: 4px; }
+.compare-pick .small { color: var(--muted); margin-inline-end: 4px; }
 .compare + .compare-pick { border-top: 0; }
 .compare > .small, .compare > div.small { padding: 8px 12px; border-top: 1px solid var(--border); }
 
@@ -6395,7 +6421,8 @@ button.todo-check:not(:disabled):hover {
 .chat-group-new {
   width: 22px;
   height: 22px;
-  margin: 0 6px 2px 0;
+  margin-block: 0 2px;
+  margin-inline: 0 6px;
   color: var(--muted);
   opacity: 0.7;
 }
@@ -6449,7 +6476,7 @@ button.todo-check:not(:disabled):hover {
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   color: var(--text);
 }
@@ -6494,7 +6521,8 @@ button.todo-check:not(:disabled):hover {
   gap: 6px;
   max-width: 190px;
   min-width: 70px;
-  padding: 5px 4px 5px 10px;
+  padding-block: 5px 5px;
+  padding-inline: 10px 4px;
   border-radius: 8px;
   font-size: 13px;
   color: var(--muted);
@@ -6576,7 +6604,8 @@ button.todo-check:not(:disabled):hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px 6px 12px;
+  padding-block: 6px 6px;
+  padding-inline: 12px 8px;
   border: 1px dashed var(--border-strong, var(--border));
   border-radius: 10px;
   background: var(--surface);
@@ -6597,7 +6626,7 @@ button.todo-check:not(:disabled):hover {
   align-items: center;
   justify-content: center;
   padding: 2px;
-  margin-left: -6px;
+  margin-inline-start: -6px;
   border: 0;
   border-radius: 6px;
   background: none;
@@ -6741,7 +6770,7 @@ button.todo-check:not(:disabled):hover {
 /* Telegram settings */
 .steps-list {
   margin: 0 0 14px;
-  padding-left: 20px;
+  padding-inline-start: 20px;
   font-size: 13.5px;
   line-height: 1.6;
 }
@@ -6857,7 +6886,8 @@ button.todo-check:not(:disabled):hover {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin: 10px 0 8px 27px;
+  margin-block: 10px 8px;
+  margin-inline: 27px 0;
 }
 .question-option {
   display: flex;
@@ -7240,4 +7270,95 @@ button.todo-check:not(:disabled):hover {
   .voice-cat {
     animation: none !important;
   }
+}
+
+/* ---------- Right-to-left (Hebrew) ---------- */
+[dir='rtl'] .toggle.on::after {
+  transform: translateX(-15px);
+}
+@keyframes slide-in-rtl {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+}
+/* Icons that point somewhere point the other way. */
+[dir='rtl'] .lucide-chevron-right,
+[dir='rtl'] .lucide-chevron-left,
+[dir='rtl'] .lucide-chevrons-right,
+[dir='rtl'] .lucide-chevrons-left,
+[dir='rtl'] .lucide-arrow-right,
+[dir='rtl'] .lucide-arrow-left,
+[dir='rtl'] .lucide-panel-left,
+[dir='rtl'] .lucide-panel-left-close,
+[dir='rtl'] .lucide-panel-left-open,
+[dir='rtl'] .lucide-panel-right,
+[dir='rtl'] .lucide-reply,
+[dir='rtl'] .lucide-undo-2,
+[dir='rtl'] .lucide-redo-2,
+[dir='rtl'] .lucide-log-out,
+[dir='rtl'] .lucide-external-link,
+[dir='rtl'] .lucide-list-plus,
+[dir='rtl'] .lucide-send {
+  transform: scaleX(-1);
+}
+/* Code reads left to right whatever the interface. */
+pre,
+code,
+input[type='url'],
+input[type='password'] {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+[dir='rtl'] pre {
+  text-align: left;
+}
+/* Answers: each paragraph follows its own language (a Hebrew interface can show an English answer and back). */
+.md p,
+.md li,
+.md h1,
+.md h2,
+.md h3,
+.md h4,
+.md h5,
+.md h6,
+.md blockquote,
+.md td,
+.md th {
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+/* The workflow canvas is laid out in screen coordinates. */
+.wf-canvas {
+  direction: ltr;
+}
+[dir='rtl'] .wf-canvas .wf-node {
+  direction: rtl;
+}
+[dir='rtl'] .side-panel {
+  animation-name: slide-in-rtl;
+}
+/* Names and titles people write keep their own direction ("hi there!" stays as written in a Hebrew interface). */
+.chat-list .title,
+.chat-tab-title,
+.chat-title-btn,
+.tile-title,
+.search-hit-title,
+.ws-chat-title,
+.file-row .name,
+.queue-text,
+.welcome-title {
+  unicode-bidi: plaintext;
+}
+/* What people type follows its own language too. */
+textarea,
+input:not([type='checkbox']):not([type='radio']):not([type='range']) {
+  unicode-bidi: plaintext;
+}
+/* Descriptions that come from data (workflows, bots, templates) keep their own direction too. */
+.tile-desc,
+.template-card .muted,
+.bank-mission,
+.steps-list li {
+  unicode-bidi: plaintext;
 }
