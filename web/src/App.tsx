@@ -88,7 +88,7 @@ export function App() {
       page = <ChatView key="chat" routeId={route.id} focusMessage={route.message} />;
       break;
     case 'new':
-      page = <ChatView key="chat" projectId={route.projectId} botId={route.botId} />;
+      page = <ChatView key="chat" projectId={route.projectId} botId={route.botId} model={route.model} />;
       break;
     case 'projects':
       page = <ProjectsPage />;

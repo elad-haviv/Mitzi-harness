@@ -1,4 +1,4 @@
-import { ArrowUpCircle, BarChart3, Wallet, Bot, Brain, CalendarClock, Check, ChevronDown, ChevronRight, FolderOpen, GitBranch, KeyRound, Layers, ListTree, MoreHorizontal, PanelLeftClose, Pencil, Pin, PinOff, Plug, Puzzle, Search, Settings, SquarePen, Trash2, WandSparkles, Workflow as WorkflowIcon, X } from 'lucide-react';
+import { ArrowUpCircle, BarChart3, Wallet, Bot, Brain, CalendarClock, Check, ChevronDown, ChevronRight, FolderOpen, GitBranch, KeyRound, Layers, ListTree, MoreHorizontal, PanelLeftClose, Pencil, Pin, PinOff, Plug, Plus, Puzzle, Search, Settings, SquarePen, Trash2, WandSparkles, Workflow as WorkflowIcon, X } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ChatListItem } from '../api';
 import { href, navigate, Route } from '../router';
@@ -64,7 +64,8 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
   }, [chats, query]);
 
   const groups = useMemo(() => {
-    const out: { label: string; chats: ChatListItem[] }[] = [];
+    // `start` is what a new chat started from the group gets: its project, bot or model.
+    const out: { label: string; chats: ChatListItem[]; start?: { projectId?: string; botId?: string; model?: string } }[] = [];
     const pinned = filtered.filter((c) => c.pinned);
     if (pinned.length) out.push({ label: 'Pinned', chats: pinned });
     const keyOf = (c: ChatListItem): string => {
@@ -83,12 +84,22 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
           return groupLabel(c.updatedAt);
       }
     };
+    const startOf = (c: ChatListItem) =>
+      groupBy === 'project'
+        ? c.projectId && projects.some((p) => p.id === c.projectId)
+          ? { projectId: c.projectId }
+          : {}
+        : groupBy === 'bot'
+          ? { botId: c.botId }
+          : groupBy === 'model'
+            ? { model: c.model }
+            : undefined;
     const rest: typeof out = [];
     for (const c of filtered.filter((c) => !c.pinned && c.messageCount > 0)) {
       const label = keyOf(c);
       const g = rest.find((x) => x.label === label);
       if (g) g.chats.push(c);
-      else rest.push({ label, chats: [c] });
+      else rest.push({ label, chats: [c], start: startOf(c) });
     }
     // Chats without a project come after the projects.
     if (groupBy === 'project') rest.sort((a, b) => Number(a.label === 'No project') - Number(b.label === 'No project'));
@@ -206,11 +217,18 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
           return (
             <div key={g.label}>
               {(groupBy !== 'none' || g.label === 'Pinned' || groups.length > 1) && (
-                <button className="chat-group-label" onClick={() => toggleGroup(g.label)} aria-expanded={!collapsed}>
-                  {collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
-                  <span className="grow">{g.label}</span>
-                  {collapsed && <span className="count">{g.chats.length}</span>}
-                </button>
+                <div className="chat-group-row">
+                  <button className="chat-group-label" onClick={() => toggleGroup(g.label)} aria-expanded={!collapsed}>
+                    {collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+                    <span className="grow">{g.label}</span>
+                    {collapsed && <span className="count">{g.chats.length}</span>}
+                  </button>
+                  {g.start && (
+                    <a className="icon-btn sm chat-group-new" href={href({ page: 'new', ...g.start })} title={`New chat in ${g.label}`} aria-label={`New chat in ${g.label}`}>
+                      <Plus size={14} />
+                    </a>
+                  )}
+                </div>
               )}
               {!collapsed &&
                 g.chats.map((c) => {

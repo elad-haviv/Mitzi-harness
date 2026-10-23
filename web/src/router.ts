@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 export type Route =
-  | { page: 'new'; projectId?: string; botId?: string }
+  | { page: 'new'; projectId?: string; botId?: string; model?: string }
   | { page: 'chat'; id: string; message?: number }
   | { page: 'projects' }
   | { page: 'project'; id: string }
@@ -49,7 +49,7 @@ export function parseRoute(hash: string): Route {
     case 'plugins':
       return { page: parts[0] };
   }
-  return { page: 'new', projectId: params.get('project') ?? undefined, botId: params.get('bot') ?? undefined };
+  return { page: 'new', projectId: params.get('project') ?? undefined, botId: params.get('bot') ?? undefined, model: params.get('model') ?? undefined };
 }
 
 export function href(route: Route): string {
@@ -58,6 +58,7 @@ export function href(route: Route): string {
       const q = new URLSearchParams();
       if (route.projectId) q.set('project', route.projectId);
       if (route.botId) q.set('bot', route.botId);
+      if (route.model) q.set('model', route.model);
       const qs = q.toString();
       return `#/new${qs ? `?${qs}` : ''}`;
     }

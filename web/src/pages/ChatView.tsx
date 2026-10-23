@@ -96,6 +96,7 @@ export function ChatView({
   routeId,
   projectId,
   botId,
+  model: routeModel,
   embedded,
   focus,
   placeholder,
@@ -109,6 +110,8 @@ export function ChatView({
   focusMessage?: number;
   projectId?: string;
   botId?: string;
+  /** The model a new chat starts with (from a sidebar group's +). */
+  model?: string;
   /** Shown inside another page (a document's chat): no header or side panel. */
   embedded?: boolean;
   /** The artifact open beside an embedded chat; messages sent here are about it. */
@@ -182,8 +185,8 @@ export function ChatView({
   }, [routeId, chatId]);
 
   useEffect(() => {
-    setDraftModel(draftBot?.model ?? (settings?.routing?.newChats ? AUTO_MODEL : settings?.defaultModel) ?? '');
-  }, [draftBot?.model, settings?.defaultModel, settings?.routing?.newChats, botId]);
+    setDraftModel(routeModel ?? draftBot?.model ?? (settings?.routing?.newChats ? AUTO_MODEL : settings?.defaultModel) ?? '');
+  }, [routeModel, draftBot?.model, settings?.defaultModel, settings?.routing?.newChats, botId]);
 
   const reload = useCallback(
     async (id: string) => {
