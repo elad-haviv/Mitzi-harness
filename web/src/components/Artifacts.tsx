@@ -1,8 +1,8 @@
 import hljs from 'highlight.js/lib/common';
-import { ChevronLeft, ChevronRight, Code, Download, ExternalLink, FileCode, FileText, Globe, Image, Maximize2, Minimize2, Network, Shapes, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Code, Download, ExternalLink, FileCode, FilePen, FileText, Globe, Image, Maximize2, Minimize2, Network, Shapes, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import type { Artifact, ArtifactType } from '../api';
-import { href } from '../router';
+import { api, Artifact, ArtifactType } from '../api';
+import { href, navigate } from '../router';
 import { CopyButton, Markdown } from './Markdown';
 
 export function ArtifactIcon({ type, size = 18 }: { type: ArtifactType; size?: number }) {
@@ -176,6 +176,21 @@ export function ArtifactView({
           </div>
         )}
         <CopyButton text={() => content} label="Copy content" />
+        {artifact.type === 'markdown' && (
+          <button
+            className="icon-btn sm"
+            title="Open in Docs to edit it together with the bot"
+            aria-label="Open in Docs"
+            onClick={() =>
+              void api
+                .createDoc({ artifactId: artifact.id })
+                .then((d) => navigate({ page: 'doc', id: d.id }))
+                .catch((err) => alert(err.message))
+            }
+          >
+            <FilePen size={14} />
+          </button>
+        )}
         <button className="icon-btn sm" title="Download" aria-label="Download" onClick={() => download(artifact, content)}>
           <Download size={14} />
         </button>

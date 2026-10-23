@@ -1,4 +1,4 @@
-import { Bot, Brain, FolderOpen, KeyRound, Layers, PanelLeftClose, Pin, Plug, Puzzle, Search, Settings, SquarePen, WandSparkles } from 'lucide-react';
+import { Bot, Brain, CalendarClock, FileText, FolderOpen, GitBranch, KeyRound, Layers, PanelLeftClose, Pin, Plug, Puzzle, Search, Settings, SquarePen, WandSparkles } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { ChatListItem } from '../api';
 import { href, Route } from '../router';
@@ -17,7 +17,8 @@ function groupLabel(iso: string): string {
 }
 
 export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collapsed: boolean; onCollapse(): void }) {
-  const { chats, projects, bots, settings } = useApp();
+  const { chats, projects, bots, settings, tasks } = useApp();
+  const unseen = tasks.reduce((n, t) => n + t.runs.filter((r) => !r.seen && r.status !== 'running').length, 0);
   const [query, setQuery] = useState('');
 
   const filtered = useMemo(() => {
@@ -41,7 +42,9 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
   const nav = [
     { route: { page: 'projects' } as Route, icon: <FolderOpen size={17} />, label: 'Projects', count: projects.length, match: ['projects', 'project'] },
     { route: { page: 'bots' } as Route, icon: <Bot size={17} />, label: 'Bots', count: bots.length, match: ['bots'] },
+    { route: { page: 'docs' } as Route, icon: <FileText size={17} />, label: 'Docs', match: ['docs', 'doc'] },
     { route: { page: 'artifacts' } as Route, icon: <Layers size={17} />, label: 'Artifacts', match: ['artifacts', 'artifact'] },
+    { route: { page: 'tasks' } as Route, icon: <CalendarClock size={17} />, label: 'Scheduled', match: ['tasks'], badge: unseen },
     { route: { page: 'memory' } as Route, icon: <Brain size={17} />, label: 'Memory', match: ['memory'] },
   ];
   const extend = [
@@ -69,6 +72,11 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
             {n.icon}
             {n.label}
             {!!n.count && <span className="count">{n.count}</span>}
+            {!!(n as { badge?: number }).badge && (
+              <span className="badge-dot" title={`${(n as { badge?: number }).badge} new result(s)`}>
+                {(n as { badge?: number }).badge}
+              </span>
+            )}
           </a>
         ))}
         <div className="nav-label">Extend</div>
@@ -94,6 +102,8 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
                 <a key={c.id} className={`chat-link${active ? ' active' : ''}`} href={href({ page: 'chat', id: c.id })} title={c.title}>
                   {bot && !bot.builtIn && <span className="emoji">{bot.emoji}</span>}
                   {c.pinned && g.label !== 'Pinned' && <Pin size={12} />}
+                  {c.branchedFrom && <GitBranch size={12} className="muted" aria-label="Branch" />}
+                  {c.taskId && <CalendarClock size={12} className="muted" aria-label="Scheduled task" />}
                   <span className="title">{c.title}</span>
                   {c.running && <span className="live-dot" aria-label="Responding" />}
                 </a>
@@ -108,7 +118,7 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
         {settings && !settings.hasApiKey && (
           <a className="key-warning" href={href({ page: 'settings' })}>
             <KeyRound size={15} style={{ flexShrink: 0, marginTop: 1 }} />
-            <span>Add your OpenRouter API key to start chatting</span>
+            <span>Add an API key for OpenRouter or another provider to start chatting</span>
           </a>
         )}
         <a className={`nav-item${route.page === 'settings' ? ' active' : ''}`} href={href({ page: 'settings' })}>

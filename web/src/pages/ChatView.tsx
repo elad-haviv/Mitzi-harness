@@ -3,7 +3,10 @@ import {
   Brain,
   ChevronDown,
   ChevronRight,
+  AudioLines,
+  CalendarClock,
   FolderOpen,
+  GitBranch,
   KeyRound,
   Layers,
   Lightbulb,
@@ -18,12 +21,14 @@ import {
   X,
 } from 'lucide-react';
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, Artifact, Attachment, Chat, ChatMessage, DEFAULT_BOT_ID, RecalledMemory, StreamEvent } from '../api';
+import { api, Artifact, Attachment, Chat, ChatMessage, DEFAULT_BOT_ID, Doc, RecalledMemory, StreamEvent } from '../api';
+import { LiveMode } from '../components/LiveMode';
+import { speaker } from '../speech';
 import { ArtifactIcon, ArtifactView, TYPE_LABEL } from '../components/Artifacts';
 import { Composer, ComposerHandle, ContextRing } from '../components/Composer';
 import { ContextPanel } from '../components/ContextPanel';
 import { Markdown } from '../components/Markdown';
-import { AssistantTurn, Avatar, buildTurns, CompactDivider, MemoryRecall, PermissionCard, PermissionRequest, ToolBlock, UserTurn } from '../components/Messages';
+import { AssistantTurn, Avatar, buildTurns, messageText, CompactDivider, MemoryRecall, PermissionCard, PermissionRequest, ToolBlock, UserTurn } from '../components/Messages';
 import { Menu, useConfirm } from '../components/ui';
 import { href, navigate } from '../router';
 import { relativeTime, useApp } from '../state';
@@ -56,7 +61,25 @@ function loadPanelWidth(): number {
   }
 }
 
-export function ChatView({ routeId, projectId, botId }: { routeId?: string; projectId?: string; botId?: string }) {
+export function ChatView({
+  routeId,
+  projectId,
+  botId,
+  embedded,
+  onDoc,
+  onTurnDone,
+  sendRef,
+}: {
+  routeId?: string;
+  projectId?: string;
+  botId?: string;
+  /** Shown inside another page (a document's chat): no header or side panel. */
+  embedded?: boolean;
+  onDoc?(doc: Doc): void;
+  onTurnDone?(): void;
+  /** Lets the host page send messages into this chat. */
+  sendRef?: { current?: (text: string) => void };
+}) {
   const app = useApp();
   const { toast, refreshChats, settings, projects, bots, models } = app;
   const [chatId, setChatId] = useState(routeId);
@@ -72,6 +95,15 @@ export function ChatView({ routeId, projectId, botId }: { routeId?: string; proj
   const [scrolled, setScrolled] = useState(false);
   const [contextVersion, setContextVersion] = useState(0);
   const [confirmNode, confirm] = useConfirm();
+  const [liveMode, setLiveMode] = useState(false);
+  const onDocRef = useRef(onDoc);
+  onDocRef.current = onDoc;
+
+  useEffect(() => {
+    speaker.useServer = !!settings?.media.speechModel;
+  }, [settings?.media.speechModel]);
+  // Stop reading aloud when leaving the chat.
+  useEffect(() => () => speaker.stop(), [routeId]);
 
   // Settings for a chat that doesn't exist yet.
   const draftBot = bots.find((b) => b.id === (botId ?? DEFAULT_BOT_ID));
@@ -192,6 +224,9 @@ export function ChatView({ routeId, projectId, botId }: { routeId?: string; proj
         setArtifacts((list) => [e.artifact, ...list.filter((a) => a.id !== e.artifact.id)]);
         setPanel({ kind: 'artifact', id: e.artifact.id });
         break;
+      case 'doc':
+        onDocRef.current?.(e.doc);
+        break;
       case 'status':
         setLive((l) => l && { ...l, status: e.message });
         break;
@@ -211,7 +246,9 @@ export function ChatView({ routeId, projectId, botId }: { routeId?: string; proj
     }
   }, [toast, refreshChats]);
 
-  const runStream = async (id: string, start: (handler: (e: StreamEvent) => void) => Promise<void>, user?: ChatMessage) => {
+  /** Streams a turn; resolves to the reloaded chat. */
+  const runStream = async (id: string, start: (handler: (e: StreamEvent) => void) => Promise<void>, user?: ChatMessage): Promise<Chat | undefined> => {
+    let result: Chat | undefined;
     setLastError(undefined);
     stick.current = true;
     setLive({ user, blocks: [] });
@@ -223,12 +260,14 @@ export function ChatView({ routeId, projectId, botId }: { routeId?: string; proj
       if (currentId.current === id) setLastError((err as Error).message);
     } finally {
       if (currentId.current === id) {
-        await reload(id);
+        result = await reload(id);
         setLive(null);
         setContextVersion((v) => v + 1);
       }
       void refreshChats();
+      onTurnDone?.();
     }
+    return result;
   };
 
   const optimisticUser = (text: string, attachments: Attachment[]): ChatMessage => {
@@ -241,7 +280,8 @@ export function ChatView({ routeId, projectId, botId }: { routeId?: string; proj
     };
   };
 
-  const send = async (text: string, attachments: Attachment[], editIndex?: number) => {
+  /** Sends a message; resolves to the answer's text. */
+  const send = async (text: string, attachments: Attachment[], editIndex?: number): Promise<string | undefined> => {
     let id = chatId;
     if (!id) {
       try {
@@ -254,12 +294,52 @@ export function ChatView({ routeId, projectId, botId }: { routeId?: string; proj
         navigate({ page: 'chat', id }, true);
       } catch (err) {
         toast((err as Error).message);
-        return;
+        return undefined;
       }
     }
     if (editIndex !== undefined) setChat((c) => c && { ...c, messages: c.messages.slice(0, editIndex) });
     const chatIdNow = id;
-    await runStream(chatIdNow, (h) => api.send(chatIdNow, { content: text, attachments, editIndex }, h), optimisticUser(text, attachments));
+    const after = await runStream(chatIdNow, (h) => api.send(chatIdNow, { content: text, attachments, editIndex }, h), optimisticUser(text, attachments));
+    if (!after) return undefined;
+    const lastUser = after.messages.findLastIndex((m) => m.role === 'user');
+    return after.messages
+      .slice(lastUser + 1)
+      .filter((m) => m.role === 'assistant')
+      .map(messageText)
+      .filter(Boolean)
+      .join('\n\n');
+  };
+
+  if (sendRef) sendRef.current = (text: string) => void send(text, []);
+
+  const branch = async (index: number) => {
+    if (!chat) return;
+    try {
+      const created = await api.branch(chat.id, index);
+      void refreshChats();
+      toast('Branched into a new chat. The original is unchanged.', 'info');
+      navigate({ page: 'chat', id: created.id });
+    } catch (err) {
+      toast((err as Error).message);
+    }
+  };
+
+  const rate = async (index: number, value: 1 | -1 | 0, comment?: string) => {
+    if (!chat) return;
+    const id = chat.id;
+    setChat((c) =>
+      c && {
+        ...c,
+        messages: c.messages.map((m, i) => (i === index ? { ...m, rating: value ? { value, comment, ratedAt: new Date().toISOString() } : undefined } : m)),
+      },
+    );
+    try {
+      await api.rate(id, index, value, comment);
+      // The lesson is distilled in the background; pick it up shortly.
+      if (value) setTimeout(() => currentId.current === id && !live && void reload(id), 4000);
+    } catch (err) {
+      toast((err as Error).message);
+    }
   };
 
   const regenerate = async () => {
@@ -311,9 +391,16 @@ export function ChatView({ routeId, projectId, botId }: { routeId?: string; proj
       onWebSearchChange={(on) => (chat ? void updateChat({ webSearch: on }) : setDraftWeb(on))}
       placeholder={customBot ? `Message ${customBot.name}…` : project ? `Message Mitzi in ${project.name}…` : undefined}
       autoFocus
-      extra={chat && chat.messages.length > 0 && (
-        <ContextRing used={chat.lastPromptTokens} total={contextLength} active={panel?.kind === 'context'} onClick={() => setPanel(panel?.kind === 'context' ? null : { kind: 'context' })} />
-      )}
+      extra={
+        <>
+          {chat && chat.messages.length > 0 && !embedded && (
+            <ContextRing used={chat.lastPromptTokens} total={contextLength} active={panel?.kind === 'context'} onClick={() => setPanel(panel?.kind === 'context' ? null : { kind: 'context' })} />
+          )}
+          <button className="icon-btn" title="Live conversation: talk and listen hands-free" aria-label="Start live conversation" onClick={() => setLiveMode(true)} disabled={running}>
+            <AudioLines size={18} />
+          </button>
+        </>
+      }
     />
   );
 
@@ -435,7 +522,7 @@ export function ChatView({ routeId, projectId, botId }: { routeId?: string; proj
           <div className="error-box" style={{ marginBottom: 16, background: 'var(--warn-soft)', color: 'var(--warn)' }}>
             <KeyRound size={18} />
             <span style={{ flex: 1 }}>
-              Add your OpenRouter API key to start chatting. <a href={href({ page: 'settings' })}>Open settings →</a>
+              Add an API key for OpenRouter or another provider to start chatting. <a href={href({ page: 'settings' })}>Open settings →</a>
             </span>
           </div>
         )}
@@ -513,6 +600,22 @@ export function ChatView({ routeId, projectId, botId }: { routeId?: string; proj
               <Loader2 className="spin" size={18} /> Loading conversation…
             </div>
           )}
+          {chat?.branchedFrom && (
+            <div className="origin-banner">
+              <GitBranch size={14} />
+              <span>
+                Branched from <a href={href({ page: 'chat', id: chat.branchedFrom.chatId })}>{chat.branchedFrom.title}</a>
+              </span>
+            </div>
+          )}
+          {chat?.taskId && (
+            <div className="origin-banner">
+              <CalendarClock size={14} />
+              <span>
+                Created by a <a href={href({ page: 'tasks' })}>scheduled task</a>
+              </span>
+            </div>
+          )}
           {turns.map((t, i) => {
             if (t.kind === 'divider') return <CompactDivider key={`d${i}`} count={t.count} summary={chat?.summary} />;
             if (t.kind === 'user')
@@ -520,6 +623,7 @@ export function ChatView({ routeId, projectId, botId }: { routeId?: string; proj
             return (
               <AssistantTurn
                 key={`a${t.index}`}
+                id={`${chat?.id}:${t.index}`}
                 messages={t.messages}
                 memories={t.memories}
                 results={results}
@@ -528,6 +632,8 @@ export function ChatView({ routeId, projectId, botId }: { routeId?: string; proj
                 activeArtifact={activeArtifact?.id}
                 onOpenArtifact={openArtifact}
                 onRegenerate={!running && i === lastAssistant ? () => void regenerate() : undefined}
+                onBranch={!running && !embedded ? () => void branch(t.lastIndex) : undefined}
+                onRate={chat ? (v, c) => void rate(t.lastIndex, v, c) : undefined}
               />
             );
           })}
@@ -610,8 +716,36 @@ export function ChatView({ routeId, projectId, botId }: { routeId?: string; proj
     );
   }
 
+  const live_ = liveMode && (
+    <LiveMode
+      title={customBot?.name ?? 'Mitzi'}
+      emoji={customBot?.emoji}
+      onSend={(text) => send(text, [])}
+      onInterrupt={stop}
+      onClose={() => setLiveMode(false)}
+    />
+  );
+
+  if (embedded) {
+    return (
+      <div className="chat-col embedded">
+        {isEmpty ? (
+          <div className="embedded-empty">
+            <div className="muted small">Ask {customBot?.name ?? 'Mitzi'} to draft, rewrite, review or answer your comments. Changes appear in the document.</div>
+            {composerNode}
+          </div>
+        ) : (
+          conversation
+        )}
+        {live_}
+        {confirmNode}
+      </div>
+    );
+  }
+
   return (
     <div className="chat-layout">
+      {live_}
       {!expanded && (
         <div className="chat-col">
           {header}

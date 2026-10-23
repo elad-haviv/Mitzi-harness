@@ -9,7 +9,15 @@ import {
   CircleDot,
   FileText,
   FolderOpen,
+  GitBranch,
   Globe,
+  ImageIcon,
+  Music,
+  Square,
+  ThumbsDown,
+  ThumbsUp,
+  Video,
+  Volume2,
   History,
   Loader2,
   Paperclip,
@@ -23,8 +31,9 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
-import { ReactNode, useMemo, useRef, useState } from 'react';
-import type { Artifact, Attachment, Bot, ChatMessage, ContentPart, RecalledMemory, Todo } from '../api';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import type { Artifact, Attachment, Bot, ChatMessage, ContentPart, Rating, RecalledMemory, Todo } from '../api';
+import { speaker, useSpeaking } from '../speech';
 import { href } from '../router';
 import { modelLabel, useApp } from '../state';
 import { ArtifactIcon, TYPE_LABEL } from './Artifacts';
@@ -76,7 +85,7 @@ export interface ToolResult {
 
 export type Turn =
   | { kind: 'user'; index: number; message: ChatMessage }
-  | { kind: 'assistant'; index: number; messages: ChatMessage[]; memories?: RecalledMemory[] }
+  | { kind: 'assistant'; index: number; lastIndex: number; messages: ChatMessage[]; memories?: RecalledMemory[] }
   | { kind: 'divider'; count: number };
 
 export function buildTurns(messages: ChatMessage[], contextStart: number): { turns: Turn[]; results: Map<string, ToolResult> } {
@@ -92,9 +101,12 @@ export function buildTurns(messages: ChatMessage[], contextStart: number): { tur
     if (m.role === 'user') return void turns.push({ kind: 'user', index: i, message: m });
     if (m.role === 'assistant') {
       const last = turns.at(-1);
-      if (last?.kind === 'assistant') last.messages.push(m);
+      if (last?.kind === 'assistant') {
+        last.messages.push(m);
+        last.lastIndex = i;
+      }
       // An answer shows the memories recalled for the message it answers.
-      else turns.push({ kind: 'assistant', index: i, messages: [m], memories: last?.kind === 'user' ? last.message.memories : undefined });
+      else turns.push({ kind: 'assistant', index: i, lastIndex: i, messages: [m], memories: last?.kind === 'user' ? last.message.memories : undefined });
     }
   });
   if (contextStart > 0 && contextStart >= messages.length) turns.push({ kind: 'divider', count: contextStart });
@@ -255,6 +267,7 @@ export function MemoryRecall({ memories, botId }: { memories: RecalledMemory[]; 
 }
 
 export function AssistantTurn({
+  id,
   messages,
   memories,
   results,
@@ -263,7 +276,11 @@ export function AssistantTurn({
   activeArtifact,
   onOpenArtifact,
   onRegenerate,
+  onBranch,
+  onRate,
 }: {
+  /** Stable id for read-aloud. */
+  id: string;
   messages: ChatMessage[];
   memories?: RecalledMemory[];
   results: Map<string, ToolResult>;
@@ -272,10 +289,13 @@ export function AssistantTurn({
   activeArtifact?: string;
   onOpenArtifact(a: Artifact, version: number): void;
   onRegenerate?(): void;
+  onBranch?(): void;
+  onRate?(value: 1 | -1 | 0, comment?: string): void;
 }) {
   const { models } = useApp();
   const text = messages.map(messageText).filter(Boolean).join('\n\n');
   const model = messages.find((m) => m.model)?.model;
+  const rating = messages.at(-1)?.rating;
   return (
     <div className="turn turn-assistant">
       <Avatar bot={bot} />
@@ -286,6 +306,13 @@ export function AssistantTurn({
         ))}
         <div className="msg-actions">
           {text && <CopyButton text={() => text} label="Copy response" />}
+          {text && <ReadAloudButton id={id} text={text} />}
+          {onRate && <RateButtons rating={rating} onRate={onRate} />}
+          {onBranch && (
+            <button className="icon-btn sm" title="Branch from here: a new chat with the conversation up to this answer" aria-label="Branch from here" onClick={onBranch}>
+              <GitBranch size={14} />
+            </button>
+          )}
           {onRegenerate && (
             <button className="icon-btn sm" title="Regenerate" aria-label="Regenerate response" onClick={onRegenerate}>
               <RefreshCw size={14} />
@@ -293,8 +320,123 @@ export function AssistantTurn({
           )}
           {model && <span className="meta">{modelLabel(model, models)}</span>}
         </div>
+        {rating?.lesson && (
+          <div className="lesson-note" title="Saved to this bot's lessons; you can remove it on the Bots page">
+            <Brain size={13} /> Learned: {rating.lesson}
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+export function ReadAloudButton({ id, text }: { id: string; text: string }) {
+  const speaking = useSpeaking(id);
+  const { toast } = useApp();
+  return (
+    <button
+      className={`icon-btn sm${speaking ? ' on' : ''}`}
+      title={speaking ? 'Stop reading' : 'Read aloud'}
+      aria-label={speaking ? 'Stop reading' : 'Read aloud'}
+      onClick={() => (speaking ? speaker.stop() : void speaker.speak(id, text).catch((err) => toast(err.message)))}
+    >
+      {speaking ? <Square size={13} /> : <Volume2 size={14} />}
+    </button>
+  );
+}
+
+function RateButtons({ rating, onRate }: { rating?: Rating; onRate(value: 1 | -1 | 0, comment?: string): void }) {
+  const [asking, setAsking] = useState<1 | -1 | null>(null);
+  const [comment, setComment] = useState('');
+  const wrap = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!asking) return;
+    const onDown = (e: MouseEvent) => !wrap.current?.contains(e.target as Node) && setAsking(null);
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [asking]);
+  const click = (v: 1 | -1) => {
+    if (rating?.value === v) return onRate(0);
+    onRate(v);
+    setComment('');
+    setAsking(v);
+  };
+  const submit = () => {
+    if (asking && comment.trim()) onRate(asking, comment.trim());
+    setAsking(null);
+  };
+  return (
+    <span className="menu-wrap" ref={wrap}>
+      <button className={`icon-btn sm${rating?.value === 1 ? ' on' : ''}`} title="Good response" aria-label="Good response" aria-pressed={rating?.value === 1} onClick={() => click(1)}>
+        <ThumbsUp size={14} />
+      </button>
+      <button className={`icon-btn sm${rating?.value === -1 ? ' on' : ''}`} title="Bad response" aria-label="Bad response" aria-pressed={rating?.value === -1} onClick={() => click(-1)}>
+        <ThumbsDown size={14} />
+      </button>
+      {asking && (
+        <form
+          className="rate-pop"
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit();
+          }}
+        >
+          <div className="small">{asking === 1 ? 'What did you like?' : 'What could be better?'} <span className="muted">(optional)</span></div>
+          <textarea
+            className="textarea"
+            autoFocus
+            rows={3}
+            value={comment}
+            placeholder={asking === 1 ? 'e.g. Great examples, just the right length' : 'e.g. Too long; skip the intro and show code'}
+            onChange={(e) => setComment(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                submit();
+              } else if (e.key === 'Escape') setAsking(null);
+            }}
+          />
+          <div className="row" style={{ justifyContent: 'flex-end' }}>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAsking(null)}>
+              Skip
+            </button>
+            <button className="btn btn-primary btn-sm" disabled={!comment.trim()}>
+              Send feedback
+            </button>
+          </div>
+        </form>
+      )}
+    </span>
+  );
+}
+
+const MEDIA_RE = /^MEDIA: (\/media\/[a-f0-9]{32}\.\w+) (\S+)$/gm;
+
+export function mediaFrom(output?: string): { url: string; mime: string }[] {
+  return output ? [...output.matchAll(MEDIA_RE)].map((m) => ({ url: m[1], mime: m[2] })) : [];
+}
+
+export function MediaPreview({ url, mime, caption }: { url: string; mime: string; caption?: string }) {
+  return (
+    <figure className="media-card">
+      {mime.startsWith('image/') ? (
+        <a href={url} target="_blank" rel="noreferrer">
+          <img src={url} alt={caption ?? 'Generated image'} loading="lazy" />
+        </a>
+      ) : mime.startsWith('video/') ? (
+        <video src={url} controls playsInline preload="metadata" />
+      ) : (
+        <audio src={url} controls preload="metadata" />
+      )}
+      {caption && (
+        <figcaption>
+          <span className="grow">{caption}</span>
+          <a href={url} download className="small">
+            Download
+          </a>
+        </figcaption>
+      )}
+    </figure>
   );
 }
 
@@ -353,6 +495,18 @@ function toolIcon(name: string): ReactNode {
       return <Brain size={13} />;
     case 'Skill':
       return <WandSparkles size={13} />;
+    case 'GenerateImage':
+      return <ImageIcon size={13} />;
+    case 'GenerateVideo':
+      return <Video size={13} />;
+    case 'GenerateSpeech':
+    case 'GenerateSound':
+    case 'GenerateMusic':
+      return <Music size={13} />;
+    case 'DocEdit':
+    case 'DocRewrite':
+    case 'DocComment':
+      return <FileText size={13} />;
     default:
       return name.startsWith('mcp__') ? <Plug size={13} /> : <Wrench size={13} />;
   }
@@ -366,7 +520,10 @@ function displayName(name: string): string {
 
 function toolSummary(name: string, args: any, fallback?: string): string {
   if (fallback) return fallback;
-  return args.file_path ?? args.command ?? args.pattern ?? args.url ?? args.path ?? '';
+  if (name === 'DocEdit') return String(args.old_str ?? '').split('\n')[0].slice(0, 80);
+  if (name === 'DocRewrite') return args.title ? `Rewrote “${args.title}”` : 'Rewrote the document';
+  if (name === 'DocComment') return `${args.action ?? ''}${args.text ? `: ${args.text}` : ''}`;
+  return args.file_path ?? args.command ?? args.pattern ?? args.url ?? args.path ?? args.prompt ?? args.text ?? '';
 }
 
 function ToolInput({ name, args }: { name: string; args: any }) {
@@ -457,6 +614,28 @@ export function ToolBlock({
         <span>
           <strong>{args.action === 'forget' ? 'Forgot a memory' : 'Saved to memory'}</strong>
           {args.content ? `: ${args.content}` : ''}
+        </span>
+      </div>
+    );
+  }
+
+  const media = result && !result.isError ? mediaFrom(result.output) : [];
+  if (media.length) {
+    return (
+      <>
+        {media.map((m) => (
+          <MediaPreview key={m.url} url={m.url} mime={m.mime} caption={args.prompt ?? args.text} />
+        ))}
+      </>
+    );
+  }
+  if (/^Generate(Image|Video|Speech|Sound|Music)$/.test(name) && running && !result) {
+    return (
+      <div className="media-card pending">
+        <Loader2 size={18} className="spin" />
+        <span>
+          {name === 'GenerateVideo' ? 'Generating video (this can take a few minutes)…' : `Generating ${name.slice(8).toLowerCase()}…`}
+          <div className="muted small">{args.prompt ?? args.text}</div>
         </span>
       </div>
     );

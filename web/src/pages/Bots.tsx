@@ -1,6 +1,6 @@
-import { Brain, Globe, Layers, MessageSquare, Pencil, Plug, Plus, Trash2, WandSparkles, X } from 'lucide-react';
-import { useState } from 'react';
-import { api, BankProfile, Bot, BotTools } from '../api';
+import { Brain, Globe, ImageIcon, Layers, MessageSquare, Pencil, Plug, Plus, ThumbsDown, ThumbsUp, Trash2, WandSparkles, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { api, BankProfile, Bot, BotTools, Lesson } from '../api';
 import { ModelPicker } from '../components/ModelPicker';
 import { Empty, Modal, Toggle, useConfirm } from '../components/ui';
 import { href, navigate } from '../router';
@@ -108,7 +108,7 @@ function BotEditor({ bot, onClose, onSaved }: { bot?: Bot; onClose(): void; onSa
     systemPrompt: bot?.systemPrompt ?? '',
     model: bot?.model ?? '',
     temperature: bot?.temperature,
-    tools: bot?.tools ?? { artifacts: true, web: true, memory: true, skills: true, connectors: true },
+    tools: { media: true, ...(bot?.tools ?? { artifacts: true, web: true, memory: true, skills: true, connectors: true }) },
     starters: bot?.starters.length ? bot.starters : [''],
     memory: bot?.memory ?? ({ mission: '', disposition: { skepticism: 3, literalism: 3, empathy: 3 }, autoRetain: true } as BankProfile),
   });
@@ -206,6 +206,7 @@ function BotEditor({ bot, onClose, onSaved }: { bot?: Bot; onClose(): void; onSa
               ['memory', <Brain size={18} key="m" />, 'Memory bank', 'Its own long-term memory: recalls what matters and learns from conversations'],
               ['skills', <WandSparkles size={18} key="s" />, 'Skills', 'Load skills from the Skills page when a task calls for one'],
               ['connectors', <Plug size={18} key="c" />, 'Connectors', 'Use tools from your connectors (MCP servers)'],
+              ['media', <ImageIcon size={18} key="i" />, 'Media', 'Generate images, video, speech, sounds and music (set up models in Settings)'],
             ] as const
           ).map(([k, icon, t, s]) => (
             <div key={k} className="tool-toggle">
@@ -214,7 +215,7 @@ function BotEditor({ bot, onClose, onSaved }: { bot?: Bot; onClose(): void; onSa
                 <div className="t">{t}</div>
                 <div className="s">{s}</div>
               </div>
-              <Toggle label={t} on={form.tools[k]} onChange={(v) => setTool(k, v)} />
+              <Toggle label={t} on={form.tools[k] !== false} onChange={(v) => setTool(k, v)} />
             </div>
           ))}
         </div>
@@ -277,6 +278,7 @@ function BotEditor({ bot, onClose, onSaved }: { bot?: Bot; onClose(): void; onSa
           </div>
         </div>
       )}
+      {bot && <LessonsField botId={bot.id} />}
       <div className="field">
         <span className="field-label">Conversation starters</span>
         {form.starters.map((s, i) => (
@@ -299,5 +301,32 @@ function BotEditor({ bot, onClose, onSaved }: { bot?: Bot; onClose(): void; onSa
         )}
       </div>
     </Modal>
+  );
+}
+
+/** What the bot learned from thumbs up/down ratings. */
+function LessonsField({ botId }: { botId: string }) {
+  const { toast } = useApp();
+  const [lessons, setLessons] = useState<Lesson[]>();
+  useEffect(() => {
+    api.lessons(botId).then(setLessons, () => setLessons([]));
+  }, [botId]);
+  if (!lessons?.length) return null;
+  return (
+    <div className="field">
+      <span className="field-label">Learned from your ratings</span>
+      <div className="card" style={{ padding: 8, boxShadow: 'none' }}>
+        {[...lessons].reverse().map((l) => (
+          <div key={l.id} className="row small" style={{ gap: 8, padding: '4px 6px' }}>
+            {l.value > 0 ? <ThumbsUp size={13} color="var(--ok)" /> : <ThumbsDown size={13} color="var(--danger)" />}
+            <span className="grow">{l.text}</span>
+            <button className="icon-btn sm" aria-label="Forget this lesson" title="Forget" onClick={() => void api.deleteLesson(botId, l.id).then(setLessons, (e) => toast(e.message))}>
+              <X size={13} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <span className="field-hint">Rate answers with 👍 or 👎 in any chat; the bot keeps these lessons in mind.</span>
+    </div>
   );
 }

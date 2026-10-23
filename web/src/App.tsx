@@ -9,6 +9,8 @@ import { MemoryPage } from './pages/Memory';
 import { ConnectorsPage } from './pages/Connectors';
 import { PluginsPage } from './pages/Plugins';
 import { SkillsPage } from './pages/Skills';
+import { DocPage, DocsPage } from './pages/Docs';
+import { TasksPage } from './pages/Tasks';
 import { ProjectPage, ProjectsPage } from './pages/Projects';
 import { useRoute } from './router';
 import { useApp } from './state';
@@ -97,6 +99,15 @@ export function App() {
       break;
     case 'plugins':
       page = <PluginsPage />;
+      break;
+    case 'docs':
+      page = <DocsPage />;
+      break;
+    case 'doc':
+      page = <DocPage key={route.id} id={route.id} />;
+      break;
+    case 'tasks':
+      page = <TasksPage />;
       break;
   }
 

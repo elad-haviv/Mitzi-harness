@@ -26,3 +26,17 @@
   `syncPlugins` turns their agents into bots and `.mcp.json` entries into servers, so call it after any plugin change.
 - `/api/oauth/callback` is the one route without the app token: the OAuth `state` authenticates it.
 - Command templates run their own !`…` snippets before the user's arguments are substituted; keep it that way.
+- Providers (`src/providers.ts`): `RoutingClient` implements `LlmClient` and routes on the model id's prefix
+  (`openai:gpt-5` → the provider with id `openai`; no known prefix → OpenRouter). Anthropic uses its native API
+  (`src/anthropic.ts`, which converts OpenAI-style messages); everything else is OpenAI-compatible. Code that
+  calls models takes an `LlmClient`, never a concrete client.
+- Media (`src/server/media.ts`): generated files are saved under `<data>/media` with random 32-hex names and served
+  at `/media/<file>` without the token (img/video tags can't send headers). Tool results carry a
+  `MEDIA: <url> <mime>` line, which the web UI renders inline.
+- Docs (`src/server/docs.ts`): a document has a companion chat (`chat.docId`, hidden from the chat list). In that
+  chat the runner adds DocEdit/DocRewrite/DocComment tools and the current document to the system prompt, and
+  emits `doc` events. Snapshot versions through `snapshot()`.
+- Ratings: `POST /api/chats/:id/messages/:index/rating` stores the rating and distills a lesson with the fast
+  model in the background. Lessons live on `bot.lessons` and are included in the system prompt.
+- Scheduled tasks (`src/server/scheduler.ts`): schedules are computed in local time. Runs go through
+  `ChatRunner.run` with `headless`, whose approver never waits for a person.

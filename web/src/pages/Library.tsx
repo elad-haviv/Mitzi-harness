@@ -1,4 +1,4 @@
-import { Brain, Check, Eye, EyeOff, FolderOpen, KeyRound, Layers, Monitor, Moon, Pencil, Plus, Sun, Trash2, X } from 'lucide-react';
+import { Brain, Check, Layers, Monitor, Moon, Sun, Trash2 } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { api, Artifact, ArtifactListItem, ArtifactType } from '../api';
 import { ArtifactIcon, ArtifactView, TYPE_LABEL } from '../components/Artifacts';
@@ -6,6 +6,7 @@ import { ModelPicker } from '../components/ModelPicker';
 import { Empty, Toggle, useConfirm } from '../components/ui';
 import { href, navigate } from '../router';
 import { relativeTime, Theme, useApp } from '../state';
+import { MediaSettingsSection, ProvidersSection } from './ProviderSettings';
 
 // ---------- Artifacts ----------
 
@@ -106,10 +107,8 @@ export function ArtifactPage({ id }: { id: string }) {
 // ---------- Settings ----------
 
 export function SettingsPage() {
-  const { settings, refreshSettings, refreshModels, theme, setTheme, toast } = useApp();
-  const [key, setKey] = useState('');
-  const [showKey, setShowKey] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const { settings, refreshSettings, theme, setTheme, toast } = useApp();
+  const [, setSaving] = useState(false);
 
   if (!settings) return <div className="page muted">Loading…</div>;
 
@@ -136,66 +135,7 @@ export function SettingsPage() {
           </div>
         </div>
 
-        <section className="settings-section card">
-          <h2 className="row" style={{ gap: 8 }}>
-            <KeyRound size={17} /> OpenRouter API key
-          </h2>
-          {settings.apiKeySource === 'env' ? (
-            <p className="muted small" style={{ margin: 0 }}>
-              Using <code>OPENROUTER_API_KEY</code> from the environment. Unset it to manage the key here.
-            </p>
-          ) : (
-            <>
-              <p className="muted small" style={{ marginTop: 0 }}>
-                {settings.hasApiKey ? (
-                  <span className="badge ok">
-                    <Check size={12} /> Key saved
-                  </span>
-                ) : (
-                  <>
-                    Get a key at{' '}
-                    <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">
-                      openrouter.ai/keys
-                    </a>
-                    . One key gives you access to hundreds of models.
-                  </>
-                )}
-              </p>
-              <form
-                className="row"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  await save({ apiKey: key }, 'API key saved');
-                  setKey('');
-                  void refreshModels();
-                }}
-              >
-                <div style={{ position: 'relative', flex: 1 }}>
-                  <input
-                    className="input mono"
-                    type={showKey ? 'text' : 'password'}
-                    placeholder={settings.hasApiKey ? 'Enter a new key to replace it' : 'sk-or-v1-…'}
-                    value={key}
-                    onChange={(e) => setKey(e.target.value)}
-                    autoComplete="off"
-                    spellCheck={false}
-                  />
-                  <button type="button" className="icon-btn sm" style={{ position: 'absolute', right: 6, top: 6 }} onClick={() => setShowKey((s) => !s)} aria-label={showKey ? 'Hide key' : 'Show key'}>
-                    {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
-                  </button>
-                </div>
-                <button className="btn btn-primary" disabled={!key.trim() || saving}>
-                  Save key
-                </button>
-                {settings.hasApiKey && (
-                  <button type="button" className="btn btn-ghost btn-danger" onClick={() => save({ apiKey: '' }, 'API key removed')}>
-                    Remove
-                  </button>
-                )}
-              </form>
-            </>
-          )}
-        </section>
+        <ProvidersSection />
 
         <section className="settings-section card">
           <h2>Models</h2>
@@ -210,6 +150,8 @@ export function SettingsPage() {
             <span className="field-hint">A cheaper model for chat titles and context compaction.</span>
           </div>
         </section>
+
+        <MediaSettingsSection />
 
         <MemorySettings />
 

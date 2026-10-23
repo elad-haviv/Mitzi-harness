@@ -22,6 +22,15 @@ import type {
   PublicSettings,
   SettingsUpdate,
   StreamEvent,
+  Doc,
+  DocSummary,
+  Lesson,
+  MediaKind,
+  MediaSettings,
+  ProviderKind,
+  ProviderView,
+  Rating,
+  ScheduledTask,
 } from '../../src/shared/types';
 
 export type * from '../../src/shared/types';
@@ -30,6 +39,22 @@ export { DEFAULT_BOT_ID } from '../../src/shared/types';
 export type ProjectView = Project & { chatCount: number };
 export type ChatListItem = ChatSummary & { running?: boolean };
 export type ArtifactListItem = Artifact & { chatTitle?: string };
+export type DocView = Doc & { running: boolean };
+export type TaskView = ScheduledTask & { running: boolean; description: string };
+export interface ProviderPresetView {
+  kind: ProviderKind;
+  name: string;
+  baseUrl: string;
+  keyUrl?: string;
+  keyless: boolean;
+  chat: boolean;
+}
+export type MediaOptions = Record<Exclude<keyof MediaSettings, 'voice'>, { id: string; label: string }[]>;
+
+/** Adds the access token to a URL for the media endpoints that need it in a plain GET. */
+export function authHeaders(): Record<string, string> {
+  return { 'x-mitzi-token': token };
+}
 
 const TOKEN_KEY = 'mitzi.token';
 
@@ -194,4 +219,45 @@ export const api = {
   removeMarketplace: (id: string) => request('DELETE', `/api/marketplaces/${id}`),
   installFromMarketplace: (id: string, name: string) => request<PluginInfo>('POST', `/api/marketplaces/${id}/install`, { name }),
   commands: () => request<SlashCommandInfo[]>('GET', '/api/commands'),
+
+  providers: () => request<{ providers: ProviderView[]; presets: ProviderPresetView[] }>('GET', '/api/providers'),
+  addProvider: (body: { kind: ProviderKind; apiKey?: string; baseUrl?: string; name?: string; id?: string }) => request<ProviderView[]>('POST', '/api/providers', body),
+  updateProvider: (id: string, body: Partial<{ apiKey: string; baseUrl: string; name: string; enabled: boolean }>) => request<ProviderView[]>('PATCH', `/api/providers/${id}`, body),
+  removeProvider: (id: string) => request<ProviderView[]>('DELETE', `/api/providers/${id}`),
+  testProvider: (id: string) => request<{ ok: boolean; count: number }>('POST', `/api/providers/${id}/test`, {}),
+
+  branch: (chatId: string, index: number) => request<ChatSummary>('POST', `/api/chats/${chatId}/branch`, { index }),
+  rate: (chatId: string, index: number, value: 1 | -1 | 0, comment?: string) =>
+    request<{ rating: Rating | null }>('POST', `/api/chats/${chatId}/messages/${index}/rating`, { value, comment }),
+  lessons: (botId: string) => request<Lesson[]>('GET', `/api/bots/${botId}/lessons`),
+  deleteLesson: (botId: string, id: string) => request<Lesson[]>('DELETE', `/api/bots/${botId}/lessons/${id}`),
+
+  docs: () => request<DocSummary[]>('GET', '/api/docs'),
+  doc: (id: string) => request<DocView>('GET', `/api/docs/${id}`),
+  createDoc: (body: { title?: string; content?: string; botId?: string; artifactId?: string }) => request<DocView>('POST', '/api/docs', body),
+  updateDoc: (id: string, body: { title?: string; content?: string }) => request<DocView>('PATCH', `/api/docs/${id}`, body),
+  deleteDoc: (id: string) => request('DELETE', `/api/docs/${id}`),
+  addDocComment: (id: string, quote: string, text: string) => request<DocView>('POST', `/api/docs/${id}/comments`, { quote, text }),
+  updateDocComment: (id: string, commentId: string, body: { reply?: string; resolved?: boolean }) => request<DocView>('PATCH', `/api/docs/${id}/comments/${commentId}`, body),
+  deleteDocComment: (id: string, commentId: string) => request<DocView>('DELETE', `/api/docs/${id}/comments/${commentId}`),
+  restoreDocVersion: (id: string, versionId: string) => request<DocView>('POST', `/api/docs/${id}/versions/${versionId}/restore`, {}),
+
+  tasks: () => request<TaskView[]>('GET', '/api/tasks'),
+  createTask: (body: Partial<ScheduledTask>) => request<TaskView>('POST', '/api/tasks', body),
+  updateTask: (id: string, body: Partial<ScheduledTask>) => request<TaskView>('PATCH', `/api/tasks/${id}`, body),
+  deleteTask: (id: string) => request('DELETE', `/api/tasks/${id}`),
+  runTask: (id: string) => request<TaskView>('POST', `/api/tasks/${id}/run`, {}),
+  markTasksSeen: () => request('POST', '/api/tasks/seen', {}),
+
+  mediaOptions: () => request<{ options: MediaOptions; available: Record<MediaKind, boolean> }>('GET', '/api/media/options'),
+  /** Server text-to-speech; resolves to an audio blob. */
+  tts: async (text: string, voice?: string): Promise<Blob> => {
+    const res = await fetch('/api/tts', { method: 'POST', headers: { 'x-mitzi-token': token, 'content-type': 'application/json' }, body: JSON.stringify({ text, voice }) });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new ApiError(res.status, data?.error ?? `Speech failed (${res.status})`);
+    }
+    return res.blob();
+  },
+  transcribe: (audio: string) => request<{ text: string }>('POST', '/api/transcribe', { audio }),
 };

@@ -1,5 +1,5 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { api, ApiError, Bot, ChatListItem, ModelInfo, ProjectView, PublicSettings } from './api';
+import { api, ApiError, Bot, ChatListItem, ModelInfo, ProjectView, PublicSettings, TaskView } from './api';
 
 export type Theme = 'system' | 'light' | 'dark';
 
@@ -24,6 +24,9 @@ interface AppState {
   refreshProjects(): Promise<void>;
   refreshBots(): Promise<void>;
   refreshModels(): Promise<void>;
+  /** Scheduled tasks, polled so finished runs show up in the sidebar. */
+  tasks: TaskView[];
+  refreshTasks(): Promise<void>;
   toast(message: string, tone?: Toast['tone']): void;
   toasts: Toast[];
   dismissToast(id: number): void;
@@ -54,6 +57,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [projects, setProjects] = useState<ProjectView[]>([]);
   const [bots, setBots] = useState<Bot[]>([]);
   const [models, setModels] = useState<ModelInfo[]>([]);
+  const [tasks, setTasks] = useState<TaskView[]>([]);
   const [modelsError, setModelsError] = useState<string>();
   const [authError, setAuthError] = useState(false);
   const [theme, setThemeState] = useState<Theme>(readTheme);
@@ -82,6 +86,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const refreshChats = useCallback(() => guard(api.chats(), setChats), [guard]);
   const refreshProjects = useCallback(() => guard(api.projects(), setProjects), [guard]);
   const refreshBots = useCallback(() => guard(api.bots(), setBots), [guard]);
+  const refreshTasks = useCallback(async () => {
+    try {
+      const next = await api.tasks();
+      setTasks((prev) => {
+        // A run finishing means a new chat to list.
+        const finished = (list: TaskView[]) => list.flatMap((t) => t.runs.filter((r) => r.status !== 'running').map((r) => r.id)).join();
+        if (finished(prev) !== finished(next)) void api.chats().then(setChats).catch(() => {});
+        return next;
+      });
+    } catch {
+      // Polling; errors surface elsewhere.
+    }
+  }, []);
   const refreshModels = useCallback(async () => {
     try {
       setModels(await api.models());
@@ -112,7 +129,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void refreshProjects();
     void refreshBots();
     void refreshModels();
-  }, [refreshSettings, refreshChats, refreshProjects, refreshBots, refreshModels]);
+    void refreshTasks();
+    const timer = setInterval(() => document.visibilityState === 'visible' && void refreshTasks(), 30_000);
+    return () => clearInterval(timer);
+  }, [refreshSettings, refreshChats, refreshProjects, refreshBots, refreshModels, refreshTasks]);
 
   const value = useMemo<AppState>(
     () => ({
@@ -130,11 +150,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       refreshProjects,
       refreshBots,
       refreshModels,
+      tasks,
+      refreshTasks,
       toast,
       toasts,
       dismissToast,
     }),
-    [settings, chats, projects, bots, models, modelsError, authError, theme, setTheme, refreshSettings, refreshChats, refreshProjects, refreshBots, refreshModels, toast, toasts, dismissToast],
+    [settings, chats, projects, bots, models, modelsError, authError, theme, setTheme, refreshSettings, refreshChats, refreshProjects, refreshBots, refreshModels, tasks, refreshTasks, toast, toasts, dismissToast],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -143,7 +165,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 export function modelLabel(id: string, models: ModelInfo[]): string {
   const found = models.find((m) => m.id === id);
   if (found) return found.name.replace(/^[^:]+:\s*/, '');
-  const base = id.split('/').pop() ?? id;
+  const base = id.split(/[/:]/).pop() ?? id;
   return base.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 

@@ -1,6 +1,6 @@
 # Mitzi
 
-An open-source, Claude-style AI workspace that runs on **any model available through [OpenRouter](https://openrouter.ai)**, including Claude, GPT, Gemini, DeepSeek, Qwen and Llama. It runs locally in your browser and offers chats, projects, artifacts, custom bots, long-term memory, and context management. When a project points at a folder, Mitzi also works as a coding agent that edits files and runs commands there. A terminal version is included.
+An open-source, Claude-style AI workspace that runs on **any model available through [OpenRouter](https://openrouter.ai)**, or directly on **OpenAI, Anthropic, Google Gemini, xAI, Groq, Mistral, DeepSeek, Together, Ollama, LM Studio** or any OpenAI-compatible API with your own keys. It runs locally in your browser and offers chats, projects, artifacts, documents, custom bots, long-term memory, scheduled tasks, image/video/audio generation, voice conversations, and context management. When a project points at a folder, Mitzi also works as a coding agent that edits files and runs commands there. A terminal version is included.
 
 ![Chat with an artifact](docs/screenshots/chat-artifact.png)
 
@@ -13,6 +13,29 @@ An open-source, Claude-style AI workspace that runs on **any model available thr
 - Switch models per chat. The model picker is searchable and shows each model's price, context size, and vision and tool support.
 - One-click web search uses OpenRouter's `:online` option.
 - Chats get titles automatically. You can pin, rename, search, and move chats between projects.
+- **Branch** a chat from any answer: the new chat has the conversation up to that point (and copies of its artifacts), and the original stays as it was.
+- **Read aloud** any answer, with your browser's voices or a natural voice from OpenAI or ElevenLabs.
+- **Rate answers** with 👍 / 👎 and an optional comment. The bot distills each rating into a lesson ("Keep explanations short and lead with an example"), keeps it in mind in later chats and saves it to its memory bank. Lessons are listed, and can be removed, in the bot's settings.
+
+![A rating becomes a lesson](docs/screenshots/rating-lesson.png)
+
+**Providers.** Add as many providers as you like in Settings → Providers. Each provider's models appear in the model picker, grouped by provider, with ids like `openai:gpt-5`, `anthropic:claude-sonnet-4-5` or `google:gemini-2.5-pro`; OpenRouter ids stay as they are (`anthropic/claude-sonnet-4.5`). Anthropic is called through its native Messages API (with prompt caching); the others through their OpenAI-compatible APIs. Keys can also come from environment variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`, …).
+
+![Providers](docs/screenshots/providers.png)
+
+**Live conversation.** Press the waveform button in the message box to talk hands-free: Mitzi listens, answers out loud, and listens again. You can interrupt it mid-answer. It uses the browser's speech recognition, or a transcription model (e.g. Whisper) in browsers without one.
+
+**Media generation.** Bots can create images (OpenAI GPT Image, Google Imagen and Gemini "Nano Banana", or image models on OpenRouter), short videos (OpenAI Sora, Google Veo), speech, sound effects and music (ElevenLabs). Pick the models in Settings → Media & voice; results play inline in the chat and are saved locally.
+
+![Image generation](docs/screenshots/image-generation.png)
+
+**Docs.** A document workspace in the style of Gemini Canvas or Claude's docs. Write a brief and the bot drafts the document; then edit it yourself (Markdown, with a Read and a Write view), select any passage to comment on it or ask for a change, and let the bot work through your comments: it edits the document with targeted replacements, replies to comments and resolves them. Every change is versioned, and any version can be restored. Markdown artifacts open in Docs with one click.
+
+![Docs](docs/screenshots/docs.png)
+
+**Scheduled tasks.** Prompts that run on their own: once, every N minutes, daily, weekly or on a cron schedule. Each run is answered by the bot you choose (optionally in a project) and saved as a chat, either a new one per run or one continuing chat. The sidebar shows a badge when new results arrive. Tasks run while Mitzi is open; missed runs catch up when it starts. Tools that normally ask for permission are skipped in unattended runs unless you allow them for that task.
+
+![Scheduled tasks](docs/screenshots/scheduled-tasks.png)
 
 **Artifacts.** Substantial output opens in a side panel instead of cluttering the chat:
 - Supported types: documents, code files, web pages, React components, SVG graphics and Mermaid diagrams.
@@ -138,14 +161,17 @@ Settings live in `~/.mitzi/config.json`, and the app and the CLI share it. The a
 
 | Environment variable | Purpose |
 |---|---|
-| `OPENROUTER_API_KEY` | API key (overrides the config file) |
+| `OPENROUTER_API_KEY` | OpenRouter API key (overrides the config file) |
+| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`, `DEEPSEEK_API_KEY`, `TOGETHER_API_KEY`, `ELEVENLABS_API_KEY` | Keys for other providers; each one adds that provider |
 | `MITZI_MODEL` | Default model |
 | `OPENROUTER_BASE_URL` | Alternative API base URL |
 | `MITZI_HOME` | Data directory (default `~/.mitzi`) |
 
 Memory settings live in the app (Settings → Memory): the engine (built-in or a Hindsight server URL and key), an optional embedding model for semantic recall, and how many tokens of memories each message gets. The built-in engine uses your *fast model* for extraction and consolidation, so each exchange costs one or two small extra requests.
 
-App data (chats, projects, bots, artifacts and memory banks) is stored as JSON files in `~/.mitzi/data`.
+Providers added in the app are saved under `providers` in `~/.mitzi/config.json`. The CLI uses them too: `mitzi -m openai:gpt-5`.
+
+App data (chats, projects, bots, artifacts, documents, scheduled tasks and memory banks) is stored as JSON files in `~/.mitzi/data`; generated media are in `~/.mitzi/data/media`.
 
 > React and Mermaid artifacts load their runtime from public CDNs (unpkg, jsdelivr and the Tailwind CDN), so they need an internet connection. Web page, SVG, document and code artifacts work offline.
 

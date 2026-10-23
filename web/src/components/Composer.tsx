@@ -14,6 +14,10 @@ export interface ComposerHandle {
   focus(): void;
 }
 
+export function isProviderModel(id: string): boolean {
+  return /^[a-z0-9-]+:/.test(id);
+}
+
 interface Props {
   onSend(text: string, attachments: Attachment[]): void;
   running?: boolean;
@@ -35,6 +39,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   useAutoResize(ref, text);
+  // Other providers' models are prefixed ("openai:gpt-5"); :online search is an OpenRouter feature.
+  const searchable = !isProviderModel(props.model);
   const [commands, setCommands] = useState<SlashCommandInfo[]>([]);
   const [menuIndex, setMenuIndex] = useState(0);
   useEffect(() => {
@@ -186,9 +192,10 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
             <Paperclip size={17} />
           </button>
           <button
-            className={`pill-btn${props.webSearch ? ' on' : ''}`}
-            title="Let the model search the web (OpenRouter :online, adds cost)"
-            aria-pressed={props.webSearch}
+            className={`pill-btn${props.webSearch && searchable ? ' on' : ''}`}
+            title={searchable ? 'Let the model search the web (OpenRouter :online, adds cost)' : 'Web search works with OpenRouter models'}
+            aria-pressed={props.webSearch && searchable}
+            disabled={!searchable}
             onClick={() => props.onWebSearchChange(!props.webSearch)}
           >
             <Globe size={15} />

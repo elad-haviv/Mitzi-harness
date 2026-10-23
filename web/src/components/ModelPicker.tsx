@@ -63,9 +63,19 @@ export function ModelPicker({
     const rest = models.filter((m) => !FEATURED.includes(m.id) && matches(m)).sort((a, b) => a.name.localeCompare(b.name));
     const out: { section?: string; model?: ModelInfo; custom?: string; empty?: boolean }[] = [];
     if (allowEmpty && !q) out.push({ empty: true });
-    if (q.includes('/') && !models.some((m) => m.id === q)) out.push({ custom: query.trim() });
-    if (featured.length) out.push({ section: 'Popular' }, ...featured.map((model) => ({ model })));
-    if (rest.length) out.push({ section: q ? 'Matches' : 'All models' }, ...rest.slice(0, 300).map((model) => ({ model })));
+    if (/[/:]/.test(q) && !models.some((m) => m.id === q)) out.push({ custom: query.trim() });
+    if (featured.length) out.push({ section: 'Popular on OpenRouter' }, ...featured.map((model) => ({ model })));
+    // Directly connected providers first, then OpenRouter's catalog.
+    const groups = new Map<string, ModelInfo[]>();
+    for (const m of rest) {
+      const p = m.provider ?? 'OpenRouter';
+      groups.set(p, [...(groups.get(p) ?? []), m]);
+    }
+    const order = [...groups.keys()].sort((a, b) => Number(a === 'OpenRouter') - Number(b === 'OpenRouter') || a.localeCompare(b));
+    for (const p of order) {
+      const list = groups.get(p)!;
+      out.push({ section: order.length > 1 ? `${p} · ${list.length}` : q ? 'Matches' : 'All models' }, ...list.slice(0, 300).map((model) => ({ model })));
+    }
     return out;
   }, [models, query, allowEmpty]);
 
@@ -102,7 +112,7 @@ export function ModelPicker({
           <div className="picker-search">
             <input
               autoFocus
-              placeholder="Search models or type an id (vendor/model)"
+              placeholder="Search models, or type an id (vendor/model or provider:model)"
               value={query}
               onChange={(e) => {
                 setQuery(e.target.value);
@@ -138,7 +148,7 @@ export function ModelPicker({
                 return (
                   <button key="custom" className={cls} onMouseEnter={() => setFocus(index)} onClick={() => choose(item)}>
                     <span className="picker-name">Use “{item.custom}”</span>
-                    <span className="picker-meta">Custom OpenRouter model id</span>
+                    <span className="picker-meta">{item.custom.includes(':') && !item.custom.includes('/') ? 'Model id for a connected provider' : 'Custom OpenRouter model id'}</span>
                   </button>
                 );
               const m = item.model!;
