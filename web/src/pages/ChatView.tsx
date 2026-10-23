@@ -169,6 +169,23 @@ export function ChatView({
   const [draftWeb, setDraftWeb] = useState(false);
 
   const scroller = useRef<HTMLDivElement>(null);
+  // The latest prompt, shown pinned at the top once it has scrolled out of view above.
+  const [pinnedPrompt, setPinnedPrompt] = useState<string>();
+  const latestPrompt = () => {
+    const prompts = scroller.current?.querySelectorAll<HTMLElement>('[data-prompt]');
+    return prompts?.[prompts.length - 1];
+  };
+  const checkPinned = useCallback(() => {
+    const box = scroller.current;
+    const el = latestPrompt();
+    if (!box || !el) return setPinnedPrompt(undefined);
+    const above = el.getBoundingClientRect().bottom < box.getBoundingClientRect().top + 4;
+    const text = above ? (el.querySelector('.bubble')?.textContent ?? el.textContent ?? '').trim() : '';
+    setPinnedPrompt(text || undefined);
+  }, []);
+  useEffect(() => {
+    checkPinned();
+  }, [checkPinned, chat?.id, chat?.messages.length, live?.user]);
   const stick = useRef(true);
   const composer = useRef<ComposerHandle>(null);
   const currentId = useRef(chatId);
@@ -789,7 +806,11 @@ export function ChatView({
   // ---------- Conversation ----------
   const liveTurn = live && (
     <>
-      {live.user && <UserTurn message={live.user} />}
+      {live.user && (
+        <div className="turn-anchor" data-prompt="">
+          <UserTurn message={live.user} />
+        </div>
+      )}
       <div className="turn turn-assistant">
         <Avatar bot={bot} />
         <div className="assistant-body">
@@ -857,8 +878,22 @@ export function ChatView({
           const el = e.currentTarget;
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
           setScrolled(el.scrollTop > 4);
+          checkPinned();
         }}
       >
+        {pinnedPrompt && (
+          <div className="pinned-prompt-wrap">
+            <div className="pinned-prompt-row">
+              <button className="pinned-prompt" dir="auto" title="Go to your message" onClick={() => {
+                  // Going up stops following the answer as it streams.
+                  stick.current = false;
+                  latestPrompt()?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+                }}>
+                {pinnedPrompt}
+              </button>
+            </div>
+          </div>
+        )}
         <div className="messages-inner">
           {loading && (
             <div className="status-line" style={{ justifyContent: 'center', padding: 40 }}>
@@ -891,7 +926,7 @@ export function ChatView({
             if (t.kind === 'divider') return <CompactDivider key={`d${i}`} count={t.count} summary={chat?.summary} />;
             if (t.kind === 'user')
               return (
-                <div key={`u${t.index}`} className="turn-anchor" data-msg-start={t.index} data-msg-end={t.index}>
+                <div key={`u${t.index}`} className="turn-anchor" data-msg-start={t.index} data-msg-end={t.index} data-prompt={t.message.auto ? undefined : ''}>
                   <UserTurn message={t.message} disabled={running} onEdit={(text, att) => void send(text, att, t.index)} />
                 </div>
               );

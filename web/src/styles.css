@@ -7028,3 +7028,47 @@ button.todo-check:not(:disabled):hover {
   gap: 2px;
   margin-top: 12px;
 }
+
+/* ---------- The latest prompt, pinned while scrolled past ---------- */
+.pinned-prompt-wrap {
+  position: sticky;
+  top: 0;
+  height: 0;
+  z-index: 6;
+}
+.pinned-prompt-row {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 8px 28px 0;
+  display: flex;
+  justify-content: flex-end;
+}
+.pinned-prompt {
+  max-width: min(560px, 85%);
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-2);
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  text-align: start;
+  white-space: pre-wrap;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  box-shadow: var(--shadow-md, 0 6px 18px rgba(0, 0, 0, 0.12));
+  cursor: pointer;
+  animation: pinned-in 0.16s ease-out;
+}
+.pinned-prompt:hover {
+  border-color: var(--border-strong, var(--muted));
+}
+@keyframes pinned-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
