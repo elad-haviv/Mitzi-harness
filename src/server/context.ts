@@ -1,8 +1,8 @@
 import { COMPACT_PROMPT, renderForTranscript } from '../agent.js';
 import type { LlmClient, Message, ToolSpec } from '../openrouter.js';
 import { buildSystemPrompt } from '../prompt.js';
-import type { Artifact, Bot, Doc, Chat, ContextBreakdown, ContextSection, ModelInfo, Project, RecalledMemory, SkillInfo, UiSettings } from '../shared/types.js';
-import { docPrompt } from './docs.js';
+import type { Artifact, Bot, Chat, ContextBreakdown, ContextSection, ModelInfo, Project, RecalledMemory, SkillInfo, UiSettings } from '../shared/types.js';
+import { focusPrompt } from './workspace.js';
 import { skillsPrompt } from './extensions/skills.js';
 
 const DEFAULT_CONTEXT_LENGTH = 128_000;
@@ -23,8 +23,8 @@ export interface ChatSetup {
   artifacts: Artifact[];
   settings: UiSettings;
   toolNames: string[];
-  /** The document a doc chat works on. */
-  doc?: Doc;
+  /** The artifact open in the workspace beside the chat. */
+  focus?: Artifact;
 }
 
 interface PromptSection {
@@ -43,7 +43,10 @@ Prefer "update" for small edits to an existing artifact.
 - react: a single component file with a default export. React and its hooks are available (import from "react" is fine) \
 and Tailwind CSS classes work. No other packages can be imported.
 - svg: one <svg> element with a viewBox. mermaid: diagram source only, without code fences.
-- code: set language. markdown: GitHub-flavored markdown.`;
+- code: set language. markdown: GitHub-flavored markdown.
+- slides: a presentation in Markdown. Separate slides with a line containing only ---. Start with a title slide (# Title, \
+then a subtitle line); give each slide one ## heading and a few short bullets, a table, an image or a short quote. Aim \
+for 6–12 slides unless asked otherwise.`;
 
 function basePrompt(setup: ChatSetup): string {
   const date = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -121,8 +124,8 @@ export function promptSections(setup: ChatSetup): PromptSection[] {
     });
   }
 
-  if (setup.doc && toolNames.includes('DocEdit')) {
-    sections.push({ label: `Document: ${setup.doc.title}`, kind: 'project', text: docPrompt(setup.doc) });
+  if (setup.focus) {
+    sections.push({ label: `Open artifact: ${setup.focus.title}`, kind: 'project', text: focusPrompt(setup.focus) });
   }
 
   if (toolNames.includes('Skill') && setup.skills.length) {

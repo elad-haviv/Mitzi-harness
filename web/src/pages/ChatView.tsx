@@ -21,7 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, Artifact, Attachment, Chat, ChatMessage, DEFAULT_BOT_ID, Doc, RecalledMemory, StreamEvent } from '../api';
+import { api, Artifact, Attachment, Chat, ChatMessage, DEFAULT_BOT_ID, RecalledMemory, StreamEvent } from '../api';
 import { LiveMode } from '../components/LiveMode';
 import { speaker } from '../speech';
 import { ArtifactIcon, ArtifactView, TYPE_LABEL } from '../components/Artifacts';
@@ -66,7 +66,9 @@ export function ChatView({
   projectId,
   botId,
   embedded,
-  onDoc,
+  focus,
+  placeholder,
+  onArtifact,
   onTurnDone,
   sendRef,
 }: {
@@ -75,7 +77,11 @@ export function ChatView({
   botId?: string;
   /** Shown inside another page (a document's chat): no header or side panel. */
   embedded?: boolean;
-  onDoc?(doc: Doc): void;
+  /** The artifact open beside an embedded chat; messages sent here are about it. */
+  focus?: string;
+  placeholder?: string;
+  /** Told about artifacts the bot creates or changes. */
+  onArtifact?(a: Artifact): void;
   onTurnDone?(): void;
   /** Lets the host page send messages into this chat. */
   sendRef?: { current?: (text: string) => void };
@@ -96,8 +102,8 @@ export function ChatView({
   const [contextVersion, setContextVersion] = useState(0);
   const [confirmNode, confirm] = useConfirm();
   const [liveMode, setLiveMode] = useState(false);
-  const onDocRef = useRef(onDoc);
-  onDocRef.current = onDoc;
+  const onArtifactRef = useRef(onArtifact);
+  onArtifactRef.current = onArtifact;
 
   useEffect(() => {
     speaker.useServer = !!settings?.media.speechModel;
@@ -222,10 +228,9 @@ export function ChatView({
         break;
       case 'artifact':
         setArtifacts((list) => [e.artifact, ...list.filter((a) => a.id !== e.artifact.id)]);
-        setPanel({ kind: 'artifact', id: e.artifact.id });
-        break;
-      case 'doc':
-        onDocRef.current?.(e.doc);
+        onArtifactRef.current?.(e.artifact);
+        // Beside a workspace, the artifact is already on screen.
+        if (!embedded) setPanel({ kind: 'artifact', id: e.artifact.id });
         break;
       case 'status':
         setLive((l) => l && { ...l, status: e.message });
@@ -299,7 +304,7 @@ export function ChatView({
     }
     if (editIndex !== undefined) setChat((c) => c && { ...c, messages: c.messages.slice(0, editIndex) });
     const chatIdNow = id;
-    const after = await runStream(chatIdNow, (h) => api.send(chatIdNow, { content: text, attachments, editIndex }, h), optimisticUser(text, attachments));
+    const after = await runStream(chatIdNow, (h) => api.send(chatIdNow, { content: text, attachments, editIndex, focus }, h), optimisticUser(text, attachments));
     if (!after) return undefined;
     const lastUser = after.messages.findLastIndex((m) => m.role === 'user');
     return after.messages
@@ -373,7 +378,7 @@ export function ChatView({
     navigate(chat.projectId ? { page: 'project', id: chat.projectId } : { page: 'new' });
   };
 
-  const openArtifact = (a: Artifact, version?: number) => setPanel({ kind: 'artifact', id: a.id, version });
+  const openArtifact = (a: Artifact, version?: number) => (embedded ? navigate({ page: 'artifact', id: a.id }) : setPanel({ kind: 'artifact', id: a.id, version }));
   const { turns, results } = useMemo(() => buildTurns(chat?.messages ?? [], chat?.contextStart ?? 0), [chat?.messages, chat?.contextStart]);
   const lastAssistant = turns.findLastIndex((t) => t.kind === 'assistant');
   const activeArtifact = panel?.kind === 'artifact' ? artifacts.find((a) => a.id === panel.id) : undefined;
@@ -389,7 +394,7 @@ export function ChatView({
       onModelChange={(m) => (chat ? void updateChat({ model: m }) : setDraftModel(m))}
       webSearch={webSearch}
       onWebSearchChange={(on) => (chat ? void updateChat({ webSearch: on }) : setDraftWeb(on))}
-      placeholder={customBot ? `Message ${customBot.name}…` : project ? `Message Mitzi in ${project.name}…` : undefined}
+      placeholder={placeholder ?? (customBot ? `Message ${customBot.name}…` : project ? `Message Mitzi in ${project.name}…` : undefined)}
       autoFocus
       extra={
         <>
@@ -674,6 +679,7 @@ export function ChatView({
         }}
         expanded={expanded}
         onToggleExpand={() => setExpanded((x) => !x)}
+        onOpenWorkspace={() => navigate({ page: 'artifact', id: activeArtifact.id })}
       />
     );
   } else if (panel?.kind === 'context' && chat) {
@@ -722,7 +728,7 @@ export function ChatView({
       <div className="chat-col embedded">
         {isEmpty ? (
           <div className="embedded-empty">
-            <div className="muted small">Ask {customBot?.name ?? 'Mitzi'} to draft, rewrite, review or answer your comments. Changes appear in the document.</div>
+            <div className="muted small">Ask {customBot?.name ?? 'Mitzi'} to draft, rewrite, review or answer your comments. Changes appear on the left.</div>
             {composerNode}
           </div>
         ) : (

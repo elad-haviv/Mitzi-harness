@@ -1,8 +1,8 @@
 import hljs from 'highlight.js/lib/common';
-import { ChevronLeft, ChevronRight, Code, Download, ExternalLink, FileCode, FilePen, FileText, Globe, Image, Maximize2, Minimize2, Network, Shapes, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { api, Artifact, ArtifactType } from '../api';
-import { href, navigate } from '../router';
+import { ChevronLeft, ChevronRight, Code, Download, ExternalLink, FileCode, FileText, Globe, Image, ImageIcon, Maximize, Maximize2, Minimize2, Music, Network, PanelsTopLeft, Presentation, Shapes, SquareArrowOutUpRight, Video, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Artifact, ArtifactType } from '../api';
+import { href } from '../router';
 import { CopyButton, Markdown } from './Markdown';
 
 export function ArtifactIcon({ type, size = 18 }: { type: ArtifactType; size?: number }) {
@@ -10,9 +10,17 @@ export function ArtifactIcon({ type, size = 18 }: { type: ArtifactType; size?: n
     case 'html':
       return <Globe size={size} />;
     case 'react':
-      return <Shapes size={size} />;
+      return <PanelsTopLeft size={size} />;
     case 'svg':
-      return <Image size={size} />;
+      return <Shapes size={size} />;
+    case 'slides':
+      return <Presentation size={size} />;
+    case 'image':
+      return <ImageIcon size={size} />;
+    case 'video':
+      return <Video size={size} />;
+    case 'audio':
+      return <Music size={size} />;
     case 'mermaid':
       return <Network size={size} />;
     case 'code':
@@ -24,12 +32,88 @@ export function ArtifactIcon({ type, size = 18 }: { type: ArtifactType; size?: n
 
 export const TYPE_LABEL: Record<ArtifactType, string> = {
   markdown: 'Document',
+  slides: 'Presentation',
   code: 'Code',
   html: 'Web page',
-  react: 'React component',
-  svg: 'Image',
+  react: 'Component',
+  svg: 'Vector graphic',
   mermaid: 'Diagram',
+  image: 'Image',
+  video: 'Video',
+  audio: 'Audio',
 };
+
+export const isMedia = (type: ArtifactType) => type === 'image' || type === 'video' || type === 'audio';
+
+/** Splits a Markdown presentation into slides at lines containing only ---. */
+export function splitSlides(content: string): string[] {
+  const slides = content.split(/^\s*---\s*$/m).map((s) => s.trim());
+  return slides.filter((s, i) => s || i === 0);
+}
+
+/** A Markdown presentation: one slide at a time, with thumbnails and a full-screen mode. */
+export function SlidesView({ content, compact }: { content: string; compact?: boolean }) {
+  const slides = useMemo(() => splitSlides(content), [content]);
+  const [index, setIndex] = useState(0);
+  const stage = useRef<HTMLDivElement>(null);
+  const at = Math.min(index, slides.length - 1);
+  const go = useCallback((d: number) => setIndex((i) => Math.max(0, Math.min(slides.length - 1, i + d))), [slides.length]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!stage.current?.contains(document.activeElement) && document.fullscreenElement !== stage.current) return;
+      if (['ArrowRight', 'PageDown', ' '].includes(e.key)) (e.preventDefault(), go(1));
+      if (['ArrowLeft', 'PageUp'].includes(e.key)) (e.preventDefault(), go(-1));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [go]);
+  return (
+    <div className={`slides${compact ? ' compact' : ''}`}>
+      <div className="slide-stage" ref={stage} tabIndex={0} onClick={(e) => document.fullscreenElement && (e.clientX > window.innerWidth / 2 ? go(1) : go(-1))}>
+        <div className={`slide${at === 0 ? ' title-slide' : ''}`}>
+          <Markdown text={slides[at] ?? ''} />
+        </div>
+      </div>
+      <div className="slide-bar">
+        <button className="icon-btn sm" disabled={at === 0} onClick={() => go(-1)} aria-label="Previous slide">
+          <ChevronLeft size={16} />
+        </button>
+        <span className="small muted">
+          {at + 1} / {slides.length}
+        </span>
+        <button className="icon-btn sm" disabled={at >= slides.length - 1} onClick={() => go(1)} aria-label="Next slide">
+          <ChevronRight size={16} />
+        </button>
+        <div style={{ flex: 1 }} />
+        <button className="btn btn-sm btn-ghost" onClick={() => void stage.current?.requestFullscreen?.()} title="Present full screen (arrow keys to move)">
+          <Maximize size={14} /> Present
+        </button>
+      </div>
+      {!compact && slides.length > 1 && (
+        <div className="slide-thumbs">
+          {slides.map((s, i) => (
+            <button key={i} className={`slide-thumb${i === at ? ' on' : ''}`} onClick={() => setIndex(i)} aria-label={`Slide ${i + 1}`}>
+              <div className={`slide${i === 0 ? ' title-slide' : ''}`}>
+                <Markdown text={s} />
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function MediaView({ type, url, title }: { type: ArtifactType; url: string; title: string }) {
+  if (type === 'image') return <img className="media-view" src={url} alt={title} />;
+  if (type === 'video') return <video className="media-view" src={url} controls playsInline />;
+  return (
+    <div className="media-view audio">
+      <Music size={40} className="muted" />
+      <audio src={url} controls />
+    </div>
+  );
+}
 
 const ERROR_OVERLAY = `<script>
 window.addEventListener('error', function (e) {
@@ -84,9 +168,16 @@ export function artifactDocument(type: ArtifactType, content: string): string | 
   }
 }
 
-const EXT: Record<ArtifactType, string> = { markdown: 'md', code: 'txt', html: 'html', react: 'jsx', svg: 'svg', mermaid: 'mmd' };
+const EXT: Record<ArtifactType, string> = { markdown: 'md', slides: 'md', code: 'txt', html: 'html', react: 'jsx', svg: 'svg', mermaid: 'mmd', image: 'png', video: 'mp4', audio: 'mp3' };
 
-function download(artifact: Artifact, content: string) {
+export function download(artifact: Artifact, content: string) {
+  if (isMedia(artifact.type)) {
+    const a = document.createElement('a');
+    a.href = content;
+    a.download = `${artifact.title.replace(/[^\w.-]+/g, '-').replace(/^-|-$/g, '') || artifact.type}.${content.split('.').pop()}`;
+    a.click();
+    return;
+  }
   const ext = artifact.type === 'code' && artifact.language ? languageExt(artifact.language) : EXT[artifact.type];
   const name = `${artifact.title.replace(/[^\w.-]+/g, '-').replace(/^-|-$/g, '') || 'artifact'}.${ext}`;
   const url = URL.createObjectURL(new Blob([content], { type: 'text/plain' }));
@@ -124,6 +215,7 @@ export function ArtifactView({
   expanded,
   onToggleExpand,
   showChatLink,
+  onOpenWorkspace,
 }: {
   artifact: Artifact;
   version?: number;
@@ -131,13 +223,16 @@ export function ArtifactView({
   expanded?: boolean;
   onToggleExpand?(): void;
   showChatLink?: boolean;
+  /** Opens the artifact in its full workspace (with its chat beside it). */
+  onOpenWorkspace?(): void;
 }) {
   const latest = artifact.versions.length - 1;
   const [version, setVersion] = useState(versionProp ?? latest);
   useEffect(() => setVersion(versionProp ?? artifact.versions.length - 1), [artifact.id, artifact.versions.length, versionProp]);
   const content = artifact.versions[Math.min(version, latest)]?.content ?? '';
   const doc = artifactDocument(artifact.type, content);
-  const previewable = !!doc || artifact.type === 'markdown';
+  const previewable = !!doc || artifact.type === 'markdown' || artifact.type === 'slides';
+  const media = isMedia(artifact.type);
   const [tab, setTab] = useState<'preview' | 'code'>(previewable ? 'preview' : 'code');
   useEffect(() => setTab(previewable ? 'preview' : 'code'), [artifact.id, previewable]);
 
@@ -165,7 +260,7 @@ export function ArtifactView({
             </button>
           </div>
         )}
-        {previewable && (
+        {previewable && !media && (
           <div className="segmented">
             <button className={tab === 'preview' ? 'active' : ''} onClick={() => setTab('preview')}>
               Preview
@@ -175,20 +270,10 @@ export function ArtifactView({
             </button>
           </div>
         )}
-        <CopyButton text={() => content} label="Copy content" />
-        {artifact.type === 'markdown' && (
-          <button
-            className="icon-btn sm"
-            title="Open in Docs to edit it together with the bot"
-            aria-label="Open in Docs"
-            onClick={() =>
-              void api
-                .createDoc({ artifactId: artifact.id })
-                .then((d) => navigate({ page: 'doc', id: d.id }))
-                .catch((err) => alert(err.message))
-            }
-          >
-            <FilePen size={14} />
+        {!media && <CopyButton text={() => content} label="Copy content" />}
+        {onOpenWorkspace && (
+          <button className="icon-btn sm" title="Open in workspace: edit, comment and see versions" aria-label="Open in workspace" onClick={onOpenWorkspace}>
+            <SquareArrowOutUpRight size={14} />
           </button>
         )}
         <button className="icon-btn sm" title="Download" aria-label="Download" onClick={() => download(artifact, content)}>
@@ -219,8 +304,10 @@ export function ArtifactView({
             srcDoc={doc}
           />
         )}
+        {media && <MediaView type={artifact.type} url={content} title={artifact.title} />}
         {tab === 'preview' && artifact.type === 'markdown' && <Markdown text={content} />}
-        {tab === 'code' && <HighlightedCode code={content} language={artifact.type === 'code' ? artifact.language : artifact.type === 'react' ? 'jsx' : artifact.type === 'svg' ? 'xml' : artifact.type} />}
+        {tab === 'preview' && artifact.type === 'slides' && <SlidesView content={content} compact />}
+        {tab === 'code' && !media && <HighlightedCode code={content} language={artifact.type === 'code' ? artifact.language : artifact.type === 'react' ? 'jsx' : artifact.type === 'svg' ? 'xml' : artifact.type === 'slides' ? 'markdown' : artifact.type} />}
       </div>
     </>
   );

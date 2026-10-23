@@ -22,8 +22,7 @@ import type {
   PublicSettings,
   SettingsUpdate,
   StreamEvent,
-  Doc,
-  DocSummary,
+  ArtifactType,
   Lesson,
   MediaKind,
   MediaSettings,
@@ -34,12 +33,13 @@ import type {
 } from '../../src/shared/types';
 
 export type * from '../../src/shared/types';
-export { DEFAULT_BOT_ID } from '../../src/shared/types';
+export { DEFAULT_BOT_ID, TEXT_ARTIFACT_TYPES } from '../../src/shared/types';
 
 export type ProjectView = Project & { chatCount: number };
 export type ChatListItem = ChatSummary & { running?: boolean };
 export type ArtifactListItem = Artifact & { chatTitle?: string };
-export type DocView = Doc & { running: boolean };
+/** An artifact with what its workspace needs. */
+export type ArtifactWork = Artifact & { chatTitle?: string; running: boolean };
 export type TaskView = ScheduledTask & { running: boolean; description: string };
 export interface ProviderPresetView {
   kind: ProviderKind;
@@ -49,7 +49,7 @@ export interface ProviderPresetView {
   keyless: boolean;
   chat: boolean;
 }
-export type MediaOptions = Record<Exclude<keyof MediaSettings, 'voice'>, { id: string; label: string }[]>;
+export type MediaModels = Record<Exclude<keyof MediaSettings, 'voice'>, { id: string; name: string; provider: string }[]>;
 
 /** Adds the access token to a URL for the media endpoints that need it in a plain GET. */
 export function authHeaders(): Record<string, string> {
@@ -146,7 +146,7 @@ export const api = {
   updateChat: (id: string, body: Partial<{ title: string; model: string; pinned: boolean; webSearch: boolean; projectId: string | null }>) =>
     request<ChatSummary>('PATCH', `/api/chats/${id}`, body),
   deleteChat: (id: string) => request('DELETE', `/api/chats/${id}`),
-  send: (id: string, body: { content: string; attachments: Attachment[]; editIndex?: number }, onEvent: (e: StreamEvent) => void) =>
+  send: (id: string, body: { content: string; attachments: Attachment[]; editIndex?: number; focus?: string }, onEvent: (e: StreamEvent) => void) =>
     stream(`/api/chats/${id}/messages`, body, onEvent),
   regenerate: (id: string, onEvent: (e: StreamEvent) => void) => stream(`/api/chats/${id}/regenerate`, {}, onEvent),
   stop: (id: string) => request('POST', `/api/chats/${id}/stop`, {}),
@@ -175,7 +175,7 @@ export const api = {
     const q = new URLSearchParams(Object.entries(filter).filter(([, v]) => v) as [string, string][]).toString();
     return request<ArtifactListItem[]>('GET', `/api/artifacts${q ? `?${q}` : ''}`);
   },
-  artifact: (id: string) => request<Artifact>('GET', `/api/artifacts/${id}`),
+  artifact: (id: string) => request<ArtifactWork>('GET', `/api/artifacts/${id}`),
   deleteArtifact: (id: string) => request('DELETE', `/api/artifacts/${id}`),
 
   banks: () => request<BankSummary[]>('GET', '/api/banks'),
@@ -233,15 +233,13 @@ export const api = {
   lessons: (botId: string) => request<Lesson[]>('GET', `/api/bots/${botId}/lessons`),
   deleteLesson: (botId: string, id: string) => request<Lesson[]>('DELETE', `/api/bots/${botId}/lessons/${id}`),
 
-  docs: () => request<DocSummary[]>('GET', '/api/docs'),
-  doc: (id: string) => request<DocView>('GET', `/api/docs/${id}`),
-  createDoc: (body: { title?: string; content?: string; botId?: string; artifactId?: string }) => request<DocView>('POST', '/api/docs', body),
-  updateDoc: (id: string, body: { title?: string; content?: string }) => request<DocView>('PATCH', `/api/docs/${id}`, body),
-  deleteDoc: (id: string) => request('DELETE', `/api/docs/${id}`),
-  addDocComment: (id: string, quote: string, text: string) => request<DocView>('POST', `/api/docs/${id}/comments`, { quote, text }),
-  updateDocComment: (id: string, commentId: string, body: { reply?: string; resolved?: boolean }) => request<DocView>('PATCH', `/api/docs/${id}/comments/${commentId}`, body),
-  deleteDocComment: (id: string, commentId: string) => request<DocView>('DELETE', `/api/docs/${id}/comments/${commentId}`),
-  restoreDocVersion: (id: string, versionId: string) => request<DocView>('POST', `/api/docs/${id}/versions/${versionId}/restore`, {}),
+  createArtifact: (body: { type: ArtifactType; title: string; content?: string; botId?: string; projectId?: string; language?: string }) =>
+    request<ArtifactWork>('POST', '/api/artifacts', body),
+  updateArtifact: (id: string, body: { title?: string; content?: string }) => request<ArtifactWork>('PATCH', `/api/artifacts/${id}`, body),
+  addComment: (id: string, quote: string, text: string) => request<ArtifactWork>('POST', `/api/artifacts/${id}/comments`, { quote, text }),
+  updateComment: (id: string, commentId: string, body: { reply?: string; resolved?: boolean }) => request<ArtifactWork>('PATCH', `/api/artifacts/${id}/comments/${commentId}`, body),
+  deleteComment: (id: string, commentId: string) => request<ArtifactWork>('DELETE', `/api/artifacts/${id}/comments/${commentId}`),
+  restoreVersion: (id: string, index: number) => request<ArtifactWork>('POST', `/api/artifacts/${id}/versions/${index}/restore`, {}),
 
   tasks: () => request<TaskView[]>('GET', '/api/tasks'),
   createTask: (body: Partial<ScheduledTask>) => request<TaskView>('POST', '/api/tasks', body),
@@ -250,7 +248,7 @@ export const api = {
   runTask: (id: string) => request<TaskView>('POST', `/api/tasks/${id}/run`, {}),
   markTasksSeen: () => request('POST', '/api/tasks/seen', {}),
 
-  mediaOptions: () => request<{ options: MediaOptions; available: Record<MediaKind, boolean> }>('GET', '/api/media/options'),
+  mediaModels: () => request<{ models: MediaModels; available: Record<MediaKind, boolean> }>('GET', '/api/media/models'),
   /** Server text-to-speech; resolves to an audio blob. */
   tts: async (text: string, voice?: string): Promise<Blob> => {
     const res = await fetch('/api/tts', { method: 'POST', headers: { 'x-mitzi-token': token, 'content-type': 'application/json' }, body: JSON.stringify({ text, voice }) });

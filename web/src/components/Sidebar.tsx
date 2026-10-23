@@ -1,4 +1,4 @@
-import { Bot, Brain, CalendarClock, FileText, FolderOpen, GitBranch, KeyRound, Layers, PanelLeftClose, Pin, Plug, Puzzle, Search, Settings, SquarePen, WandSparkles } from 'lucide-react';
+import { Bot, Brain, CalendarClock, FolderOpen, GitBranch, KeyRound, Layers, PanelLeftClose, Pin, Plug, Puzzle, Search, Settings, SquarePen, WandSparkles } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { ChatListItem } from '../api';
 import { href, Route } from '../router';
@@ -42,7 +42,6 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
   const nav = [
     { route: { page: 'projects' } as Route, icon: <FolderOpen size={17} />, label: 'Projects', count: projects.length, match: ['projects', 'project'] },
     { route: { page: 'bots' } as Route, icon: <Bot size={17} />, label: 'Bots', count: bots.length, match: ['bots'] },
-    { route: { page: 'docs' } as Route, icon: <FileText size={17} />, label: 'Docs', match: ['docs', 'doc'] },
     { route: { page: 'artifacts' } as Route, icon: <Layers size={17} />, label: 'Artifacts', match: ['artifacts', 'artifact'] },
     { route: { page: 'tasks' } as Route, icon: <CalendarClock size={17} />, label: 'Scheduled', match: ['tasks'], badge: unseen },
     { route: { page: 'memory' } as Route, icon: <Brain size={17} />, label: 'Memory', match: ['memory'] },

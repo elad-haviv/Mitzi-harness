@@ -60,7 +60,7 @@ export class StarterService {
   private recentChats(bot: Bot) {
     return this.deps.store.chats
       .all()
-      .filter((c) => (c.botId ?? DEFAULT_BOT_ID) === bot.id && !c.docId && !c.taskId && c.messages.some((m) => m.role === 'user'))
+      .filter((c) => (c.botId ?? DEFAULT_BOT_ID) === bot.id && !c.taskId && c.messages.some((m) => m.role === 'user'))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .slice(0, 8);
   }

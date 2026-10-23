@@ -32,7 +32,7 @@ before(async () => {
     req.on('end', () => {
       if (req.url?.endsWith('/models')) {
         res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ data: [{ id: 'test/model', name: 'Test: Model', context_length: 100000, supported_parameters: ['tools'] }, { id: 'gpt-test' }] }));
+        res.end(JSON.stringify({ data: [{ id: 'test/model', name: 'Test: Model', context_length: 100000, supported_parameters: ['tools'] }, { id: 'gpt-test' }, { id: 'gpt-image-1' }, { id: 'tts-1' }, { id: 'whisper-1' }, { id: 'vendor/painter', name: 'Vendor: Painter', architecture: { output_modalities: ['image', 'text'] } }] }));
         return;
       }
       if (req.url?.endsWith('/images/generations')) {
@@ -260,29 +260,34 @@ test('ratings teach the bot lessons that shape later prompts', async () => {
   assert.equal((await call('POST', `/api/chats/${chat.id}/messages/0/rating`, { value: 1 })).status, 400);
 });
 
-test('documents: the bot edits, comments and versions a shared document', async () => {
-  const doc = (await call('POST', '/api/docs', { title: 'Trip notes', content: '# Trip\n\nWe go to Rome in May.' })).data;
-  assert.ok(doc.chatId);
-  // The companion chat stays out of the chat list.
-  assert.ok(!(await call('GET', '/api/chats')).data.some((c: any) => c.id === doc.chatId));
+test('artifact workspace: the bot edits, comments and versions an artifact', async () => {
+  const doc = (await call('POST', '/api/artifacts', { type: 'markdown', title: 'Trip notes', content: '# Trip\n\nWe go to Rome in May.' })).data;
+  assert.equal(doc.versions[0].author, 'user');
+  // A new artifact gets its own chat, listed like any other.
+  assert.ok((await call('GET', '/api/chats')).data.some((c: any) => c.id === doc.chatId));
+  assert.equal((await call('POST', '/api/artifacts', { type: 'image', title: 'x' })).status, 400);
 
-  const withComment = (await call('POST', `/api/docs/${doc.id}/comments`, { quote: 'Rome', text: 'Should we add Florence?' })).data;
+  const withComment = (await call('POST', `/api/artifacts/${doc.id}/comments`, { quote: 'Rome', text: 'Should we add Florence?' })).data;
   const commentId = withComment.comments[0].id;
 
   let turn = 0;
   reply = () => {
     turn++;
-    if (turn === 1) return toolCallChunks('d1', 'DocEdit', { old_str: 'Rome in May.', new_str: 'Rome and Florence in May.' });
-    if (turn === 2) return toolCallChunks('d2', 'DocComment', { action: 'resolve', id: commentId, text: 'Added Florence.' });
+    if (turn === 1) return toolCallChunks('d1', 'Artifact', { command: 'update', id: doc.id, old_str: 'Rome in May.', new_str: 'Rome and Florence in May.' });
+    if (turn === 2) return toolCallChunks('d2', 'ArtifactComment', { action: 'resolve', artifact_id: doc.id, comment_id: commentId, text: 'Added Florence.' });
     return textChunks('Added Florence to the plan.');
   };
-  const events = await send(doc.chatId, 'Please address my comment');
-  const docEvents = events.filter((e) => e.type === 'doc');
-  assert.equal(docEvents.length, 2);
-  assert.match(JSON.stringify(requests.filter((r) => !isBackground(r)).at(-3).messages[0]), /Document workspace[\s\S]*We go to Rome in May[\s\S]*Should we add Florence/);
+  const res = await fetch(`${base}/api/chats/${doc.chatId}/messages`, {
+    method: 'POST',
+    headers: { 'x-mitzi-token': TOKEN, 'content-type': 'application/json' },
+    body: JSON.stringify({ content: 'Please address my comment', focus: doc.id }),
+  });
+  const events = (await res.text()).split('\n\n').filter((f) => f.startsWith('data: ')).map((f) => JSON.parse(f.slice(6)));
+  assert.equal(events.filter((e) => e.type === 'artifact').length, 2);
+  assert.match(JSON.stringify(requests.filter((r) => !isBackground(r)).at(-3).messages[0]), /# Workspace[\s\S]*We go to Rome in May[\s\S]*Should we add Florence/);
 
-  const after = (await call('GET', `/api/docs/${doc.id}`)).data;
-  assert.equal(after.content, '# Trip\n\nWe go to Rome and Florence in May.');
+  const after = (await call('GET', `/api/artifacts/${doc.id}`)).data;
+  assert.equal(after.versions.at(-1).content, '# Trip\n\nWe go to Rome and Florence in May.');
   assert.equal(after.comments[0].resolved, true);
   assert.equal(after.comments[0].replies[0].text, 'Added Florence.');
   assert.deepEqual(
@@ -290,25 +295,35 @@ test('documents: the bot edits, comments and versions a shared document', async 
     ['user', 'assistant'],
   );
 
-  // User edits are saved, and old versions can be restored.
-  await call('PATCH', `/api/docs/${doc.id}`, { content: 'Rewritten by hand' });
-  const restored = (await call('POST', `/api/docs/${doc.id}/versions/${after.versions[0].id}/restore`)).data;
-  assert.equal(restored.content, '# Trip\n\nWe go to Rome in May.');
-  const list = (await call('GET', '/api/docs')).data;
-  assert.equal(list[0].id, doc.id);
-  assert.equal(list[0].openComments, 0);
+  // User edits are versions too, and old versions can be restored.
+  await call('PATCH', `/api/artifacts/${doc.id}`, { content: 'Rewritten by hand', title: 'Italy trip' });
+  const edited = (await call('GET', `/api/artifacts/${doc.id}`)).data;
+  assert.equal(edited.title, 'Italy trip');
+  assert.equal(edited.versions.at(-1).author, 'user');
+  const restored = (await call('POST', `/api/artifacts/${doc.id}/versions/0/restore`)).data;
+  assert.equal(restored.versions.at(-1).content, '# Trip\n\nWe go to Rome in May.');
+  assert.equal(restored.title, 'Trip notes');
 
-  // A failed edit is reported to the model, not applied.
-  reply = () => (turn++ === 3 ? toolCallChunks('d3', 'DocEdit', { old_str: 'Paris', new_str: 'Lyon' }) : textChunks('Sorry.'));
-  const failed = await send(doc.chatId, 'Change Paris');
-  assert.ok(failed.some((e) => e.type === 'tool_result' && e.isError && /not found/.test(e.output)));
+  // Without the workspace open, the next message isn't about the artifact.
+  reply = () => textChunks('Sure.');
+  await send(doc.chatId, 'Unrelated question');
+  assert.ok(!JSON.stringify(lastMain().messages[0]).includes('# Workspace'));
+});
 
-  // Documents can start from a markdown artifact; deleting a doc removes its chat.
-  const art = (await call('GET', '/api/artifacts')).data.find((a: any) => a.type === 'markdown');
-  const fromArt = (await call('POST', '/api/docs', { artifactId: art.id })).data;
-  assert.equal(fromArt.content, '# Plan');
-  await call('DELETE', `/api/docs/${fromArt.id}`);
-  assert.equal((await call('GET', `/api/chats/${fromArt.chatId}`)).status, 404);
+test('documents from before artifacts are migrated', async () => {
+  const { Store } = await import('../server/store.js');
+  const { migrateDocs } = await import('../server/workspace.js');
+  const store = new Store(tempDir());
+  store.chats.put({ id: 'chat1', title: 'Doc: Plan', docId: 'doc1', messages: [], contextStart: 0, allowedRules: [], usage: { promptTokens: 0, completionTokens: 0, cost: 0, requests: 0 }, lastPromptTokens: 0, webSearch: false, pinned: false, model: 'm', createdAt: '', updatedAt: '' } as any);
+  store.legacyDocs.put({ id: 'doc1', title: 'Plan', content: '# Plan v2', chatId: 'chat1', comments: [{ id: 'c1', quote: 'Plan', text: 'Hi', author: 'user', resolved: false, replies: [], createdAt: '' }], versions: [{ id: 'v1', title: 'Plan', content: '# Plan', author: 'assistant', createdAt: '' }], createdAt: '', updatedAt: '' });
+  migrateDocs(store);
+  const a = store.artifacts.get('doc1')!;
+  assert.equal(a.type, 'markdown');
+  assert.equal(a.chatId, 'chat1');
+  assert.deepEqual(a.versions.map((v) => v.content), ['# Plan', '# Plan v2']);
+  assert.equal(a.comments?.length, 1);
+  assert.equal((store.chats.get('chat1') as any).docId, undefined);
+  assert.equal(store.legacyDocs.all().length, 0);
 });
 
 test('scheduled tasks validate, run headless and record runs', async () => {
@@ -358,15 +373,26 @@ test('media: image generation tool, read-aloud and media files', async () => {
   const settings = (await call('PUT', '/api/settings', { media: { imageModel: 'studio:img-1', speechModel: 'studio:tts-1', bogus: 'x' } })).data;
   assert.equal(settings.media.imageModel, 'studio:img-1');
   assert.equal(settings.media.bogus, undefined);
-  const opts = (await call('GET', '/api/media/options')).data;
+  const opts = (await call('GET', '/api/media/models')).data;
   assert.equal(opts.available.image, true);
   assert.equal(opts.available.video, false);
+  // Media models come from the providers' own model lists.
+  assert.ok(opts.models.imageModel.some((m: any) => m.id === 'studio:gpt-image-1' && m.provider === 'OpenAI-compatible'));
+  assert.ok(opts.models.imageModel.some((m: any) => m.id === 'vendor/painter' && m.provider === 'OpenRouter'));
+  assert.ok(opts.models.speechModel.some((m: any) => m.id === 'studio:tts-1'));
+  assert.ok(opts.models.transcribeModel.some((m: any) => m.id === 'studio:whisper-1'));
+  assert.ok(!opts.models.speechModel.some((m: any) => m.id === 'studio:whisper-1'));
+  assert.deepEqual(opts.models.videoModel, []);
 
   let turn = 0;
   reply = () => (turn++ === 0 ? toolCallChunks('img1', 'GenerateImage', { prompt: 'a cat' }) : textChunks('Here is your cat.'));
   const chat = (await call('POST', '/api/chats', {})).data;
   const events = await send(chat.id, 'Draw a cat');
   const result = events.find((e) => e.type === 'tool_result');
+  // The image is also kept as an artifact of the chat.
+  const art = events.find((e) => e.type === 'artifact').artifact;
+  assert.equal(art.type, 'image');
+  assert.match(art.versions[0].content, /^\/media\/[a-f0-9]{32}\.png$/);
   const m = /MEDIA: (\/media\/[a-f0-9]{32}\.png) image\/png/.exec(result.output);
   assert.ok(m, result.output);
   // Media load without the token (img tags can't send headers), and support ranges.

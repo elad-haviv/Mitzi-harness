@@ -4,12 +4,12 @@ import { Sidebar } from './components/Sidebar';
 import { Toasts } from './components/ui';
 import { BotsPage } from './pages/Bots';
 import { ChatView } from './pages/ChatView';
-import { ArtifactPage, ArtifactsPage, SettingsPage } from './pages/Library';
+import { SettingsPage } from './pages/Library';
 import { MemoryPage } from './pages/Memory';
 import { ConnectorsPage } from './pages/Connectors';
 import { PluginsPage } from './pages/Plugins';
 import { SkillsPage } from './pages/Skills';
-import { DocPage, DocsPage } from './pages/Docs';
+import { ArtifactPage, ArtifactsPage } from './pages/Workspace';
 import { TasksPage } from './pages/Tasks';
 import { ProjectPage, ProjectsPage } from './pages/Projects';
 import { useRoute } from './router';
@@ -83,7 +83,7 @@ export function App() {
       page = <ArtifactsPage />;
       break;
     case 'artifact':
-      page = <ArtifactPage id={route.id} />;
+      page = <ArtifactPage key={route.id} id={route.id} />;
       break;
     case 'memory':
       page = <MemoryPage botId={route.botId} />;
@@ -99,12 +99,6 @@ export function App() {
       break;
     case 'plugins':
       page = <PluginsPage />;
-      break;
-    case 'docs':
-      page = <DocsPage />;
-      break;
-    case 'doc':
-      page = <DocPage key={route.id} id={route.id} />;
       break;
     case 'tasks':
       page = <TasksPage />;

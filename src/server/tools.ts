@@ -1,8 +1,9 @@
-import type { Artifact, ArtifactType } from '../shared/types.js';
+import { Artifact, ArtifactType, TEXT_ARTIFACT_TYPES } from '../shared/types.js';
 import { Tool, ToolError } from '../tools/types.js';
 import { newId, now, Store } from './store.js';
 
-const ARTIFACT_TYPES: ArtifactType[] = ['markdown', 'code', 'html', 'react', 'svg', 'mermaid'];
+/** Types the model writes itself; image, video and audio artifacts come from the media tools. */
+const ARTIFACT_TYPES: ArtifactType[] = ['markdown', 'slides', 'code', 'html', 'react', 'svg', 'mermaid'];
 
 interface ArtifactArgs {
   command: 'create' | 'update' | 'rewrite';
@@ -21,7 +22,7 @@ export function artifactTool(store: Store, chatId: string, projectId: string | u
     kind: 'read',
     description:
       'Create or change an artifact: substantial, self-contained content shown in a panel beside the chat ' +
-      '(documents, code files, web pages, React components, SVG graphics, Mermaid diagrams). ' +
+      '(documents, presentations, code files, web pages, React components, SVG graphics, Mermaid diagrams). ' +
       '"create" needs type, title and content and returns the new artifact id. ' +
       '"update" replaces old_str (must match exactly once) with new_str in an existing artifact; use it for small changes. ' +
       '"rewrite" replaces the whole content (and optionally the title).',
@@ -51,7 +52,7 @@ export function artifactTool(store: Store, chatId: string, projectId: string | u
           title: args.title?.trim() || 'Untitled',
           type: args.type,
           language: args.language,
-          versions: [{ content: args.content, createdAt: now(), callId: ctx.callId }],
+          versions: [{ content: args.content, author: 'assistant', createdAt: now(), callId: ctx.callId }],
           createdAt: now(),
           updatedAt: now(),
         };
@@ -61,6 +62,7 @@ export function artifactTool(store: Store, chatId: string, projectId: string | u
       }
 
       const artifact = args.id ? store.artifacts.get(args.id) : undefined;
+      if (artifact && !TEXT_ARTIFACT_TYPES.includes(artifact.type)) throw new ToolError(`Artifact ${artifact.id} is ${artifact.type}; generate a new one instead of editing it.`);
       if (!artifact || artifact.chatId !== chatId) throw new ToolError(`No artifact with id "${args.id}" in this chat.`);
       const current = artifact.versions.at(-1)!.content;
       let next: string;
@@ -76,7 +78,7 @@ export function artifactTool(store: Store, chatId: string, projectId: string | u
       } else {
         throw new ToolError('command must be create, update or rewrite');
       }
-      artifact.versions.push({ content: next, createdAt: now(), callId: ctx.callId });
+      artifact.versions.push({ content: next, title: artifact.title, author: 'assistant', createdAt: now(), callId: ctx.callId });
       artifact.updatedAt = now();
       store.artifacts.put(artifact);
       onChange(artifact);

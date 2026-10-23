@@ -32,6 +32,8 @@ export function ModelPicker({
   variant = 'pill',
   direction = 'up',
   allowEmpty,
+  options,
+  emptyHint,
 }: {
   value: string;
   onChange(id: string): void;
@@ -39,9 +41,26 @@ export function ModelPicker({
   direction?: 'up' | 'down';
   /** Shows a "Default" choice that maps to an empty value. */
   allowEmpty?: string;
+  /** Models to choose from instead of the chat models (e.g. image models). */
+  options?: ModelInfo[];
+  /** Shown when there are no options. */
+  emptyHint?: string;
 }) {
-  const { models, modelsError } = useApp();
+  const app = useApp();
+  const models = options ?? app.models;
+  const modelsError = options ? (options.length ? undefined : emptyHint) : app.modelsError;
   const [open, setOpen] = useState(false);
+  // Opens toward whichever side of the screen has room.
+  const [side, setSide] = useState(direction);
+  const toggle = () => {
+    const rect = wrap.current?.getBoundingClientRect();
+    if (rect) {
+      const below = window.innerHeight - rect.bottom;
+      const preferred = direction === 'down' ? below >= 360 || below >= rect.top : rect.top < 360 && below > rect.top;
+      setSide(preferred ? 'down' : 'up');
+    }
+    setOpen((o) => !o);
+  };
   const [query, setQuery] = useState('');
   const [focus, setFocus] = useState(0);
   const wrap = useRef<HTMLDivElement>(null);
@@ -59,8 +78,8 @@ export function ModelPicker({
   const items = useMemo(() => {
     const q = query.trim().toLowerCase();
     const matches = (m: ModelInfo) => !q || m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q);
-    const featured = FEATURED.map((id) => models.find((m) => m.id === id)).filter((m): m is ModelInfo => !!m && matches(m));
-    const rest = models.filter((m) => !FEATURED.includes(m.id) && matches(m)).sort((a, b) => a.name.localeCompare(b.name));
+    const featured = (options ? [] : FEATURED).map((id) => models.find((m) => m.id === id)).filter((m): m is ModelInfo => !!m && matches(m));
+    const rest = models.filter((m) => (options || !FEATURED.includes(m.id)) && matches(m)).sort((a, b) => a.name.localeCompare(b.name));
     const out: { section?: string; model?: ModelInfo; custom?: string; empty?: boolean }[] = [];
     if (allowEmpty && !q) out.push({ empty: true });
     if (/[/:]/.test(q) && !models.some((m) => m.id === q)) out.push({ custom: query.trim() });
@@ -77,7 +96,7 @@ export function ModelPicker({
       out.push({ section: order.length > 1 ? `${p} · ${list.length}` : q ? 'Matches' : 'All models' }, ...list.slice(0, 300).map((model) => ({ model })));
     }
     return out;
-  }, [models, query, allowEmpty]);
+  }, [models, query, allowEmpty, options]);
 
   const selectable = items.filter((i) => !i.section);
   const choose = (i: (typeof items)[number]) => {
@@ -91,16 +110,16 @@ export function ModelPicker({
     listRef.current?.querySelector('.focused')?.scrollIntoView({ block: 'nearest' });
   }, [focus]);
 
-  const label = value ? modelLabel(value, models) : allowEmpty ?? 'Choose a model';
+  const label = value ? modelLabel(value, models) : (allowEmpty ?? 'Choose a model');
   return (
     <div className="menu-wrap" ref={wrap}>
       {variant === 'pill' ? (
-        <button type="button" className="pill-btn" onClick={() => setOpen((o) => !o)} title={value}>
+        <button type="button" className="pill-btn" onClick={toggle} title={value}>
           <span>{label}</span>
           <ChevronDown size={14} />
         </button>
       ) : (
-        <button type="button" className="input" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', textAlign: 'left' }} onClick={() => setOpen((o) => !o)}>
+        <button type="button" className="input" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', textAlign: 'left' }} onClick={toggle}>
           <span>
             {label} {value && <span className="muted small">· {value}</span>}
           </span>
@@ -108,7 +127,7 @@ export function ModelPicker({
         </button>
       )}
       {open && (
-        <div className="picker" style={direction === 'up' ? { bottom: 'calc(100% + 6px)', left: 0 } : { top: 'calc(100% + 6px)', left: 0 }}>
+        <div className="picker" style={side === 'up' ? { bottom: 'calc(100% + 6px)', left: 0 } : { top: 'calc(100% + 6px)', left: 0 }}>
           <div className="picker-search">
             <input
               autoFocus
@@ -133,7 +152,7 @@ export function ModelPicker({
             />
           </div>
           <div className="picker-list" ref={listRef}>
-            {modelsError && !models.length && <div className="picker-section" style={{ textTransform: 'none' }}>{modelsError} Type a model id to use it.</div>}
+            {modelsError && !models.length && <div className="picker-section" style={{ textTransform: 'none' }}>{modelsError} You can also type a model id.</div>}
             {items.map((item, idx) => {
               if (item.section) return <div key={`s${idx}`} className="picker-section">{item.section}</div>;
               const index = selectable.indexOf(item);

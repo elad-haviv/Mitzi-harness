@@ -20,6 +20,7 @@ import {
   Volume2,
   History,
   Loader2,
+  MessageSquare,
   Paperclip,
   Pencil,
   Plug,
@@ -503,10 +504,8 @@ function toolIcon(name: string): ReactNode {
     case 'GenerateSound':
     case 'GenerateMusic':
       return <Music size={13} />;
-    case 'DocEdit':
-    case 'DocRewrite':
-    case 'DocComment':
-      return <FileText size={13} />;
+    case 'ArtifactComment':
+      return <MessageSquare size={13} />;
     default:
       return name.startsWith('mcp__') ? <Plug size={13} /> : <Wrench size={13} />;
   }
@@ -520,9 +519,7 @@ function displayName(name: string): string {
 
 function toolSummary(name: string, args: any, fallback?: string): string {
   if (fallback) return fallback;
-  if (name === 'DocEdit') return String(args.old_str ?? '').split('\n')[0].slice(0, 80);
-  if (name === 'DocRewrite') return args.title ? `Rewrote “${args.title}”` : 'Rewrote the document';
-  if (name === 'DocComment') return `${args.action ?? ''}${args.text ? `: ${args.text}` : ''}`;
+  if (name === 'ArtifactComment') return `${args.action ?? ''}${args.text ? `: ${args.text}` : ''}`;
   return args.file_path ?? args.command ?? args.pattern ?? args.url ?? args.path ?? args.prompt ?? args.text ?? '';
 }
 

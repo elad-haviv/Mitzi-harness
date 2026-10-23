@@ -81,7 +81,8 @@ export class Store {
   readonly mcpServers: Collection<McpServerConfig>;
   readonly plugins: Collection<PluginInfo>;
   readonly marketplaces: Collection<MarketplaceInfo>;
-  readonly docs: Collection<Doc>;
+  /** Documents from before they became artifacts, kept only until they're migrated. */
+  readonly legacyDocs: Collection<Doc>;
   readonly tasks: Collection<ScheduledTask>;
   /** Pre-memory-bank memories, kept only until they're migrated. */
   readonly legacyMemories: Collection<LegacyMemory>;
@@ -97,7 +98,7 @@ export class Store {
     this.mcpServers = new Collection(join(root, 'mcp'), 0o600);
     this.plugins = new Collection(join(root, 'plugins'));
     this.marketplaces = new Collection(join(root, 'marketplaces'));
-    this.docs = new Collection(join(root, 'docs'));
+    this.legacyDocs = new Collection(join(root, 'docs'));
     this.tasks = new Collection(join(root, 'tasks'));
     this.settingsPath = join(root, 'settings.json');
     try {

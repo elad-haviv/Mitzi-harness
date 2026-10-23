@@ -25,24 +25,29 @@ An open-source, Claude-style AI workspace that runs on **any model available thr
 
 **Live conversation.** Press the waveform button in the message box to talk hands-free: Mitzi listens, answers out loud, and listens again. You can interrupt it mid-answer. It uses the browser's speech recognition, or a transcription model (e.g. Whisper) in browsers without one.
 
-**Media generation.** Bots can create images (OpenAI GPT Image, Google Imagen and Gemini "Nano Banana", or image models on OpenRouter), short videos (OpenAI Sora, Google Veo), speech, sound effects and music (ElevenLabs). Pick the models in Settings → Media & voice; results play inline in the chat and are saved locally.
+**Media generation.** Bots can create images (OpenAI GPT Image, Google Imagen and Gemini "Nano Banana", or image models on OpenRouter), short videos (OpenAI Sora, Google Veo), speech, sound effects and music (ElevenLabs). In Settings → Media & voice, each kind has the same searchable model picker as chat models, filled from your providers' own model lists. Results play inline in the chat and are saved as artifacts.
 
 ![Image generation](docs/screenshots/image-generation.png)
 
-**Docs.** A document workspace in the style of Gemini Canvas or Claude's docs. Write a brief and the bot drafts the document; then edit it yourself (Markdown, with a Read and a Write view), select any passage to comment on it or ask for a change, and let the bot work through your comments: it edits the document with targeted replacements, replies to comments and resolves them. Every change is versioned, and any version can be restored. Markdown artifacts open in Docs with one click.
-
-![Docs](docs/screenshots/docs.png)
 
 **Scheduled tasks.** Prompts that run on their own: once, every N minutes, daily, weekly or on a cron schedule. Each run is answered by the bot you choose (optionally in a project) and saved as a chat, either a new one per run or one continuing chat. The sidebar shows a badge when new results arrive. Tasks run while Mitzi is open; missed runs catch up when it starts. Tools that normally ask for permission are skipped in unattended runs unless you allow them for that task.
 
 ![Scheduled tasks](docs/screenshots/scheduled-tasks.png)
 
 **Artifacts.** Substantial output opens in a side panel instead of cluttering the chat:
-- Supported types: documents, code files, web pages, React components, SVG graphics and Mermaid diagrams.
-- Web pages, components, SVG and diagrams render live in a sandboxed frame.
-- Each change is kept as a version you can step through. You can also copy, download or expand any artifact.
+- Types: documents, presentations, web pages, React components, code files, SVG graphics, Mermaid diagrams, and generated images, video and audio.
+- Web pages, components, SVG and diagrams render live in a sandboxed frame; presentations show as slides with a full-screen presenter mode.
 - The model edits artifacts in place with small targeted updates instead of rewriting them each time.
-- All artifacts are collected in a gallery.
+- All artifacts are collected in a gallery. Start a new document, presentation, web page, component, script or diagram there from a short brief, and the bot makes the first version.
+
+**Workspace.** Open any artifact to work on it in the style of Gemini Canvas or Claude's docs: the artifact on the left, its chat on the right.
+- Edit it yourself (a Read/Write view for documents and slides, Preview/Code for web pages and components), or ask the bot for changes.
+- Select any passage to comment on it or ask about it. "Address all" has the bot work through your comments: it makes the changes, replies and resolves each thread.
+- Every change, yours or the bot's, is a version you can view and restore.
+
+![Workspace](docs/screenshots/docs.png)
+
+![Presentation](docs/screenshots/presentation.png)
 
 **Projects** group chats around shared context:
 - *Instructions* are added to every chat in the project.

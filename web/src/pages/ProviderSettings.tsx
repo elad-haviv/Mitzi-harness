@@ -1,6 +1,7 @@
 import { AlertTriangle, Check, ExternalLink, KeyRound, Loader2, Mic, Plus, RefreshCw, Trash2, Volume2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { api, MediaOptions, MediaSettings, ProviderKind, ProviderPresetView, ProviderView } from '../api';
+import { api, MediaModels, MediaSettings, ModelInfo, ProviderKind, ProviderPresetView, ProviderView } from '../api';
+import { ModelPicker } from '../components/ModelPicker';
 import { Modal, Toggle } from '../components/ui';
 import { browserVoices, loadVoicePrefs, saveVoicePrefs, speaker } from '../speech';
 import { useApp } from '../state';
@@ -248,24 +249,27 @@ function KeyModal({
 
 // ---------- Media & voice ----------
 
-const MEDIA_FIELDS: { key: keyof MediaOptions; label: string; hint: string }[] = [
-  { key: 'imageModel', label: 'Images', hint: 'Lets bots create images with the GenerateImage tool.' },
-  { key: 'videoModel', label: 'Video', hint: 'Short clips; slow and costly, so the bot asks before each one.' },
-  { key: 'speechModel', label: 'Speech (text to speech)', hint: 'Natural voices for read-aloud and live mode. Without it, your browser’s voices are used.' },
-  { key: 'soundModel', label: 'Sound effects', hint: 'Sound design from a description.' },
-  { key: 'musicModel', label: 'Music', hint: 'Original music from a description.' },
-  { key: 'transcribeModel', label: 'Transcription (speech to text)', hint: 'For live mode in browsers without built-in speech recognition (Firefox, some Safari).' },
+const MEDIA_FIELDS: { key: keyof MediaModels; label: string; hint: string; empty: string }[] = [
+  { key: 'imageModel', label: 'Images', hint: 'Lets bots create images.', empty: 'Add OpenAI, Google, OpenRouter or another provider with image models.' },
+  { key: 'videoModel', label: 'Video', hint: 'Short clips; slow and costly, so the bot asks before each one.', empty: 'Add OpenAI (Sora) or Google (Veo) to generate video.' },
+  { key: 'speechModel', label: 'Speech (text to speech)', hint: 'Natural voices for read-aloud and live mode. Without it, your browser’s voices are used.', empty: 'Add OpenAI or ElevenLabs for natural voices.' },
+  { key: 'soundModel', label: 'Sound effects', hint: 'Sound design from a description.', empty: 'Add ElevenLabs to generate sound effects.' },
+  { key: 'musicModel', label: 'Music', hint: 'Original music from a description.', empty: 'Add ElevenLabs to generate music.' },
+  { key: 'transcribeModel', label: 'Transcription (speech to text)', hint: 'For live mode in browsers without built-in speech recognition (Firefox, some Safari).', empty: 'Add OpenAI or Groq (Whisper) for transcription.' },
 ];
 
 export function MediaSettingsSection() {
-  const { settings, refreshSettings, toast } = useApp();
-  const [options, setOptions] = useState<MediaOptions>();
+  const { settings, refreshSettings, toast, models } = useApp();
+  const [catalog, setCatalog] = useState<MediaModels>();
   const [prefs, setPrefs] = useState(loadVoicePrefs);
   const [voices, setVoices] = useState(browserVoices);
   const [voiceId, setVoiceId] = useState(settings?.media.voice ?? '');
 
+  // The chat model list reloads whenever providers change; media models follow it.
   useEffect(() => {
-    api.mediaOptions().then((r) => setOptions(r.options), () => {});
+    api.mediaModels().then((r) => setCatalog(r.models), () => {});
+  }, [models]);
+  useEffect(() => {
     if (typeof speechSynthesis === 'undefined') return;
     const update = () => setVoices(speechSynthesis.getVoices());
     speechSynthesis.addEventListener('voiceschanged', update);
@@ -296,7 +300,19 @@ export function MediaSettingsSection() {
         Pick models for each kind of media. They use the providers above (OpenAI, Google, OpenRouter, ElevenLabs). Any <code>provider:model</code> id works.
       </p>
       {MEDIA_FIELDS.map((f) => (
-        <MediaField key={f.key} label={f.label} hint={f.hint} value={settings.media[f.key]} options={options?.[f.key] ?? []} onChange={(v) => void save({ [f.key]: v })} />
+        <div key={f.key} className="field">
+          <span className="field-label">{f.label}</span>
+          <ModelPicker
+            value={settings.media[f.key]}
+            onChange={(v) => void save({ [f.key]: v })}
+            variant="input"
+            direction="down"
+            allowEmpty="Off"
+            options={catalog ? catalog[f.key].map((m): ModelInfo => ({ ...m, tools: true, vision: false })) : []}
+            emptyHint={catalog ? f.empty : 'Loading models…'}
+          />
+          <span className="field-hint">{f.hint}</span>
+        </div>
       ))}
       {settings.media.speechModel && (
         <form
@@ -366,52 +382,5 @@ export function MediaSettingsSection() {
         </div>
       )}
     </section>
-  );
-}
-
-function MediaField({ label, hint, value, options, onChange }: { label: string; hint: string; value: string; options: { id: string; label: string }[]; onChange(v: string): void }) {
-  const known = !value || options.some((o) => o.id === value);
-  const [custom, setCustom] = useState(!known);
-  const [text, setText] = useState(value);
-  return (
-    <div className="field">
-      <span className="field-label">{label}</span>
-      <div className="row">
-        <select
-          className="select"
-          style={{ flex: 1 }}
-          value={custom ? '__custom' : value}
-          onChange={(e) => {
-            if (e.target.value === '__custom') return setCustom(true);
-            setCustom(false);
-            onChange(e.target.value);
-          }}
-        >
-          <option value="">Off</option>
-          {options.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.label}
-            </option>
-          ))}
-          <option value="__custom">Other model id…</option>
-        </select>
-        {custom && (
-          <form
-            className="row"
-            style={{ flex: 1 }}
-            onSubmit={(e) => {
-              e.preventDefault();
-              onChange(text.trim());
-            }}
-          >
-            <input className="input mono" placeholder="provider:model" value={text} onChange={(e) => setText(e.target.value)} />
-            <button className="btn" disabled={text.trim() === value}>
-              Save
-            </button>
-          </form>
-        )}
-      </div>
-      <span className="field-hint">{hint}</span>
-    </div>
   );
 }

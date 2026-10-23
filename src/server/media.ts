@@ -3,8 +3,8 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { PROVIDER_PRESETS, ResolvedProvider, RoutingClient } from '../providers.js';
-import type { MediaKind, MediaSettings } from '../shared/types.js';
+import { PROVIDER_PRESETS, ResolvedProvider, RoutingClient, usable } from '../providers.js';
+import type { MediaKind, MediaSettings, ProviderKind } from '../shared/types.js';
 import { Tool, ToolError } from '../tools/types.js';
 
 const EXT: Record<string, string> = {
@@ -45,7 +45,7 @@ export const MEDIA_OPTIONS: Record<keyof Omit<MediaSettings, 'voice'>, { id: str
     { id: 'elevenlabs:eleven_multilingual_v2', label: 'ElevenLabs Multilingual v2' },
     { id: 'elevenlabs:eleven_flash_v2_5', label: 'ElevenLabs Flash v2.5' },
   ],
-  soundModel: [{ id: 'elevenlabs:sound-effects', label: 'ElevenLabs Sound Effects' }],
+  soundModel: [{ id: 'elevenlabs:eleven_text_to_sound_v2', label: 'ElevenLabs Sound Effects v2' }],
   musicModel: [{ id: 'elevenlabs:music_v1', label: 'ElevenLabs Music' }],
   transcribeModel: [
     { id: 'openai:gpt-4o-mini-transcribe', label: 'OpenAI GPT-4o mini Transcribe' },
@@ -55,6 +55,45 @@ export const MEDIA_OPTIONS: Record<keyof Omit<MediaSettings, 'voice'>, { id: str
 };
 
 const GEMINI = 'https://generativelanguage.googleapis.com/v1beta';
+
+/** Providers whose media endpoints follow OpenAI's API (images, speech, transcription). */
+function openAiCompatible(kind: ProviderKind): boolean {
+  return !['anthropic', 'google', 'openrouter', 'elevenlabs'].includes(kind);
+}
+
+export type MediaField = keyof Omit<MediaSettings, 'voice'>;
+
+export interface MediaModel {
+  id: string;
+  name: string;
+  provider: string;
+}
+
+/** Which media each provider can do through MediaService, and how to spot those models in its list. */
+const KIND_PATTERNS: Partial<Record<MediaField, RegExp>> = {
+  imageModel: /(gpt-image|dall-e|imagen|flux|stable-diffusion|sdxl|sd3|grok-\d?-?image|image)/i,
+  videoModel: /(sora|veo)/i,
+  speechModel: /(tts|speech)/i,
+  transcribeModel: /(whisper|transcribe)/i,
+};
+
+function supports(kind: ProviderKind, field: MediaField): boolean {
+  switch (field) {
+    case 'imageModel':
+      return kind !== 'anthropic' && kind !== 'elevenlabs';
+    case 'videoModel':
+      return kind === 'openai' || kind === 'google';
+    case 'speechModel':
+      return openAiCompatible(kind) || kind === 'elevenlabs';
+    case 'transcribeModel':
+      return openAiCompatible(kind);
+    case 'soundModel':
+    case 'musicModel':
+      return kind === 'elevenlabs';
+  }
+}
+
+const label = (id: string) => id.replace(/^models\//, '').replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 const sleep = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
     const t = setTimeout(resolve, ms);
@@ -121,7 +160,7 @@ export class MediaService {
     if (!id) throw new ToolError('No image model is set up (Settings → Media & voice).');
     const { provider, model, base, key } = this.resolve(id);
     const aspect = opts.aspect ?? '1:1';
-    if (provider.kind === 'openai' || provider.kind === 'custom') {
+    if (openAiCompatible(provider.kind)) {
       const size = aspect === '16:9' || aspect === '3:2' ? '1536x1024' : aspect === '9:16' || aspect === '2:3' ? '1024x1536' : '1024x1024';
       const res = await check(
         await fetch(`${base}/images/generations`, {
@@ -238,7 +277,7 @@ export class MediaService {
     if (!s.speechModel) throw new ToolError('No speech model is set up (Settings → Media & voice).');
     const { provider, model, base, key } = this.resolve(s.speechModel);
     const v = voice || s.voice;
-    if (provider.kind === 'openai' || provider.kind === 'custom') {
+    if (openAiCompatible(provider.kind)) {
       const res = await check(
         await fetch(`${base}/audio/speech`, {
           method: 'POST',
@@ -270,13 +309,13 @@ export class MediaService {
   async sound(prompt: string, seconds?: number, signal?: AbortSignal): Promise<MediaFile> {
     const id = this.settings().soundModel;
     if (!id) throw new ToolError('No sound-effects model is set up (Settings → Media & voice).');
-    const { provider, base, key } = this.resolve(id);
+    const { provider, model, base, key } = this.resolve(id);
     if (provider.kind !== 'elevenlabs') throw new ToolError('Sound effects need ElevenLabs.');
     const res = await check(
       await fetch(`${base}/v1/sound-generation`, {
         method: 'POST',
         headers: { 'xi-api-key': key, 'content-type': 'application/json' },
-        body: JSON.stringify({ text: prompt, ...(seconds ? { duration_seconds: Math.min(22, Math.max(0.5, seconds)) } : {}) }),
+        body: JSON.stringify({ text: prompt, ...(model.startsWith('eleven_') ? { model_id: model } : {}), ...(seconds ? { duration_seconds: Math.min(22, Math.max(0.5, seconds)) } : {}) }),
         signal,
       }),
       'Sound generation',
@@ -312,6 +351,67 @@ export class MediaService {
     return String(((await res.json()) as { text?: string }).text ?? '').trim();
   }
 
+  private catalog?: { key: string; at: number; models: Record<MediaField, MediaModel[]> };
+
+  /** Media models offered by the configured providers, by setting. Listed live where the provider allows it. */
+  async models(): Promise<Record<MediaField, MediaModel[]>> {
+    const providers = this.router().providers.filter((p) => usable(p));
+    const key = JSON.stringify(providers.map((p) => [p.id, p.kind, p.baseUrl, !!p.apiKey]));
+    if (this.catalog?.key === key && Date.now() - this.catalog.at < 3600_000) return this.catalog.models;
+    const out: Record<MediaField, MediaModel[]> = { imageModel: [], videoModel: [], speechModel: [], soundModel: [], musicModel: [], transcribeModel: [] };
+    const add = (field: MediaField, m: MediaModel) => !out[field].some((x) => x.id === m.id) && out[field].push(m);
+
+    await Promise.all(
+      providers.map(async (p) => {
+        const base = (p.baseUrl || PROVIDER_PRESETS[p.kind].baseUrl).replace(/\/+$/, '');
+        const prefix = p.kind === 'openrouter' ? '' : `${p.id}:`;
+        const listed: { id: string; name?: string; image?: boolean }[] = [];
+        try {
+          const signal = AbortSignal.timeout(15_000);
+          if (p.kind === 'google') {
+            const json = (await (await check(await fetch(`${GEMINI}/models?pageSize=1000`, { headers: { 'x-goog-api-key': p.apiKey ?? '' }, signal }), 'Models')).json()) as any;
+            for (const m of json.models ?? []) listed.push({ id: String(m.name).replace(/^models\//, ''), name: m.displayName });
+          } else if (p.kind === 'elevenlabs') {
+            const json = (await (await check(await fetch(`${base}/v1/models`, { headers: { 'xi-api-key': p.apiKey ?? '' }, signal }), 'Models')).json()) as any[];
+            for (const m of json ?? []) if (m.can_do_text_to_speech) add('speechModel', { id: `${prefix}${m.model_id}`, name: m.name ?? label(m.model_id), provider: p.name });
+          } else if (p.kind !== 'anthropic') {
+            const json = (await (await check(await fetch(`${base}/models`, { headers: p.apiKey ? { authorization: `Bearer ${p.apiKey}` } : {}, signal }), 'Models')).json()) as any;
+            for (const m of json.data ?? []) listed.push({ id: String(m.id), name: m.name, image: m.architecture?.output_modalities?.includes('image') });
+          }
+        } catch {
+          // Fall back to the known models below.
+        }
+        for (const m of listed) {
+          const name = (m.name ?? label(m.id)).replace(/^[^:]+:\s*/, '');
+          if (p.kind === 'openrouter') {
+            if (m.image) add('imageModel', { id: m.id, name, provider: p.name });
+            continue;
+          }
+          for (const field of Object.keys(KIND_PATTERNS) as MediaField[]) {
+            if (!supports(p.kind, field) || !KIND_PATTERNS[field]!.test(m.id)) continue;
+            // "tts" models aren't transcription models and vice versa; Gemini's image *input* models aren't image generators.
+            if (field === 'speechModel' && /transcribe|whisper/i.test(m.id)) continue;
+            if (field === 'imageModel' && p.kind === 'google' && !/imagen|-image/.test(m.id)) continue;
+            add(field, { id: `${prefix}${m.id}`, name, provider: p.name });
+          }
+        }
+        // Known models for providers that can't (or didn't) list them.
+        for (const field of Object.keys(MEDIA_OPTIONS) as MediaField[]) {
+          if (!supports(p.kind, field)) continue;
+          for (const o of MEDIA_OPTIONS[field]) {
+            const ownPrefix = p.kind === 'openrouter' ? !/^[a-z0-9-]+:/.test(o.id) : o.id.startsWith(`${p.kind}:`);
+            if (!ownPrefix) continue;
+            const id = p.kind === 'openrouter' ? o.id : `${prefix}${o.id.slice(p.kind.length + 1)}`;
+            if (!listed.length || field === 'soundModel' || field === 'musicModel') add(field, { id, name: o.label.replace(/ via OpenRouter$/, ''), provider: p.name });
+          }
+        }
+      }),
+    );
+    for (const list of Object.values(out)) list.sort((a, b) => a.provider.localeCompare(b.provider) || a.name.localeCompare(b.name));
+    this.catalog = { key, at: Date.now(), models: out };
+    return out;
+  }
+
   exists(name: string): boolean {
     return /^[a-f0-9]{32}\.\w+$/.test(name) && existsSync(join(this.dir, name));
   }
@@ -320,10 +420,20 @@ export class MediaService {
 const ASPECTS = ['1:1', '16:9', '9:16', '3:2', '2:3', '4:3', '3:4'];
 
 /** Agent tools for whichever media kinds are set up. Results carry a MEDIA: line the UI renders. */
-export function mediaTools(media: MediaService): Tool[] {
+export interface GeneratedMedia {
+  kind: 'image' | 'video' | 'audio';
+  url: string;
+  prompt: string;
+  callId?: string;
+}
+
+export function mediaTools(media: MediaService, onMedia?: (m: GeneratedMedia) => void): Tool[] {
   const on = media.available();
   const tools: Tool[] = [];
-  const result = (kind: string, f: MediaFile) => `Generated ${kind}; the user can see it in the chat.\nMEDIA: ${f.url} ${f.mimeType}`;
+  const result = (kind: string, f: MediaFile, prompt: string, callId?: string) => {
+    onMedia?.({ kind: kind === 'image' || kind === 'video' ? kind : 'audio', url: f.url, prompt, callId });
+    return `Generated ${kind}; the user can see it in the chat and in their artifacts.\nMEDIA: ${f.url} ${f.mimeType}`;
+  };
   if (on.image) {
     tools.push({
       name: 'GenerateImage',
@@ -331,7 +441,7 @@ export function mediaTools(media: MediaService): Tool[] {
       description: 'Generate an image from a detailed text description. Describe subject, style, composition, lighting and colors.',
       parameters: { type: 'object', properties: { prompt: { type: 'string' }, aspect_ratio: { type: 'string', enum: ASPECTS } }, required: ['prompt'] },
       summarize: (a) => a.prompt?.slice(0, 80) ?? '',
-      run: async (a, ctx) => result('image', await media.image(String(a.prompt), { aspect: a.aspect_ratio }, ctx.signal)),
+      run: async (a, ctx) => result('image', await media.image(String(a.prompt), { aspect: a.aspect_ratio }, ctx.signal), String(a.prompt), ctx.callId),
     });
   }
   if (on.video) {
@@ -346,7 +456,7 @@ export function mediaTools(media: MediaService): Tool[] {
         required: ['prompt'],
       },
       summarize: (a) => a.prompt?.slice(0, 80) ?? '',
-      run: async (a, ctx) => result('video', await media.video(String(a.prompt), { seconds: a.seconds, aspect: a.aspect_ratio }, ctx.signal)),
+      run: async (a, ctx) => result('video', await media.video(String(a.prompt), { seconds: a.seconds, aspect: a.aspect_ratio }, ctx.signal), String(a.prompt), ctx.callId),
     });
   }
   if (on.speech) {
@@ -358,7 +468,7 @@ export function mediaTools(media: MediaService): Tool[] {
       summarize: (a) => a.text?.slice(0, 80) ?? '',
       run: async (a, ctx) => {
         const { bytes, mimeType } = await media.speech(String(a.text), a.voice, ctx.signal);
-        return result('speech', media.save(bytes, mimeType));
+        return result('speech', media.save(bytes, mimeType), String(a.text), ctx.callId);
       },
     });
   }
@@ -369,7 +479,7 @@ export function mediaTools(media: MediaService): Tool[] {
       description: 'Generate a sound effect from a description, e.g. "rain on a tin roof with distant thunder".',
       parameters: { type: 'object', properties: { prompt: { type: 'string' }, seconds: { type: 'number' } }, required: ['prompt'] },
       summarize: (a) => a.prompt?.slice(0, 80) ?? '',
-      run: async (a, ctx) => result('sound', await media.sound(String(a.prompt), a.seconds, ctx.signal)),
+      run: async (a, ctx) => result('sound', await media.sound(String(a.prompt), a.seconds, ctx.signal), String(a.prompt), ctx.callId),
     });
   }
   if (on.music) {
@@ -379,7 +489,7 @@ export function mediaTools(media: MediaService): Tool[] {
       description: 'Compose a piece of music from a description of genre, mood, instruments and structure (10–300 seconds).',
       parameters: { type: 'object', properties: { prompt: { type: 'string' }, seconds: { type: 'number' } }, required: ['prompt'] },
       summarize: (a) => a.prompt?.slice(0, 80) ?? '',
-      run: async (a, ctx) => result('music', await media.music(String(a.prompt), a.seconds, ctx.signal)),
+      run: async (a, ctx) => result('music', await media.music(String(a.prompt), a.seconds, ctx.signal), String(a.prompt), ctx.callId),
     });
   }
   return tools;

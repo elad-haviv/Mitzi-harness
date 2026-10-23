@@ -1,9 +1,9 @@
 // Routes for branching, ratings, documents, scheduled tasks, and media and voice.
 import type { Config } from '../config.js';
 import type { RoutingClient } from '../providers.js';
-import { Chat, ChatMessage, DEFAULT_BOT_ID, Doc, Lesson, MediaSettings, ScheduledTask, StreamEvent, TaskRun, TaskSchedule } from '../shared/types.js';
-import { newComment, snapshot, summarizeDoc } from './docs.js';
-import { MEDIA_OPTIONS, MediaService } from './media.js';
+import { Artifact, ArtifactType, Chat, ChatMessage, DEFAULT_BOT_ID, Lesson, TEXT_ARTIFACT_TYPES, MediaSettings, ScheduledTask, StreamEvent, TaskRun, TaskSchedule } from '../shared/types.js';
+import { newComment, userEdit } from './workspace.js';
+import { MediaService } from './media.js';
 import type { MemoryService } from './memory/index.js';
 import { ChatRunner, summarizeChat } from './runner.js';
 import { describeSchedule, Scheduler, validateSchedule } from './scheduler.js';
@@ -50,7 +50,6 @@ Rating: {rating}
 export function registerFeatureRoutes(route: Route, deps: FeatureDeps): { scheduler: Scheduler } {
   const { store, runner, media } = deps;
   const getChat = (id: string) => store.chats.get(id) ?? fail(404, 'Chat not found');
-  const getDoc = (id: string) => store.docs.get(id) ?? fail(404, 'Document not found');
   const getTask = (id: string) => store.tasks.get(id) ?? fail(404, 'Scheduled task not found');
 
   // ---- Branching ---------------------------------------------------------------
@@ -168,77 +167,71 @@ export function registerFeatureRoutes(route: Route, deps: FeatureDeps): { schedu
     return bot.lessons;
   });
 
-  // ---- Documents ---------------------------------------------------------------
+  // ---- Artifact workspace -----------------------------------------------------------
 
-  const createDoc = (title: string, content: string, botId?: string): Doc => {
-    const id = newId();
-    const chat = deps.newChat({ title: `Doc: ${title}`.slice(0, 120), botId: botId || DEFAULT_BOT_ID, docId: id });
-    store.chats.put(chat);
-    const doc: Doc = { id, title, content, comments: [], versions: [], chatId: chat.id, createdAt: now(), updatedAt: now() };
-    snapshot(doc, 'user', 'Created');
-    return store.docs.put(doc);
+  const getArtifact = (id: string) => store.artifacts.get(id) ?? fail(404, 'Artifact not found');
+  const artifactView = (a: Artifact) => ({ ...a, chatTitle: store.chats.get(a.chatId)?.title, running: runner.isRunning(a.chatId) });
+  const editable = (a: Artifact) => {
+    if (runner.isRunning(a.chatId)) throw new HttpError(409, 'The bot is working on it; wait for it to finish');
   };
-  const docView = (doc: Doc) => ({ ...doc, running: runner.isRunning(doc.chatId) });
 
-  route('GET', '/api/docs', () =>
-    store.docs
-      .all()
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-      .map(summarizeDoc),
-  );
-  route('POST', '/api/docs', ({ body }) => {
-    const fromArtifact = body?.artifactId ? store.artifacts.get(str(body.artifactId)) : undefined;
-    if (body?.artifactId && !fromArtifact) throw new HttpError(404, 'Artifact not found');
-    const title = str(body?.title).trim() || fromArtifact?.title || 'Untitled document';
-    const content = fromArtifact ? (fromArtifact.versions.at(-1)?.content ?? '') : str(body?.content);
-    const botId = str(body?.botId) || (fromArtifact ? store.chats.get(fromArtifact.chatId)?.botId : undefined);
-    return docView(createDoc(title.slice(0, 200), content, botId));
+  // A new artifact starts its own chat, which is where you work on it with the bot.
+  route('POST', '/api/artifacts', ({ body }) => {
+    const type = str(body?.type) as ArtifactType;
+    if (!TEXT_ARTIFACT_TYPES.includes(type)) throw new HttpError(400, 'Choose a document, presentation, web page, component, code, graphic or diagram');
+    const title = str(body?.title).trim().slice(0, 200) || 'Untitled';
+    const project = body?.projectId ? store.projects.get(str(body.projectId)) : undefined;
+    const chat = store.chats.put(deps.newChat({ title, botId: str(body?.botId) || DEFAULT_BOT_ID, projectId: project?.id }));
+    const artifact: Artifact = {
+      id: newId(),
+      chatId: chat.id,
+      projectId: project?.id,
+      title,
+      type,
+      language: type === 'code' ? str(body?.language) || undefined : undefined,
+      versions: [{ content: str(body?.content), title, author: 'user', note: 'Created', createdAt: now() }],
+      comments: [],
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    return artifactView(store.artifacts.put(artifact));
   });
-  route('GET', '/api/docs/:id', ({ params }) => docView(getDoc(params.id)));
-  route('PATCH', '/api/docs/:id', ({ params, body }) => {
-    const doc = getDoc(params.id);
-    if (runner.isRunning(doc.chatId) && typeof body?.content === 'string') throw new HttpError(409, 'The bot is editing the document; wait for it to finish');
-    if (typeof body?.title === 'string' && body.title.trim()) doc.title = body.title.trim().slice(0, 200);
-    if (typeof body?.content === 'string') doc.content = body.content;
-    doc.updatedAt = now();
-    snapshot(doc, 'user');
-    return docView(store.docs.put(doc));
+  route('PATCH', '/api/artifacts/:id', ({ params, body }) => {
+    const a = getArtifact(params.id);
+    editable(a);
+    if (!TEXT_ARTIFACT_TYPES.includes(a.type) && typeof body?.content === 'string') throw new HttpError(400, `A ${a.type} can't be edited as text`);
+    const title = typeof body?.title === 'string' && body.title.trim() ? body.title.trim().slice(0, 200) : undefined;
+    const content = typeof body?.content === 'string' ? body.content : (a.versions.at(-1)?.content ?? '');
+    userEdit(a, content, title);
+    return artifactView(store.artifacts.put(a));
   });
-  route('DELETE', '/api/docs/:id', ({ params }) => {
-    const doc = getDoc(params.id);
-    runner.stop(doc.chatId);
-    store.chats.delete(doc.chatId);
-    store.docs.delete(doc.id);
-    return { ok: true };
-  });
-  route('POST', '/api/docs/:id/comments', ({ params, body }) => {
-    const doc = getDoc(params.id);
+  route('POST', '/api/artifacts/:id/comments', ({ params, body }) => {
+    const a = getArtifact(params.id);
     const text = str(body?.text).trim();
     if (!text) throw new HttpError(400, 'Comment is empty');
-    doc.comments.push(newComment(str(body?.quote), text, 'user'));
-    return docView(store.docs.put(doc));
+    (a.comments ??= []).push(newComment(str(body?.quote), text, 'user'));
+    return artifactView(store.artifacts.put(a));
   });
-  route('PATCH', '/api/docs/:id/comments/:commentId', ({ params, body }) => {
-    const doc = getDoc(params.id);
-    const c = doc.comments.find((x) => x.id === params.commentId) ?? fail(404, 'Comment not found');
+  route('PATCH', '/api/artifacts/:id/comments/:commentId', ({ params, body }) => {
+    const a = getArtifact(params.id);
+    const c = a.comments?.find((x) => x.id === params.commentId) ?? fail(404, 'Comment not found');
     if (typeof body?.reply === 'string' && body.reply.trim()) c.replies.push({ author: 'user', text: body.reply.trim(), createdAt: now() });
     if (typeof body?.resolved === 'boolean') c.resolved = body.resolved;
-    return docView(store.docs.put(doc));
+    return artifactView(store.artifacts.put(a));
   });
-  route('DELETE', '/api/docs/:id/comments/:commentId', ({ params }) => {
-    const doc = getDoc(params.id);
-    doc.comments = doc.comments.filter((c) => c.id !== params.commentId);
-    return docView(store.docs.put(doc));
+  route('DELETE', '/api/artifacts/:id/comments/:commentId', ({ params }) => {
+    const a = getArtifact(params.id);
+    a.comments = (a.comments ?? []).filter((c) => c.id !== params.commentId);
+    return artifactView(store.artifacts.put(a));
   });
-  route('POST', '/api/docs/:id/versions/:versionId/restore', ({ params }) => {
-    const doc = getDoc(params.id);
-    if (runner.isRunning(doc.chatId)) throw new HttpError(409, 'Wait for the bot to finish first');
-    const v = doc.versions.find((x) => x.id === params.versionId) ?? fail(404, 'Version not found');
-    doc.content = v.content;
-    doc.title = v.title;
-    doc.updatedAt = now();
-    doc.versions.push({ id: newId(), title: v.title, content: v.content, author: 'user', note: `Restored version from ${new Date(v.createdAt).toLocaleString()}`, createdAt: now() });
-    return docView(store.docs.put(doc));
+  route('POST', '/api/artifacts/:id/versions/:index/restore', ({ params }) => {
+    const a = getArtifact(params.id);
+    editable(a);
+    const v = a.versions[Number(params.index)] ?? fail(404, 'Version not found');
+    a.versions.push({ content: v.content, title: v.title ?? a.title, author: 'user', note: `Restored version ${Number(params.index) + 1}`, createdAt: now() });
+    if (v.title) a.title = v.title;
+    a.updatedAt = now();
+    return artifactView(store.artifacts.put(a));
   });
 
   // ---- Scheduled tasks -----------------------------------------------------------
@@ -352,7 +345,7 @@ export function registerFeatureRoutes(route: Route, deps: FeatureDeps): { schedu
 
   // ---- Media and voice -----------------------------------------------------------
 
-  route('GET', '/api/media/options', () => ({ options: MEDIA_OPTIONS, available: media.available() }));
+  route('GET', '/api/media/models', async () => ({ models: await media.models(), available: media.available() }));
   route('POST', '/api/tts', async ({ body, res }) => {
     const text = str(body?.text).trim();
     if (!text) throw new HttpError(400, 'Nothing to read');

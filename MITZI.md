@@ -33,9 +33,13 @@
 - Media (`src/server/media.ts`): generated files are saved under `<data>/media` with random 32-hex names and served
   at `/media/<file>` without the token (img/video tags can't send headers). Tool results carry a
   `MEDIA: <url> <mime>` line, which the web UI renders inline.
-- Docs (`src/server/docs.ts`): a document has a companion chat (`chat.docId`, hidden from the chat list). In that
-  chat the runner adds DocEdit/DocRewrite/DocComment tools and the current document to the system prompt, and
-  emits `doc` events. Snapshot versions through `snapshot()`.
+- Artifact workspace (`src/server/workspace.ts`): every artifact belongs to a chat, and its workspace page embeds that
+  chat. Messages sent from the workspace carry `focus` (the artifact id); the runner stores it as
+  `chat.focusArtifactId`, adds the artifact's latest content and open comments to the system prompt, and offers the
+  ArtifactComment tool. Record user edits with `userEdit()` so versions stay attributed. Media tools save their output
+  as image/video/audio artifacts. Old Docs (`data/docs`) are migrated into markdown artifacts at startup.
+- Media models for Settings come from `MediaService.models()`, which lists each provider's models and classifies
+  them by kind; `supports()` says which provider kinds MediaService can call for each kind of media.
 - Ratings: `POST /api/chats/:id/messages/:index/rating` stores the rating and distills a lesson with the fast
   model in the background. Lessons live on `bot.lessons` and are included in the system prompt.
 - Scheduled tasks (`src/server/scheduler.ts`): schedules are computed in local time. Runs go through

@@ -4,7 +4,7 @@ import type { Config } from '../config.js';
 import type { ContentPart, LlmClient, Message } from '../openrouter.js';
 import type { RoutingClient } from '../providers.js';
 import { ApprovalAnswer, Approver, Permissions } from '../permissions.js';
-import { Artifact, Attachment, Doc, Bot, Chat, ChatMessage, ChatSummary, DEFAULT_BOT_ID, RecalledMemory, StreamEvent } from '../shared/types.js';
+import { Artifact, Attachment, Bot, Chat, ChatMessage, ChatSummary, DEFAULT_BOT_ID, RecalledMemory, StreamEvent } from '../shared/types.js';
 import { ALL_TOOLS, Tool, toToolSpecs } from '../tools/index.js';
 import { webFetchTool } from '../tools/web.js';
 import type { Todo } from '../tools/types.js';
@@ -16,7 +16,7 @@ import type { McpManager } from './mcp/manager.js';
 import { CommandDef, expandCommand, parseSlash } from './extensions/commands.js';
 import { Skills, skillTool } from './extensions/skills.js';
 import { artifactTool } from './tools.js';
-import { docTools, snapshot } from './docs.js';
+import { commentTool } from './workspace.js';
 import { MediaService, mediaTools } from './media.js';
 
 const MAX_EVENT_OUTPUT = 20_000;
@@ -39,7 +39,8 @@ export interface RunnerDeps {
 }
 
 export type RunInput =
-  | { kind: 'message'; content: string; attachments: Attachment[]; editIndex?: number }
+  /** `focus`: the artifact open in the workspace beside the chat. */
+  | { kind: 'message'; content: string; attachments: Attachment[]; editIndex?: number; focus?: string }
   | { kind: 'regenerate' };
 
 export interface RunOptions {
@@ -148,26 +149,52 @@ export class ChatRunner {
       recalled: chat.messages.findLast((m) => m.role === 'user')?.memories ?? [],
       skills: this.deps.skills.enabled(),
       artifacts: store.artifacts.all().filter((a) => a.chatId === chat.id),
-      doc: chat.docId ? store.docs.get(chat.docId) : undefined,
+      focus: this.focusOf(chat),
     };
   }
 
-  tools(chat: Chat, onArtifact: (a: Artifact) => void, onDoc: (d: Doc) => void = () => {}): Tool[] {
+  /** The chat's artifact open in the workspace, if any. */
+  focusOf(chat: Chat): Artifact | undefined {
+    const a = chat.focusArtifactId ? this.deps.store.artifacts.get(chat.focusArtifactId) : undefined;
+    return a?.chatId === chat.id ? a : undefined;
+  }
+
+  tools(chat: Chat, onArtifact: (a: Artifact) => void): Tool[] {
     const { store, memory } = this.deps;
     const project = chat.projectId ? store.projects.get(chat.projectId) : undefined;
     const bot = this.botFor(chat);
     const tools: Tool[] = project?.folder ? [...ALL_TOOLS] : bot.tools.web ? [webFetchTool] : [];
-    if (bot.tools.artifacts) tools.push(artifactTool(store, chat.id, chat.projectId, onArtifact));
+    // Working on an artifact in its workspace needs the artifact tools whatever the bot's settings.
+    const focus = this.focusOf(chat);
+    if (bot.tools.artifacts || focus) tools.push(artifactTool(store, chat.id, chat.projectId, onArtifact));
+    if (focus || store.artifacts.all().some((a) => a.chatId === chat.id && a.comments?.length)) tools.push(commentTool(store, chat.id, onArtifact));
     if (this.memoryOn(bot)) tools.push(memoryTool(memory, memory.bankFor(bot)));
     if (bot.tools.skills && this.deps.skills.enabled().length) tools.push(skillTool(this.deps.skills));
-    if (bot.tools.media !== false) tools.push(...mediaTools(this.deps.media));
-    if (chat.docId && store.docs.get(chat.docId)) tools.push(...docTools(store, chat.docId, onDoc));
+    if (bot.tools.media !== false) {
+      // Generated media are kept as artifacts of the chat, so they show up in the gallery.
+      tools.push(
+        ...mediaTools(this.deps.media, ({ kind, url, prompt, callId }) => {
+          const artifact: Artifact = {
+            id: newId(),
+            chatId: chat.id,
+            projectId: chat.projectId,
+            title: prompt.length > 60 ? `${prompt.slice(0, 57).trim()}…` : prompt,
+            type: kind,
+            versions: [{ content: url, author: 'assistant', note: prompt, createdAt: now(), callId }],
+            createdAt: now(),
+            updatedAt: now(),
+          };
+          store.artifacts.put(artifact);
+          onArtifact(artifact);
+        }),
+      );
+    }
     return tools;
   }
 
   /** All tools for a turn, including connector (MCP) tools, which may need a moment to start. */
-  async allTools(chat: Chat, onArtifact: (a: Artifact) => void, onDoc?: (d: Doc) => void, waitMs = 20_000): Promise<{ tools: Tool[]; warnings: string[] }> {
-    const tools = this.tools(chat, onArtifact, onDoc);
+  async allTools(chat: Chat, onArtifact: (a: Artifact) => void, waitMs = 20_000): Promise<{ tools: Tool[]; warnings: string[] }> {
+    const tools = this.tools(chat, onArtifact);
     if (!this.botFor(chat).tools.connectors) return { tools, warnings: [] };
     const mcp = await this.deps.mcp.tools(waitMs);
     return { tools: [...tools, ...mcp.tools], warnings: mcp.warnings };
@@ -256,6 +283,8 @@ export class ChatRunner {
       } else {
         content = buildUserContent(input.content, input.attachments);
       }
+      // Messages sent from an artifact's workspace are about that artifact.
+      chat.focusArtifactId = input.focus;
     }
     if (chat.contextStart > chat.messages.length) {
       chat.contextStart = chat.messages.length;
@@ -314,19 +343,7 @@ export class ChatRunner {
         });
       });
 
-    // Edits to a document are versioned; keep the user's latest edits as their own version first.
-    if (chat.docId) {
-      const doc = store.docs.get(chat.docId);
-      if (doc) {
-        snapshot(doc, 'user');
-        store.docs.put(doc);
-      }
-    }
-    const toolset = await this.allTools(
-      chat,
-      (artifact) => emit({ type: 'artifact', artifact }),
-      (doc) => emit({ type: 'doc', doc }),
-    );
+    const toolset = await this.allTools(chat, (artifact) => emit({ type: 'artifact', artifact }));
     for (const w of toolset.warnings) emit({ type: 'warn', message: w });
     const tools = toolset.tools;
     const supportsTools = (await catalog.list().catch(() => [])).find((m) => m.id === chat.model)?.tools ?? true;

@@ -20,6 +20,7 @@ import { oauthCallback, registerExtensionRoutes } from './routes-ext.js';
 import { ChatRunner, summarizeChat } from './runner.js';
 import { MediaService } from './media.js';
 import { StarterService } from './starters.js';
+import { migrateDocs } from './workspace.js';
 import { mediaUpdate, registerFeatureRoutes } from './routes-features.js';
 import { newId, now, Store } from './store.js';
 import { clamp, fail, Handler, HttpError, Req, STREAMED, str } from './util.js';
@@ -112,6 +113,7 @@ export function createApp(opts: AppOptions) {
   seedBots(store, opts.dataDir);
   ensureDefaultBot(store);
   migrateLegacyMemories(store, memory);
+  migrateDocs(store);
   void extensions.sync().then(() => mcp.warmup());
 
   const routes: { method: string; re: RegExp; keys: string[]; handler: Handler }[] = [];
@@ -271,8 +273,7 @@ export function createApp(opts: AppOptions) {
     const projectId = query.get('projectId');
     return store.chats
       .all()
-      // Documents' companion chats live with their document.
-      .filter((c) => (!projectId || c.projectId === projectId) && !c.docId)
+      .filter((c) => !projectId || c.projectId === projectId)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .map((c) => ({ ...summarizeChat(c), running: runner.isRunning(c.id) }));
   });
@@ -351,7 +352,7 @@ export function createApp(opts: AppOptions) {
       : [];
     if (!content.trim() && !attachments.length) throw new HttpError(400, 'Message is empty');
     const editIndex = typeof r.body?.editIndex === 'number' ? r.body.editIndex : undefined;
-    return stream(r.params.id, { kind: 'message', content, attachments, editIndex })(r);
+    return stream(r.params.id, { kind: 'message', content, attachments, editIndex, focus: str(r.body?.focus) || undefined })(r);
   });
   route('POST', '/api/chats/:id/regenerate', (r) => stream(r.params.id, { kind: 'regenerate' })(r));
   route('POST', '/api/chats/:id/stop', ({ params }) => ({ stopped: runner.stop(params.id) }));
@@ -474,7 +475,10 @@ export function createApp(opts: AppOptions) {
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .map((a) => ({ ...a, chatTitle: store.chats.get(a.chatId)?.title }));
   });
-  route('GET', '/api/artifacts/:id', ({ params }) => store.artifacts.get(params.id) ?? fail(404, 'Artifact not found'));
+  route('GET', '/api/artifacts/:id', ({ params }) => {
+    const a = store.artifacts.get(params.id) ?? fail(404, 'Artifact not found');
+    return { ...a, chatTitle: store.chats.get(a.chatId)?.title, running: runner.isRunning(a.chatId) };
+  });
   route('DELETE', '/api/artifacts/:id', ({ params }) => ({ ok: store.artifacts.delete(params.id) }));
 
   // ---- Memory banks ----------------------------------------------------------
@@ -554,8 +558,6 @@ export function createApp(opts: AppOptions) {
   // ---- Helpers ---------------------------------------------------------------
 
   function deleteChat(id: string) {
-    const docId = store.chats.get(id)?.docId;
-    if (docId) store.docs.delete(docId);
     for (const a of store.artifacts.all()) if (a.chatId === id) store.artifacts.delete(a.id);
     store.chats.delete(id);
   }

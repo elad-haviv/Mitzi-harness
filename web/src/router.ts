@@ -12,8 +12,6 @@ export type Route =
   | { page: 'connectors' }
   | { page: 'skills' }
   | { page: 'plugins' }
-  | { page: 'docs' }
-  | { page: 'doc'; id: string }
   | { page: 'tasks' }
   | { page: 'settings' };
 
@@ -29,14 +27,14 @@ export function parseRoute(hash: string): Route {
       return parts[1] ? { page: 'project', id: parts[1] } : { page: 'projects' };
     case 'bots':
       return { page: 'bots' };
+    // Documents became artifacts; keep old links working.
+    case 'docs':
     case 'artifacts':
       return parts[1] ? { page: 'artifact', id: parts[1] } : { page: 'artifacts' };
     case 'memory':
       return { page: 'memory', botId: parts[1] };
     case 'settings':
       return { page: 'settings' };
-    case 'docs':
-      return parts[1] ? { page: 'doc', id: parts[1] } : { page: 'docs' };
     case 'tasks':
       return { page: 'tasks' };
     case 'connectors':
@@ -62,8 +60,6 @@ export function href(route: Route): string {
       return `#/projects/${route.id}`;
     case 'artifact':
       return `#/artifacts/${route.id}`;
-    case 'doc':
-      return `#/docs/${route.id}`;
     case 'memory':
       return `#/memory${route.botId ? `/${route.botId}` : ''}`;
     default:

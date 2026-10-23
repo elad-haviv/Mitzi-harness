@@ -214,8 +214,8 @@ export interface Chat {
   lastPromptTokens: number;
   /** Set on chats branched off another chat. */
   branchedFrom?: { chatId: string; title: string };
-  /** Set on a document's companion chat. */
-  docId?: string;
+  /** The artifact the user last worked on in its workspace; the next turn focuses on it. */
+  focusArtifactId?: string;
   /** Set on chats created by a scheduled task. */
   taskId?: string;
   createdAt: string;
@@ -241,11 +241,19 @@ export interface Lesson {
 
 export type ChatSummary = Omit<Chat, 'messages' | 'summary'> & { messageCount: number };
 
-export type ArtifactType = 'markdown' | 'code' | 'html' | 'react' | 'svg' | 'mermaid';
+export type ArtifactType = 'markdown' | 'slides' | 'code' | 'html' | 'react' | 'svg' | 'mermaid' | 'image' | 'video' | 'audio';
+
+/** Artifacts whose content is text the user and the bot edit (media artifacts hold a file URL). */
+export const TEXT_ARTIFACT_TYPES: ArtifactType[] = ['markdown', 'slides', 'code', 'html', 'react', 'svg', 'mermaid'];
 
 export interface ArtifactVersion {
   content: string;
   createdAt: string;
+  /** Who made this version; versions without one came from the bot. */
+  author?: 'user' | 'assistant';
+  /** The title at this version, when it changed. */
+  title?: string;
+  note?: string;
   /** Tool call that produced this version, so chat messages can link to it. */
   callId?: string;
 }
@@ -258,6 +266,8 @@ export interface Artifact {
   type: ArtifactType;
   language?: string;
   versions: ArtifactVersion[];
+  /** Comments on passages, for text artifacts. */
+  comments?: ArtifactComment[];
   createdAt: string;
   updatedAt: string;
 }
@@ -349,7 +359,6 @@ export type StreamEvent =
   | { type: 'todos'; todos: Todo[] }
   | { type: 'status'; message: string }
   | { type: 'recall'; memories: RecalledMemory[] }
-  | { type: 'doc'; doc: Doc }
   | { type: 'warn'; message: string }
   | { type: 'compacted'; contextStart: number }
   | { type: 'chat'; chat: ChatSummary }
@@ -542,9 +551,9 @@ export interface MediaSettings {
 
 export type MediaKind = 'image' | 'video' | 'speech' | 'sound' | 'music';
 
-// ---------- Documents ----------
+// ---------- Documents (before they became artifacts; migrated on startup) ----------
 
-export interface DocComment {
+export interface ArtifactComment {
   id: string;
   /** The passage the comment is about. */
   quote: string;
@@ -564,12 +573,13 @@ export interface DocVersion {
   createdAt: string;
 }
 
+/** @deprecated Documents are markdown artifacts now. */
 export interface Doc {
   id: string;
   title: string;
   /** Markdown. */
   content: string;
-  comments: DocComment[];
+  comments: ArtifactComment[];
   versions: DocVersion[];
   /** The chat used to work on the document with a bot. */
   chatId: string;
@@ -577,7 +587,6 @@ export interface Doc {
   updatedAt: string;
 }
 
-export type DocSummary = Omit<Doc, 'content' | 'versions' | 'comments'> & { openComments: number; words: number; excerpt: string };
 
 // ---------- Scheduled tasks ----------
 
