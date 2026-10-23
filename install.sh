@@ -44,4 +44,4 @@ case ":$PATH:" in
     ;;
 esac
 
-printf '\nStart the app with:   mitzi ui\nOr in the terminal:   mitzi\n\n'
+printf '\nOpen the app:        mitzi ui\nIn your browser:     mitzi web\nIn the terminal:     mitzi\n\nMitzi updates itself from Settings → Updates.\n\n'

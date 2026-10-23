@@ -16,7 +16,9 @@ const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.u
 const USAGE = `${color.bold('mitzi')} — an agentic coding CLI powered by OpenRouter
 
 ${color.bold('Usage')}
-  mitzi ui                    Open the Mitzi desktop web app (chats, projects, artifacts, bots)
+  mitzi ui                    Open Mitzi in its own window (chats, projects, artifacts, bots…)
+  mitzi web                   Run Mitzi in your browser instead
+  mitzi update                Update Mitzi to the latest version
   mitzi [prompt]              Start an interactive session (optionally with a first message)
   mitzi -p "prompt"           Print mode: run once, print the answer, exit
   cat file | mitzi -p "..."   Piped stdin is appended to the prompt
@@ -31,8 +33,8 @@ ${color.bold('Options')}
   -r, --resume <id>           Resume a specific session
       --max-turns <n>         Maximum model calls per message (default: 100)
       --reasoning             Show model reasoning tokens when available
-      --port <n>              Port for \`mitzi ui\` (default: 4545)
-      --no-open               Don't open a browser for \`mitzi ui\`
+      --port <n>              Port for \`mitzi ui\` / \`mitzi web\` (default: 4545)
+      --no-open               Start the server without opening a window or browser
   -v, --version               Print version
   -h, --help                  Show this help
 
@@ -99,17 +101,49 @@ async function main(): Promise<number> {
     return 0;
   }
 
-  if (positionals[0] === 'ui') {
-    const { startServer, openBrowser } = await import('./server/index.js');
-    const server = await startServer({ port: values.port ? Number(values.port) : undefined });
-    process.stdout.write(
-      `${color.bold(color.orange('🐱 Mitzi'))} ${color.dim(`v${VERSION}`)} is running at\n\n  ${color.cyan(server.url)}\n\n` +
-        `${color.dim('The link includes your private access token. Press Ctrl+C to stop.')}\n`,
-    );
-    if (!values['no-open']) openBrowser(server.url);
-    await new Promise<void>((resolve) => process.once('SIGINT', resolve));
+  if (positionals[0] === 'ui' || positionals[0] === 'web') {
+    const { runApp } = await import('./launcher.js');
+    return runApp(positionals[0], { port: values.port ? Number(values.port) : undefined, open: !values['no-open'], version: VERSION });
+  }
+  // The server process that `mitzi ui` / `mitzi web` start and restart after updates.
+  if (positionals[0] === '__serve') {
+    const { startServer } = await import('./server/index.js');
+    let server;
+    try {
+      server = await startServer({ port: values.port ? Number(values.port) : undefined });
+    } catch (err: any) {
+      if (err?.code === 'EADDRINUSE') return 98;
+      throw err;
+    }
+    process.send?.({ type: 'ready', url: server.url, port: server.port, version: VERSION });
+    await new Promise<void>((resolve) => {
+      process.once('SIGINT', resolve);
+      process.once('SIGTERM', resolve);
+      process.once('disconnect', resolve);
+    });
     await server.close();
     return 0;
+  }
+  if (positionals[0] === 'update') {
+    const { applyUpdate, checkForUpdates } = await import('./updater.js');
+    const info = await checkForUpdates();
+    if (!info.supported) {
+      process.stderr.write(`${color.yellow(info.reason ?? 'Updates aren’t available for this copy.')}\n`);
+      return 1;
+    }
+    if (!info.behind) {
+      process.stdout.write(`${color.green('✓')} Mitzi v${info.current.version} is up to date.\n`);
+      return 0;
+    }
+    process.stdout.write(`${color.bold(`${info.behind} update${info.behind === 1 ? '' : 's'} available`)} (v${info.current.version} → v${info.latest?.version}):\n`);
+    for (const c of info.commits.slice(0, 15)) process.stdout.write(`  ${color.dim(c.sha)} ${c.subject}\n`);
+    const labels = { download: 'Downloading', install: 'Installing dependencies', build: 'Building' };
+    const ok = await applyUpdate((e) => {
+      if (e.type === 'step' && e.status === 'running') process.stdout.write(`${color.orange('…')} ${labels[e.step]}\n`);
+      if (e.type === 'error') process.stderr.write(`${color.red(e.message)}\n`);
+      if (e.type === 'done') process.stdout.write(`${color.green('✓')} Updated to v${e.version}. Restart Mitzi to use it.\n`);
+    });
+    return ok ? 0 : 1;
   }
 
   const cwd = process.cwd();

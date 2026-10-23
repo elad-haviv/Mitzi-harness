@@ -2,7 +2,7 @@
 
 - Build everything: `npm run build` (tsc → `dist/`, then Vite → `dist/web`). Tests: `npm test`.
 - Run one test file: `npx tsc -p . && node --test dist/tests/server.test.js`; filter with `--test-name-pattern`.
-- Type-check the web app: `npx tsc -p web`. Run the app: `node dist/index.js ui`.
+- Type-check the web app: `npx tsc -p web`. Run the app: `node dist/index.js web` (browser) or `ui` (window).
 - The server and CLI have no runtime dependencies: Node built-ins only. The React app's packages are
   devDependencies because Vite bundles them.
 - ESM with NodeNext resolution: relative imports in `src/` must end in `.js`.
@@ -56,3 +56,10 @@
   carry `chat.imported` so importing twice doesn't duplicate. Pasted memory summaries are split by the fast model
   (falling back to one memory per line) and saved with `remember`.
 - The logo is the 🐱 emoji (`LOGO` in `web/src/state.tsx` and `src/server/http.ts`); the default bot uses it as its icon.
+- Launcher (`src/launcher.ts`): `mitzi ui` and `mitzi web` fork `index.js __serve` with `MITZI_SUPERVISED=1` and wait
+  for its IPC `ready` message. A child that exits with `RESTART_CODE` (75) is started again; exit 98 means the port is
+  taken. `ui` opens `desktop/main.cjs` in Electron (an optional dependency), then a Chrome/Edge `--app` window, then the
+  browser. Closing the window stops the server. The window and the web page both reconnect after a restart.
+- Updates (`src/updater.ts`, `src/server/routes-update.ts`): installs are git checkouts. Updating fast-forwards the
+  tracked branch, runs `npm install` only when the package files changed, rebuilds, and on any failure resets to the
+  previous commit and rebuilds. `MITZI_APP_DIR` points it at another checkout (the tests use this).

@@ -189,6 +189,8 @@ type Recognition = {
 };
 
 export function hasBrowserRecognition(): boolean {
+  // Electron (the desktop window) has the API but not Google's speech service behind it.
+  if (typeof navigator !== 'undefined' && /Electron\//.test(navigator.userAgent)) return false;
   return typeof window !== 'undefined' && !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
 }
 

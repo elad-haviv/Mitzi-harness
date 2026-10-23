@@ -22,6 +22,7 @@ import { MediaService } from './media.js';
 import { StarterService } from './starters.js';
 import { migrateDocs } from './workspace.js';
 import { registerFolderRoutes } from './folders.js';
+import { registerUpdateRoutes } from './routes-update.js';
 import { registerImportRoutes } from './importer.js';
 import { mediaUpdate, registerFeatureRoutes } from './routes-features.js';
 import { newId, now, Store } from './store.js';
@@ -167,6 +168,7 @@ export function createApp(opts: AppOptions) {
       ui.hindsightUrl = url;
     }
     if (typeof update.embeddingModel === 'string') ui.embeddingModel = update.embeddingModel.trim();
+    if (typeof update.autoCheckUpdates === 'boolean') ui.autoCheckUpdates = update.autoCheckUpdates;
     if (typeof update.recallTokens === 'number') ui.recallTokens = clamp(Math.round(update.recallTokens), 200, 8000);
     if (update.media) ui.media = mediaUpdate(update.media, store.settings.media);
     store.updateSettings(ui);
@@ -567,6 +569,7 @@ export function createApp(opts: AppOptions) {
 
   registerExtensionRoutes(route, extensions);
   registerFolderRoutes(route, store, projectView);
+  const updates = registerUpdateRoutes(route, store);
   registerImportRoutes(route, { store, memory, client, config, newChat, memoryOn: (bot) => runner.memoryOn(bot) });
   const { scheduler } = registerFeatureRoutes(route, { store, runner, client, config, memory, media, newChat });
   scheduler.start();
@@ -623,6 +626,7 @@ export function createApp(opts: AppOptions) {
   return Object.assign(handle, {
     dispose: () => {
       scheduler.stop();
+      updates.dispose();
       return mcp.dispose();
     },
   });

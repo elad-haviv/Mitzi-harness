@@ -58,9 +58,10 @@ foreach ($folder in $targets) {
   $link.TargetPath = Join-Path $Bin 'mitzi.cmd'
   $link.Arguments = 'ui'
   $link.WorkingDirectory = $HOME
+  $link.WindowStyle = 7  # keep the console minimized; the app opens in its own window
   $link.Description = 'Mitzi AI workspace'
   $link.Save()
 }
 
-Say "Installed. Open 'Mitzi' from your desktop or Start menu, or run:  mitzi ui"
+Say "Installed. Open 'Mitzi' from your desktop or Start menu, or run:  mitzi ui  (or mitzi web for the browser)"
 Write-Host '(Open a new terminal window first so the mitzi command is found.)'

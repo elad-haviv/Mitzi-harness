@@ -37,9 +37,13 @@ import type {
 } from '../../src/shared/types';
 
 export type * from '../../src/shared/types';
+import type { UpdateEvent, UpdateInfo } from '../../src/updater';
+export type { UpdateEvent, UpdateInfo, UpdateStep } from '../../src/updater';
 export { DEFAULT_BOT_ID, TEXT_ARTIFACT_TYPES } from '../../src/shared/types';
 
 export type ProjectView = Project & { chatCount: number };
+export type UpdateStatus = UpdateInfo & { updating: boolean; canRestart: boolean };
+export type UpdateStreamEvent = UpdateEvent | { type: 'restarting' } | { type: 'restart-required' };
 export type ChatListItem = ChatSummary & { running?: boolean };
 export type ArtifactListItem = Artifact & { chatTitle?: string };
 /** An artifact with what its workspace needs. */
@@ -181,6 +185,44 @@ export const api = {
   importMemories: (botId: string, memories: string[]) => request<{ imported: number }>('POST', '/api/import/memory', { botId, memories }),
   importChats: (body: { source: ImportSource; botId: string; conversations: ImportedConversation[]; learn: boolean }) =>
     request<{ imported: number; skipped: number; learning: number }>('POST', '/api/import/chats', body),
+
+  updateInfo: (refresh = false) => request<UpdateStatus>('GET', `/api/update${refresh ? '?refresh=1' : ''}`),
+  /** Runs the update; events arrive as it goes. */
+  applyUpdate: async (onEvent: (e: UpdateStreamEvent) => void) => {
+    const res = await fetch('/api/update/apply', { method: 'POST', headers: { 'x-mitzi-token': token } });
+    if (!res.ok || !res.body) {
+      const data = await res.json().catch(() => ({}));
+      throw new ApiError(res.status, data?.error ?? `Update failed (${res.status})`);
+    }
+    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+    let buf = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += value;
+      let i: number;
+      while ((i = buf.indexOf('\n\n')) >= 0) {
+        const frame = buf.slice(0, i);
+        buf = buf.slice(i + 2);
+        if (frame.startsWith('data: ')) onEvent(JSON.parse(frame.slice(6)));
+      }
+    }
+  },
+  /** Resolves once the server answers again (after a restart). */
+  waitForServer: async (timeoutMs = 120_000) => {
+    const end = Date.now() + timeoutMs;
+    await new Promise((r) => setTimeout(r, 1500));
+    while (Date.now() < end) {
+      try {
+        const res = await fetch('/api/settings', { headers: { 'x-mitzi-token': token }, signal: AbortSignal.timeout(2000) });
+        if (res.ok) return (await res.json()) as PublicSettings;
+      } catch {
+        // Still restarting.
+      }
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    throw new Error('Mitzi didn’t come back. Check the terminal where it runs.');
+  },
 
   bots: () => request<Bot[]>('GET', '/api/bots'),
   createBot: (body: Partial<Bot>) => request<Bot>('POST', '/api/bots', body),

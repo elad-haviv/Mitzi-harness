@@ -71,6 +71,7 @@ const DEFAULT_UI_SETTINGS: UiSettings = {
   media: { imageModel: '', videoModel: '', speechModel: '', voice: '', soundModel: '', musicModel: '', transcribeModel: '' },
   autoCompactPercent: 80,
   keepRecentTurns: 2,
+  autoCheckUpdates: true,
 };
 
 export class Store {

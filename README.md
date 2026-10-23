@@ -116,7 +116,7 @@ curl -fsSL https://raw.githubusercontent.com/elad-haviv/Mitzi-harness/feature/we
 irm https://raw.githubusercontent.com/elad-haviv/Mitzi-harness/feature/web-ui/install.ps1 | iex
 ```
 
-The installer puts Mitzi in `~/.mitzi/app` and adds a `mitzi` command. On Windows it also creates Desktop and Start menu shortcuts. Run the same line again to update. Then start the app with `mitzi ui`.
+The installer puts Mitzi in `~/.mitzi/app` and adds a `mitzi` command. On Windows it also creates Desktop and Start menu shortcuts. Then start the app with `mitzi ui`. Mitzi checks for updates by itself and offers them in the app (**Settings → Updates**); you can also run `mitzi update` or the install line again.
 
 ### From source
 
@@ -127,12 +127,17 @@ npm install
 npm run build
 npm link          # puts `mitzi` on your PATH
 
-mitzi ui          # opens the app in your browser
+mitzi ui          # opens the app in its own window
+mitzi web         # or in your browser
 ```
 
 Add your OpenRouter key in **Settings**. You can get one at <https://openrouter.ai/keys>. Alternatively, set `OPENROUTER_API_KEY` before starting.
 
-`mitzi ui` serves the app at `http://localhost:4545`. It only accepts connections from your own machine and requires a private access token, which is included in the link it prints. Use `--port` to change the port and `--no-open` to skip opening a browser.
+`mitzi ui` opens Mitzi in a desktop window. It uses Electron, which npm installs as an optional dependency; if Electron isn't available, it opens a Chrome or Edge app window, and failing that, your browser. Closing the window stops Mitzi. `mitzi web` runs the same app in your browser instead.
+
+Both serve the app at `http://localhost:4545`. It only accepts connections from your own machine and requires a private access token, which is included in the link it prints. Use `--port` to change the port and `--no-open` to start without opening anything.
+
+When an update is available, the sidebar says so. **Settings → Updates** lists what's new and installs it; Mitzi restarts by itself and the window reconnects. If an update fails, Mitzi goes back to the version you had.
 
 <p>
   <img src="docs/screenshots/project.png" width="49%" alt="A project with instructions and knowledge files">

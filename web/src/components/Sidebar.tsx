@@ -1,4 +1,4 @@
-import { Bot, Brain, CalendarClock, FolderOpen, GitBranch, KeyRound, Layers, PanelLeftClose, Pin, Plug, Puzzle, Search, Settings, SquarePen, WandSparkles } from 'lucide-react';
+import { ArrowUpCircle, Bot, Brain, CalendarClock, FolderOpen, GitBranch, KeyRound, Layers, PanelLeftClose, Pin, Plug, Puzzle, Search, Settings, SquarePen, WandSparkles } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { ChatListItem } from '../api';
 import { href, Route } from '../router';
@@ -17,7 +17,7 @@ function groupLabel(iso: string): string {
 }
 
 export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collapsed: boolean; onCollapse(): void }) {
-  const { chats, projects, bots, settings, tasks } = useApp();
+  const { chats, projects, bots, settings, tasks, update } = useApp();
   const unseen = tasks.reduce((n, t) => n + t.runs.filter((r) => !r.seen && r.status !== 'running').length, 0);
   const [query, setQuery] = useState('');
 
@@ -118,6 +118,11 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
           <a className="key-warning" href={href({ page: 'settings', section: 'providers' })}>
             <KeyRound size={15} style={{ flexShrink: 0, marginTop: 1 }} />
             <span>Add an API key for OpenRouter or another provider to start chatting</span>
+          </a>
+        )}
+        {update?.supported && update.behind > 0 && (
+          <a className="update-pill" href={href({ page: 'settings', section: 'updates' })} title={`v${update.current.version} → v${update.latest?.version}`}>
+            <ArrowUpCircle size={15} /> Update available
           </a>
         )}
         <a className={`nav-item${route.page === 'settings' ? ' active' : ''}`} href={href({ page: 'settings' })}>

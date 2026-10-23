@@ -1,5 +1,5 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { api, ApiError, Bot, ChatListItem, ModelInfo, ProjectView, PublicSettings, TaskView } from './api';
+import { api, ApiError, Bot, ChatListItem, ModelInfo, ProjectView, PublicSettings, TaskView, UpdateStatus } from './api';
 
 export type Theme = 'system' | 'light' | 'dark';
 
@@ -30,6 +30,9 @@ interface AppState {
   /** Scheduled tasks, polled so finished runs show up in the sidebar. */
   tasks: TaskView[];
   refreshTasks(): Promise<void>;
+  /** The last update check (the server checks in the background). */
+  update?: UpdateStatus;
+  setUpdate(u: UpdateStatus): void;
   toast(message: string, tone?: Toast['tone']): void;
   toasts: Toast[];
   dismissToast(id: number): void;
@@ -61,6 +64,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [bots, setBots] = useState<Bot[]>([]);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [tasks, setTasks] = useState<TaskView[]>([]);
+  const [update, setUpdate] = useState<UpdateStatus>();
   const [modelsError, setModelsError] = useState<string>();
   const [authError, setAuthError] = useState(false);
   const [theme, setThemeState] = useState<Theme>(readTheme);
@@ -134,7 +138,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void refreshModels();
     void refreshTasks();
     const timer = setInterval(() => document.visibilityState === 'visible' && void refreshTasks(), 30_000);
-    return () => clearInterval(timer);
+    // The server's last update check; cheap, it doesn't contact GitHub itself.
+    const loadUpdate = () => api.updateInfo().then(setUpdate, () => {});
+    const first = setTimeout(loadUpdate, 20_000);
+    const updates = setInterval(loadUpdate, 3 * 3600_000);
+    return () => {
+      clearInterval(timer);
+      clearTimeout(first);
+      clearInterval(updates);
+    };
   }, [refreshSettings, refreshChats, refreshProjects, refreshBots, refreshModels, refreshTasks]);
 
   const value = useMemo<AppState>(
@@ -155,11 +167,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       refreshModels,
       tasks,
       refreshTasks,
+      update,
+      setUpdate,
       toast,
       toasts,
       dismissToast,
     }),
-    [settings, chats, projects, bots, models, modelsError, authError, theme, setTheme, refreshSettings, refreshChats, refreshProjects, refreshBots, refreshModels, tasks, refreshTasks, toast, toasts, dismissToast],
+    [settings, chats, projects, bots, models, modelsError, authError, theme, setTheme, refreshSettings, refreshChats, refreshProjects, refreshBots, refreshModels, tasks, refreshTasks, update, toast, toasts, dismissToast],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -26,6 +26,8 @@ export interface UiSettings {
   autoCompactPercent: number;
   /** User turns kept verbatim when compacting. */
   keepRecentTurns: number;
+  /** Look for new versions in the background. */
+  autoCheckUpdates: boolean;
 }
 
 export interface PublicSettings extends UiSettings {
