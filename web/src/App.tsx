@@ -1,8 +1,8 @@
 import { SearchDialog } from './components/SearchDialog';
 import { InsightsPage } from './pages/Insights';
 import { WorkflowEditor, WorkflowsPage } from './pages/Workflows';
-import { KeyRound, PanelLeft } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { KeyRound, PanelLeft, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Toasts } from './components/ui';
 import { BotsPage } from './pages/Bots';
@@ -15,7 +15,7 @@ import { SkillsPage } from './pages/Skills';
 import { ArtifactPage, ArtifactsPage } from './pages/Workspace';
 import { TasksPage } from './pages/Tasks';
 import { ProjectPage, ProjectsPage } from './pages/Projects';
-import { useRoute } from './router';
+import { navigate, Route, useRoute } from './router';
 import { useApp } from './state';
 import { tr } from './i18n';
 
@@ -30,6 +30,9 @@ function readCollapsed(): boolean {
 export function App() {
   const route = useRoute();
   const { authError } = useApp();
+  // The settings page gets an X that returns to where you were; remember the last non-settings page.
+  const lastPage = useRef<Route>({ page: 'new' });
+  if (route.page !== 'settings') lastPage.current = route;
   const narrow = () => window.matchMedia('(max-width: 860px)').matches;
   const [collapsed, setCollapsed] = useState(() => narrow() || readCollapsed());
   // Search everything: Ctrl/⌘+K, or from the sidebar.
@@ -64,6 +67,11 @@ export function App() {
       }
       return !c;
     });
+  };
+
+  const closeSettings = () => {
+    const back = lastPage.current;
+    navigate(back, back.page === 'new');
   };
 
   if (authError) {
@@ -109,7 +117,7 @@ export function App() {
       page = <MemoryPage botId={route.botId} />;
       break;
     case 'settings':
-      page = <SettingsPage section={route.section} />;
+      page = <SettingsPage section={route.section} onClose={closeSettings} />;
       break;
     case 'connectors':
       page = <ConnectorsPage />;

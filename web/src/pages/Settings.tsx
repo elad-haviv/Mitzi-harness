@@ -35,7 +35,7 @@ const EXTENSIONS = [
   { page: 'plugins' as const, label: tr('Plugins'), icon: <Puzzle size={16} /> },
 ];
 
-export function SettingsPage({ section }: { section?: string }) {
+export function SettingsPage({ section, onClose }: { section?: string; onClose?: () => void }) {
   const { settings, update } = useApp();
   if (!settings) return <div className="page muted">{tr('Loading…')}</div>;
   // Without a provider there's nothing else to do, so start there.
@@ -77,6 +77,11 @@ export function SettingsPage({ section }: { section?: string }) {
               <h2 className="page-title">{info.label}</h2>
               <p className="page-subtitle">{info.hint}</p>
             </div>
+            {onClose && (
+              <button className="icon-btn" onClick={onClose} aria-label={tr('Close settings')} title={tr('Close settings')}>
+                <X size={18} />
+              </button>
+            )}
           </div>
           {current === 'general' && <GeneralSettings />}
           {current === 'models' && <ModelSettings />}
