@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createServer, IncomingMessage, Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { createServer as createTcpServer, type AddressInfo } from 'node:net';
 import { createHmac } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -10,6 +10,8 @@ import { fakeWebSocketServer, FakeSocket, tempDir, textChunks, toolCallChunks } 
 process.env.MITZI_HOME = tempDir();
 process.env.OPENROUTER_API_KEY = 'test-key';
 process.env.CLAUDE_CONFIG_DIR = tempDir();
+process.env.MITZI_EMAIL_PLAIN = '1';
+process.env.MITZI_EMAIL_POLL_MS = '100';
 
 const TOKEN = 'c'.repeat(48);
 let base = '';
@@ -312,4 +314,174 @@ test('WhatsApp: verified, signed webhooks; pairing; whole answers; buttons and l
   await until(() => chat && sentTo().at(-1)?.text?.body === 'ok', 'answered by number');
 
   await call('PUT', '/api/channels/whatsapp', { enabled: false });
+});
+
+/** A fake mail server: an IMAP inbox and an SMTP outbox. */
+async function fakeMail() {
+  const inbox: { uid: number; raw: string; seen: boolean }[] = [];
+  const outbox: string[] = [];
+  let nextUid = 1;
+  const imap = createTcpServer((sock) => {
+    sock.write('* OK fake IMAP ready\r\n');
+    let buf = '';
+    sock.on('data', (d) => {
+      buf += d.toString('utf8');
+      let i: number;
+      while ((i = buf.indexOf('\r\n')) >= 0) {
+        const line = buf.slice(0, i);
+        buf = buf.slice(i + 2);
+        const [tag, ...rest] = line.split(' ');
+        const cmd = rest.join(' ');
+        if (/^LOGIN/i.test(cmd)) sock.write(cmd === 'LOGIN "mitzi@test.dev" "mail-pass"' ? `${tag} OK logged in\r\n` : `${tag} NO [AUTHENTICATIONFAILED] Invalid credentials\r\n`);
+        else if (/^SELECT/i.test(cmd)) sock.write(`* ${inbox.length} EXISTS\r\n* OK [UIDNEXT ${nextUid}] next\r\n${tag} OK [READ-WRITE] done\r\n`);
+        else if (/^UID SEARCH/i.test(cmd)) {
+          const from = Number(/UID (\d+):\*/.exec(cmd)?.[1] ?? 1);
+          sock.write(`* SEARCH ${inbox.filter((m) => !m.seen && m.uid >= from).map((m) => m.uid).join(' ')}\r\n${tag} OK done\r\n`);
+        } else if (/^UID FETCH/i.test(cmd)) {
+          const uid = Number(cmd.split(' ')[2]);
+          const m = inbox.find((x) => x.uid === uid)!;
+          const headerOnly = /HEADER\.FIELDS/.test(cmd);
+          const data = headerOnly ? `${m.raw.split('\r\n\r\n')[0].split('\r\n').filter((l) => /^(From|Subject):/i.test(l)).join('\r\n')}\r\n\r\n` : m.raw;
+          const len = Buffer.byteLength(data);
+          sock.write(`* ${uid} FETCH (UID ${uid} BODY[${headerOnly ? 'HEADER.FIELDS (FROM SUBJECT)' : ''}] {${len}}\r\n${data})\r\n${tag} OK done\r\n`);
+        } else if (/^UID STORE/i.test(cmd)) {
+          inbox.find((x) => x.uid === Number(cmd.split(' ')[2]))!.seen = true;
+          sock.write(`${tag} OK done\r\n`);
+        } else if (/^LOGOUT/i.test(cmd)) sock.end(`* BYE\r\n${tag} OK bye\r\n`);
+        else sock.write(`${tag} BAD unknown\r\n`);
+      }
+    });
+    sock.on('error', () => {});
+  });
+  const smtp = createTcpServer((sock) => {
+    sock.write('220 fake SMTP\r\n');
+    let buf = '';
+    let data: string | undefined;
+    sock.on('data', (d) => {
+      buf += d.toString('utf8');
+      let i: number;
+      while ((i = buf.indexOf('\r\n')) >= 0) {
+        const line = buf.slice(0, i);
+        buf = buf.slice(i + 2);
+        if (data !== undefined) {
+          if (line === '.') {
+            outbox.push(data);
+            data = undefined;
+            sock.write('250 queued\r\n');
+          } else data += `${line}\r\n`;
+        } else if (/^EHLO/i.test(line)) sock.write('250-fake\r\n250 AUTH PLAIN\r\n');
+        else if (/^AUTH PLAIN/i.test(line)) sock.write(Buffer.from(line.slice(11), 'base64').toString() === '\0mitzi@test.dev\0mail-pass' ? '235 ok\r\n' : '535 no\r\n');
+        else if (/^(MAIL|RCPT)/i.test(line)) sock.write('250 ok\r\n');
+        else if (/^DATA/i.test(line)) {
+          data = '';
+          sock.write('354 go\r\n');
+        } else if (/^QUIT/i.test(line)) sock.end('221 bye\r\n');
+      }
+    });
+    sock.on('error', () => {});
+  });
+  for (const s of [imap, smtp]) {
+    servers.push(s as unknown as Server);
+    await new Promise<void>((r) => s.listen(0, '127.0.0.1', r));
+  }
+  const deliver = (from: string, subject: string, body: string, extra = '') => {
+    inbox.push({ uid: nextUid++, seen: false, raw: `From: ${from}\r\nTo: mitzi@test.dev\r\nSubject: ${subject}\r\nMessage-ID: <m${nextUid}@mail.test>\r\n${extra}\r\n${body}` });
+  };
+  return { imapPort: (imap.address() as AddressInfo).port, smtpPort: (smtp.address() as AddressInfo).port, inbox, outbox, deliver };
+}
+
+/** A sent message's headers and its (base64) text. */
+const readMail = (raw: string) => {
+  const [head, body] = raw.split('\r\n\r\n');
+  return { head, text: Buffer.from(body.replace(/\s/g, ''), 'base64').toString('utf8') };
+};
+
+test('Email: reads only new mail from paired addresses, answers in the thread, choices by number', { timeout: 30_000 }, async () => {
+  const mail = await fakeMail();
+  // Mail from before Mitzi starts is left alone, even a pairing code.
+  mail.deliver('Dana <dana@home.test>', 'pair 000000', 'old');
+  const config = { address: 'mitzi@test.dev', password: 'wrong', imapHost: '127.0.0.1', imapPort: String(mail.imapPort), smtpHost: '127.0.0.1', smtpPort: String(mail.smtpPort) };
+  assert.match((await call('PUT', '/api/channels/email', { config, enabled: true })).data.error, /Couldn’t sign in to 127.0.0.1: \[AUTHENTICATIONFAILED\] Invalid credentials/);
+  const on = (await call('PUT', '/api/channels/email', { config: { password: 'mail-pass' }, enabled: true })).data;
+  assert.equal(on.running, true);
+  assert.equal(on.username, 'mitzi@test.dev');
+
+  // A stranger's mail stays unread and unanswered.
+  mail.deliver('Spammer <spam@bad.test>', 'Buy now', 'Cheap stuff');
+  await new Promise((r) => setTimeout(r, 400));
+  assert.equal(mail.outbox.length, 0);
+  assert.ok(mail.inbox.every((m) => !m.seen));
+
+  mail.deliver('"Dana Cohen" <Dana@Home.test>', `pair ${on.pairingCode}`, 'Hi Mitzi\r\n\r\n-- \r\nDana');
+  await until(() => mail.outbox.length === 1, 'pairing reply');
+  const paired = readMail(mail.outbox[0]);
+  assert.match(paired.text, /Connected to Mitzi/);
+  assert.match(paired.head, new RegExp(`Subject: Re: pair ${on.pairingCode}`));
+  assert.match(paired.head, /In-Reply-To: <m\d+@mail.test>/);
+  assert.equal(mail.inbox.at(-1)!.seen, true);
+  assert.deepEqual((await channel('email')).links.map((l: any) => [l.address, l.name]), [['dana@home.test', 'Dana Cohen']]);
+
+  // Quoted text and signatures don't reach the model; the answer is plain text.
+  let asked = '';
+  reply = (body) => {
+    asked = JSON.stringify(body.messages.at(-1).content);
+    return textChunks('**Four.** See [the docs](https://example.com).');
+  };
+  mail.deliver('Dana <dana@home.test>', 'Re: Mitzi', 'What is 2+2?\r\n\r\nOn Mon, 1 Jan 2026, Mitzi wrote:\r\n> earlier answer\r\n', 'Content-Type: text/plain; charset=utf-8\r\n');
+  await until(() => mail.outbox.length === 2, 'answer');
+  assert.equal(JSON.parse(asked), 'What is 2+2?');
+  assert.equal(readMail(mail.outbox[1]).text, 'Four. See the docs (https://example.com).');
+
+  // Choices are numbered; a reply with a number picks one.
+  reply = (body) => (body.messages.at(-1).role === 'tool' ? textChunks(`Booked: ${body.messages.at(-1).content}`) : toolCallChunks('q', 'AskUser', { questions: [{ question: 'Which day?', options: [{ label: 'Monday' }, { label: 'Tuesday', description: 'busier' }] }] }));
+  mail.deliver('Dana <dana@home.test>', 'Book a table', 'Please book a table');
+  await until(() => mail.outbox.some((m) => /Which day\?/.test(readMail(m).text)), 'question');
+  assert.match(readMail(mail.outbox.at(-1)!).text, /1\. Monday\n2\. Tuesday — busier\n\nReply with a number, or in your own words\./);
+  // A multipart reply (quoted-printable) answers it.
+  mail.deliver('Dana <dana@home.test>', 'Re: Book a table', '--b1\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n2\r\n--b1\r\nContent-Type: text/html\r\n\r\n<p>2</p>\r\n--b1--\r\n', 'MIME-Version: 1.0\r\nContent-Type: multipart/alternative; boundary="b1"\r\n');
+  await until(() => mail.outbox.some((m) => /Booked: Which day\?\n→ Tuesday/.test(readMail(m).text)), 'booked');
+
+  // Out-of-office replies aren't answered.
+  const sent = mail.outbox.length;
+  mail.deliver('Dana <dana@home.test>', 'Automatic reply', 'I am away', 'Auto-Submitted: auto-replied\r\n');
+  await new Promise((r) => setTimeout(r, 400));
+  assert.equal(mail.outbox.length, sent);
+
+  await call('PUT', '/api/channels/email', { enabled: false });
+});
+
+test('mail parsing: encoded headers and bodies, HTML-only mail, attachments, quoted replies', async () => {
+  const { parseMail, replyText, buildMessage } = await import('../server/channels/mail.js');
+  const raw = Buffer.from(
+    [
+      'From: =?UTF-8?B?157XmdeY16bXmQ==?= <cat@example.com>',
+      'Subject: =?utf-8?Q?Caf=C3=A9_plans?=',
+      'Content-Type: multipart/mixed; boundary=outer',
+      '',
+      '--outer',
+      'Content-Type: text/html; charset=utf-8',
+      'Content-Transfer-Encoding: base64',
+      '',
+      Buffer.from('<p>Shall we meet at <b>noon</b>?</p><blockquote>old stuff</blockquote>').toString('base64'),
+      '--outer',
+      'Content-Type: image/png; name="map.png"',
+      'Content-Transfer-Encoding: base64',
+      'Content-Disposition: attachment; filename="map.png"',
+      '',
+      Buffer.from('PNGDATA').toString('base64'),
+      '--outer--',
+      '',
+    ].join('\r\n'),
+  );
+  const m = parseMail(raw);
+  assert.deepEqual(m.from, { address: 'cat@example.com', name: 'מיטצי' });
+  assert.equal(m.subject, 'Café plans');
+  assert.equal(m.text, 'Shall we meet at noon?');
+  assert.deepEqual(m.files.map((f) => [f.name, f.type, f.data.toString()]), [['map.png', 'image/png', 'PNGDATA']]);
+  assert.equal(replyText('Sure!\n\n-----Original Message-----\nFrom: x'), 'Sure!');
+  assert.equal(replyText('Yes\n> quoted\nthanks'), 'Yes\nthanks');
+  const built = buildMessage({ from: 'mitzi@x.dev', to: 'a@b.c', subject: 'שלום', text: 'hi', inReplyTo: '<1@x>' }, 'x.dev');
+  assert.match(built.data, /Subject: =\?UTF-8\?B\?/);
+  assert.match(built.data, /In-Reply-To: <1@x>\r\nReferences: <1@x>/);
+  assert.match(built.id, /@x\.dev>$/);
 });
