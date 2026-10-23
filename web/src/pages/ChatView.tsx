@@ -21,8 +21,9 @@ import {
   X,
 } from 'lucide-react';
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, Artifact, Attachment, Chat, ChatMessage, DEFAULT_BOT_ID, RecalledMemory, StreamEvent } from '../api';
+import { api, Artifact, Attachment, Chat, ChatMessage, DEFAULT_BOT_ID, RecalledMemory, RepoStatus, StreamEvent } from '../api';
 import { LiveMode } from '../components/LiveMode';
+import { ProjectChip } from '../components/ProjectChip';
 import { speaker } from '../speech';
 import { ArtifactIcon, ArtifactView, TYPE_LABEL } from '../components/Artifacts';
 import { Composer, ComposerHandle, ContextRing } from '../components/Composer';
@@ -394,6 +395,16 @@ export function ChatView({
       onModelChange={(m) => (chat ? void updateChat({ model: m }) : setDraftModel(m))}
       webSearch={webSearch}
       onWebSearchChange={(on) => (chat ? void updateChat({ webSearch: on }) : setDraftWeb(on))}
+      leading={
+        !embedded && (
+          <ProjectChip
+            projectId={chat?.projectId ?? projectId}
+            onChange={(id) =>
+              chat ? void updateChat({ projectId: id }) : navigate({ page: 'new', projectId: id ?? undefined, botId }, true)
+            }
+          />
+        )
+      }
       placeholder={placeholder ?? (customBot ? `Message ${customBot.name}…` : project ? `Message Mitzi in ${project.name}…` : undefined)}
       autoFocus
       extra={
@@ -514,9 +525,10 @@ export function ChatView({
           )}
           {project?.folder && (
             <span className="badge ok" title={project.folder}>
-              <Terminal size={12} /> Coding agent in {project.folder.split('/').slice(-2).join('/')}
+              <Terminal size={12} /> Coding agent in {project.folder.split(/[\\/]/).slice(-2).join('/')}
             </span>
           )}
+          {project?.folder && <RepoBadge projectId={project.id} />}
           {settings?.memoryEnabled && bot?.tools.memory && (
             <a className="badge" href={href({ page: 'memory', botId: bot.id })} title={`${bot.name}'s memory bank`}>
               <Brain size={12} /> Memory on
@@ -803,6 +815,22 @@ function Starters({ botId, onPick }: { botId: string; onPick(text: string): void
         </div>
       )}
     </>
+  );
+}
+
+/** Branch and state of a project's git repository. */
+function RepoBadge({ projectId }: { projectId: string }) {
+  const [status, setStatus] = useState<RepoStatus | null>(null);
+  useEffect(() => {
+    api.repoStatus(projectId).then(setStatus, () => setStatus(null));
+  }, [projectId]);
+  if (!status?.branch) return null;
+  const bits = [status.changed && `${status.changed} changed`, status.ahead && `${status.ahead} to push`, status.behind && `${status.behind} to pull`].filter(Boolean);
+  return (
+    <a className="badge" href={href({ page: 'project', id: projectId })} title={status.remote ?? 'Local repository'}>
+      <GitBranch size={12} /> {status.branch}
+      {bits.length ? ` · ${bits.join(' · ')}` : ''}
+    </a>
   );
 }
 

@@ -3739,3 +3739,180 @@ mark.doc-mark.hot {
 .reasoning-body .md > :first-child {
   margin-top: 0;
 }
+
+/* ---------- Projects, folders and repositories ---------- */
+.accent {
+  color: var(--accent);
+}
+.project-chip {
+  max-width: 220px;
+}
+.project-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-menu {
+  width: 300px;
+  max-height: 420px;
+  overflow: auto;
+}
+.menu-label {
+  padding: 6px 10px 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.menu-sub {
+  display: block;
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+.menu-check {
+  color: var(--accent);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.menu .menu-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-size: 13.5px;
+  color: var(--text-2);
+  text-decoration: none;
+}
+.menu .menu-link:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin: 8px 0 10px;
+  font-size: 12.5px;
+}
+.crumbs > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.folder-browser {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  height: min(380px, 50vh);
+  overflow: hidden;
+}
+.folder-places {
+  width: 170px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 6px;
+  overflow: auto;
+}
+.folder-place {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-2);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.folder-place:hover,
+.folder-place.on {
+  background: var(--surface-3);
+  color: var(--text);
+}
+.folder-list {
+  flex: 1;
+  overflow: auto;
+  padding: 4px;
+}
+.folder-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text);
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+button.folder-row:hover {
+  background: var(--surface-2);
+}
+.repo-panel {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+.repo-panel > .row {
+  width: 100%;
+}
+.repo-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--muted);
+}
+@media (max-width: 640px) {
+  .folder-places {
+    display: none;
+  }
+  .project-chip {
+    max-width: 130px;
+  }
+}
+/* Small screens: the message box's controls shrink so the send button stays in view. */
+.composer-bar > * {
+  flex-shrink: 0;
+}
+.composer-bar .menu-wrap {
+  min-width: 0;
+  flex-shrink: 1;
+}
+.composer-bar .pill-btn > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .composer-bar {
+    gap: 2px;
+    padding-left: 6px;
+  }
+  .project-chip .project-chip-label {
+    display: none;
+  }
+  .composer-bar .pill-btn {
+    max-width: 100%;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+}

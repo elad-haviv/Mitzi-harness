@@ -30,6 +30,8 @@ import type {
   ProviderView,
   Rating,
   ScheduledTask,
+  DirListing,
+  RepoStatus,
 } from '../../src/shared/types';
 
 export type * from '../../src/shared/types';
@@ -164,6 +166,13 @@ export const api = {
   deleteProject: (id: string) => request('DELETE', `/api/projects/${id}`),
   addProjectFile: (id: string, name: string, content: string) => request<ProjectView>('POST', `/api/projects/${id}/files`, { name, content }),
   removeProjectFile: (id: string, fileId: string) => request<ProjectView>('DELETE', `/api/projects/${id}/files/${fileId}`),
+
+  dirs: (path?: string, hidden = false) => request<DirListing>('GET', `/api/fs/dirs?path=${encodeURIComponent(path ?? '~')}${hidden ? '&hidden=1' : ''}`),
+  mkdir: (parent: string, name: string) => request<DirListing>('POST', '/api/fs/mkdir', { parent, name }),
+  openFolder: (folder: string) => request<ProjectView>('POST', '/api/projects/open-folder', { folder }),
+  cloneRepo: (body: { url: string; branch?: string; token?: string; parent?: string; name?: string }) => request<ProjectView>('POST', '/api/repos/clone', body),
+  repoStatus: (projectId: string) => request<RepoStatus | null>('GET', `/api/projects/${projectId}/git`),
+  pull: (projectId: string) => request<{ output: string; status?: RepoStatus }>('POST', `/api/projects/${projectId}/pull`, {}),
 
   bots: () => request<Bot[]>('GET', '/api/bots'),
   createBot: (body: Partial<Bot>) => request<Bot>('POST', '/api/bots', body),

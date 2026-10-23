@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer, Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { toAnthropic } from '../anthropic.js';
@@ -149,6 +150,61 @@ test('thinking is saved with the answer but never sent back to the model', async
   reply = () => textChunks('Sure.');
   await send(chat.id, 'Thanks');
   assert.ok(!JSON.stringify(lastMain().messages).includes('check the facts'));
+});
+
+test('folders: browse, open as a project, clone a repository, status and pull', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const { mkdirSync, writeFileSync } = await import('node:fs');
+  const root = tempDir();
+  mkdirSync(join(root, 'app', '.git'), { recursive: true });
+  mkdirSync(join(root, 'notes'));
+  mkdirSync(join(root, '.hidden'));
+  const listing = (await call('GET', `/api/fs/dirs?path=${encodeURIComponent(root)}`)).data;
+  assert.deepEqual(listing.dirs.map((d: any) => [d.name, d.git]), [['app', true], ['notes', false]]);
+  assert.ok(listing.parent);
+  assert.ok(listing.places.some((p: any) => p.label === 'Home'));
+  assert.equal((await call('GET', `/api/fs/dirs?path=${encodeURIComponent(join(root, 'nope'))}`)).status, 404);
+  const made = (await call('POST', '/api/fs/mkdir', { parent: root, name: 'new-app' })).data;
+  assert.equal(made.path, join(root, 'new-app'));
+
+  // Opening a folder makes a project once, then reuses it.
+  const p1 = (await call('POST', '/api/projects/open-folder', { folder: join(root, 'notes') })).data;
+  assert.equal(p1.name, 'notes');
+  assert.equal(p1.folder, join(root, 'notes'));
+  const p2 = (await call('POST', '/api/projects/open-folder', { folder: join(root, 'notes') })).data;
+  assert.equal(p2.id, p1.id);
+
+  // A local "remote" repository with one commit.
+  const sh = (args: string[], cwd: string) => execFileSync('git', args, { cwd, env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' } });
+  const upstream = join(root, 'upstream');
+  mkdirSync(upstream);
+  sh(['init', '-q', '-b', 'main'], upstream);
+  writeFileSync(join(upstream, 'README.md'), '# Hello\n');
+  sh(['add', '.'], upstream);
+  sh(['commit', '-qm', 'first'], upstream);
+
+  assert.equal((await call('POST', '/api/repos/clone', { url: '--upload-pack=evil' })).status, 400);
+  const clones = join(root, 'clones');
+  const repo = (await call('POST', '/api/repos/clone', { url: `file://${upstream}`, parent: clones, name: 'my-repo' })).data;
+  assert.equal(repo.folder, join(clones, 'my-repo'));
+  assert.equal(repo.repo.branch, 'main');
+  assert.equal(readFileSync(join(clones, 'my-repo', 'README.md'), 'utf8'), '# Hello\n');
+  // Cloning the same repository again reuses it.
+  assert.equal((await call('POST', '/api/repos/clone', { url: `file://${upstream}`, parent: clones, name: 'my-repo' })).data.id, repo.id);
+
+  let status = (await call('GET', `/api/projects/${repo.id}/git`)).data;
+  assert.deepEqual([status.branch, status.changed, status.behind], ['main', 0, 0]);
+  writeFileSync(join(clones, 'my-repo', 'new.txt'), 'x');
+  status = (await call('GET', `/api/projects/${repo.id}/git`)).data;
+  assert.equal(status.changed, 1);
+
+  writeFileSync(join(upstream, 'CHANGELOG.md'), 'v2\n');
+  sh(['add', '.'], upstream);
+  sh(['commit', '-qm', 'second'], upstream);
+  const pulled = (await call('POST', `/api/projects/${repo.id}/pull`)).data;
+  assert.match(pulled.output, /CHANGELOG|Fast-forward|file changed/);
+  assert.equal(readFileSync(join(clones, 'my-repo', 'CHANGELOG.md'), 'utf8'), 'v2\n');
+  assert.equal((await call('GET', `/api/projects/${p1.id}/git`)).status, 400);
 });
 
 test('cron and schedules compute the next run in local time', () => {

@@ -29,6 +29,8 @@ interface Props {
   placeholder?: string;
   autoFocus?: boolean;
   extra?: ReactNode;
+  /** Shown after the model picker, e.g. the project picker. */
+  leading?: ReactNode;
 }
 
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(props, handle) {
@@ -202,6 +204,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
             <span className="search-label">Search</span>
           </button>
           <ModelPicker value={props.model} onChange={props.onModelChange} />
+          {props.leading}
           <div style={{ flex: 1 }} />
           {props.extra}
           {props.running ? (

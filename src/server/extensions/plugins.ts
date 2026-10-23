@@ -2,7 +2,7 @@
 // skills/, commands/, agents/, .mcp.json and hooks/. Marketplaces are git repos with
 // .claude-plugin/marketplace.json listing plugins. Mitzi maps agents to bots and MCP
 // servers to connectors; hooks are listed but not run.
-import { execFile } from 'node:child_process';
+import { git } from '../git.js';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
@@ -51,15 +51,6 @@ function readJson(path: string): any | undefined {
   } catch {
     return undefined;
   }
-}
-
-function git(args: string[], cwd?: string): Promise<string> {
-  return new Promise((resolvePromise, reject) => {
-    execFile('git', args, { cwd, timeout: 180_000, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
-      if (err) reject(new Error((err as NodeJS.ErrnoException).code === 'ENOENT' ? 'git is not installed' : stderr.trim().split('\n').pop() || err.message));
-      else resolvePromise(stdout);
-    });
-  });
 }
 
 /** Expands ${CLAUDE_PLUGIN_ROOT} (and ${VAR} / ${VAR:-default} from the environment). */

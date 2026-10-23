@@ -53,6 +53,9 @@ An open-source, Claude-style AI workspace that runs on **any model available thr
 - *Instructions* are added to every chat in the project.
 - *Knowledge files* are reference documents included in every chat's context.
 - A *coding workspace* links a local folder. Chats in the project then get Read, Write, Edit, Bash, Glob, Grep and the other coding tools, with a permission prompt (showing a diff) before anything changes.
+- **Pick where to work from the message box:** the project button next to the model picker sets a new chat's project, or moves an existing chat. From the same menu:
+  - **Open a folder…** browses the folders on your computer and starts working there (Mitzi makes a project for the folder, or reuses the one it has).
+  - **Connect a repository…** clones a GitHub, GitLab or any git repository (`owner/repo`, an https or SSH URL, a branch, and an access token for private ones) and opens it as a project. The project page shows its branch, local changes and commits to push or pull, with a **Pull latest** button. Tokens are stored only on your computer and never written into the repository's config.
 
 ![Coding agent asking for permission](docs/screenshots/coding-permission.png)
 

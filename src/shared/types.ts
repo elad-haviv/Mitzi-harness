@@ -62,6 +62,8 @@ export interface Project {
   files: ProjectFile[];
   /** Local folder; when set, chats get coding tools (Read, Edit, Bash…) scoped to it. */
   folder?: string;
+  /** Set when the folder was cloned from a remote repository. */
+  repo?: { url: string; branch?: string };
   permissionMode: PermissionMode;
   createdAt: string;
   updatedAt: string;
@@ -634,4 +636,33 @@ export interface ScheduledTask {
   runs: TaskRun[];
   createdAt: string;
   updatedAt: string;
+}
+
+// ---------- Folders and repositories ----------
+
+export interface DirEntry {
+  name: string;
+  path: string;
+  /** Contains a .git folder. */
+  git: boolean;
+}
+
+export interface DirListing {
+  path: string;
+  /** Undefined at a filesystem root. */
+  parent?: string;
+  dirs: DirEntry[];
+  /** Shortcuts: home, Desktop, Documents, drives… */
+  places: { label: string; path: string }[];
+  git: boolean;
+}
+
+export interface RepoStatus {
+  branch?: string;
+  /** Commits not yet pushed / not yet pulled. */
+  ahead: number;
+  behind: number;
+  /** Files changed, added or deleted in the working tree. */
+  changed: number;
+  remote?: string;
 }

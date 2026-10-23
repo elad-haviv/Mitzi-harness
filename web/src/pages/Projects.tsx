@@ -1,14 +1,21 @@
-import { BookOpen, FileText, FolderOpen, Layers, MessageSquare, MoreHorizontal, Pencil, Plus, ShieldCheck, SquarePen, Terminal, Trash2, Upload } from 'lucide-react';
+import { BookOpen, FileText, FolderGit2, FolderOpen, FolderSearch, GitBranch, Loader2, RefreshCw, Layers, MessageSquare, MoreHorizontal, Pencil, Plus, ShieldCheck, SquarePen, Terminal, Trash2, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { api, ArtifactListItem, ChatListItem, PermissionMode, ProjectView } from '../api';
+import { api, ArtifactListItem, ChatListItem, PermissionMode, ProjectView, RepoStatus } from '../api';
+import { CloneRepoModal, FolderPicker } from '../components/Folders';
 import { ArtifactIcon, TYPE_LABEL } from '../components/Artifacts';
 import { Empty, Menu, Modal, readFileAsText, useConfirm } from '../components/ui';
 import { href, navigate } from '../router';
 import { formatTokens, relativeTime, useApp } from '../state';
 
 export function ProjectsPage() {
-  const { projects, refreshProjects } = useApp();
+  const { projects, refreshProjects, toast } = useApp();
   const [creating, setCreating] = useState(false);
+  const [dialog, setDialog] = useState<'folder' | 'repo' | null>(null);
+  const opened = async (p: ProjectView) => {
+    await refreshProjects();
+    setDialog(null);
+    navigate({ page: 'project', id: p.id });
+  };
   return (
     <div className="page">
       <div className="page-inner">
@@ -17,10 +24,33 @@ export function ProjectsPage() {
             <h1 className="page-title">Projects</h1>
             <p className="page-subtitle">Group chats with shared instructions and knowledge, or point Mitzi at a folder to work on code.</p>
           </div>
-          <button className="btn btn-primary" onClick={() => setCreating(true)}>
-            <Plus size={16} /> New project
-          </button>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn" onClick={() => setDialog('folder')}>
+              <FolderSearch size={16} /> Open folder
+            </button>
+            <button className="btn" onClick={() => setDialog('repo')}>
+              <GitBranch size={16} /> Connect repository
+            </button>
+            <button className="btn btn-primary" onClick={() => setCreating(true)}>
+              <Plus size={16} /> New project
+            </button>
+          </div>
         </div>
+        {dialog === 'folder' && (
+          <FolderPicker
+            title="Open a folder"
+            action="Work in this folder"
+            onClose={() => setDialog(null)}
+            onPick={async (path) => {
+              try {
+                await opened(await api.openFolder(path));
+              } catch (err) {
+                toast((err as Error).message);
+              }
+            }}
+          />
+        )}
+        {dialog === 'repo' && <CloneRepoModal onClose={() => setDialog(null)} onCloned={(p) => void opened(p)} />}
         {projects.length === 0 ? (
           <Empty
             icon={<FolderOpen size={22} />}
@@ -39,7 +69,7 @@ export function ProjectsPage() {
               <a key={p.id} className="tile" href={href({ page: 'project', id: p.id })}>
                 <div className="row" style={{ gap: 10 }}>
                   <div className="artifact-icon" style={{ width: 36, height: 36, borderRadius: 10 }}>
-                    {p.folder ? <Terminal size={17} /> : <FolderOpen size={17} />}
+                    {p.repo ? <FolderGit2 size={17} /> : p.folder ? <Terminal size={17} /> : <FolderOpen size={17} />}
                   </div>
                   <div className="tile-title">{p.name}</div>
                 </div>
@@ -139,6 +169,7 @@ export function ProjectPage({ id }: { id: string }) {
   const [editing, setEditing] = useState(false);
   const [instructionsOpen, setInstructionsOpen] = useState(false);
   const [folder, setFolder] = useState(project?.folder ?? '');
+  const [browsing, setBrowsing] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const [confirmNode, confirm] = useConfirm();
 
@@ -350,10 +381,25 @@ export function ProjectPage({ id }: { id: string }) {
                 }}
               >
                 <input className="input mono" placeholder="~/code/my-app" value={folder} onChange={(e) => setFolder(e.target.value)} />
+                <button className="btn btn-sm" type="button" onClick={() => setBrowsing(true)}>
+                  <FolderSearch size={14} /> Browse…
+                </button>
                 <button className="btn btn-sm" type="submit" disabled={folder === (project.folder ?? '')}>
                   Save
                 </button>
               </form>
+              {browsing && (
+                <FolderPicker
+                  start={project.folder}
+                  onClose={() => setBrowsing(false)}
+                  onPick={async (path) => {
+                    setBrowsing(false);
+                    setFolder(path);
+                    await update({ folder: path });
+                  }}
+                />
+              )}
+              {project.folder && <RepoPanel project={project} />}
               {project.folder && (
                 <div className="field" style={{ marginTop: 14, marginBottom: 0 }}>
                   <span className="field-label row" style={{ gap: 6 }}>
@@ -415,5 +461,54 @@ function InstructionsModal({ initial, onClose, onSave }: { initial: string; onCl
         placeholder={'e.g.\nYou are helping me write my thesis on urban heat islands.\nUse British English and cite sources in APA style.\nKeep answers under 300 words unless I ask for more.'}
       />
     </Modal>
+  );
+}
+
+/** Branch, changes and sync state of a project folder that is a git repository. */
+function RepoPanel({ project }: { project: ProjectView }) {
+  const { toast } = useApp();
+  const [status, setStatus] = useState<RepoStatus | null>();
+  const [pulling, setPulling] = useState(false);
+  const load = () => api.repoStatus(project.id).then(setStatus, () => setStatus(null));
+  useEffect(() => void load(), [project.id, project.folder]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!status) return null;
+  return (
+    <div className="repo-panel">
+      <div className="row" style={{ gap: 8 }}>
+        <GitBranch size={14} />
+        <strong>{status.branch ?? 'detached'}</strong>
+        <span className="muted small grow" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {status.remote ?? 'No remote'}
+        </span>
+        <button className="icon-btn sm" aria-label="Refresh" title="Refresh" onClick={() => void load()}>
+          <RefreshCw size={13} />
+        </button>
+      </div>
+      <div className="repo-stats small">
+        <span>{status.changed ? `${status.changed} changed file${status.changed === 1 ? '' : 's'}` : 'No local changes'}</span>
+        {status.ahead > 0 && <span>{status.ahead} to push</span>}
+        {status.behind > 0 && <span>{status.behind} to pull</span>}
+      </div>
+      {status.remote && (
+        <button
+          className="btn btn-sm"
+          disabled={pulling}
+          onClick={async () => {
+            setPulling(true);
+            try {
+              const r = await api.pull(project.id);
+              toast(r.output.split('\n').slice(-1)[0] || 'Pulled', 'info');
+              if (r.status) setStatus(r.status);
+            } catch (err) {
+              toast((err as Error).message);
+            } finally {
+              setPulling(false);
+            }
+          }}
+        >
+          {pulling ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />} Pull latest
+        </button>
+      )}
+    </div>
   );
 }
