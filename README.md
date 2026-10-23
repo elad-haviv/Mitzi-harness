@@ -98,12 +98,14 @@ Settings are merged from lowest to highest priority: built-in defaults, `~/.mitz
   "maxTurns": 100,
   "autoCompactTokens": 150000,
   "maxTokens": 16000,
-  "showReasoning": false
+  "showReasoning": false,
+  "attribution": true
 }
 ```
 
 - `smallModel` is used for summarizing during compaction.
 - `allowedTools` rules are a tool name (`"Edit"`) or a Bash command prefix (`"Bash(npm test)"`). A prefix rule never matches a command that chains other commands with `;`, `&&`, `|`, `$(…)` or redirects.
+- `attribution` controls the trailer Mitzi adds to commits it writes, so GitHub shows Mitzi as a co-author while you stay the author. `true` (the default) adds `Co-Authored-By: Mitzi (<model>) <noreply@mitzi.invalid>`; `false` turns it off; a string replaces it, with `{model}` expanded to the current model, e.g. `"Co-Authored-By: mitzi-bot <123+mitzi-bot@users.noreply.github.com>"`. The model is asked to add it, so a weaker model may occasionally forget.
 - Environment variables: `OPENROUTER_API_KEY`, `MITZI_MODEL`, `OPENROUTER_BASE_URL`, and `MITZI_HOME` (default `~/.mitzi`).
 
 Tool calling works best with models that support it well. Claude, GPT and Gemini models, and recent DeepSeek and Qwen models, all work well with Mitzi.

@@ -68,7 +68,12 @@ export class Agent {
   }
 
   private systemMessage(): Message {
-    const text = buildSystemPrompt({ cwd: this.ctx.cwd, model: this.model, mode: this.deps.permissions.mode });
+    const text = buildSystemPrompt({
+      cwd: this.ctx.cwd,
+      model: this.model,
+      mode: this.deps.permissions.mode,
+      attribution: this.deps.config.attribution,
+    });
     // Anthropic models only cache prompts with explicit breakpoints.
     return this.isAnthropic()
       ? { role: 'system', content: [{ type: 'text', text, cache_control: { type: 'ephemeral' } }] }

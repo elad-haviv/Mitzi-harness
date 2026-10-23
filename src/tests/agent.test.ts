@@ -6,6 +6,7 @@ import { Agent } from '../agent.js';
 import { loadConfig } from '../config.js';
 import { OpenRouterClient, OpenRouterError } from '../openrouter.js';
 import { Permissions } from '../permissions.js';
+import { buildSystemPrompt, commitTrailer } from '../prompt.js';
 import { ALL_TOOLS } from '../tools/index.js';
 import { mockOpenRouter, silentUI, tempDir, textChunks, toolCallChunks } from './helpers.js';
 
@@ -104,4 +105,14 @@ test('compact replaces history with a summary', async () => {
   assert.equal(agent.messages.length, 2);
   assert.match(String(agent.messages[0].content), /SUMMARY TEXT/);
   assert.match(mock.requests[1].messages[0].content, /First answer/);
+});
+
+test('commit attribution trailer follows the config and model', () => {
+  assert.equal(commitTrailer(true, 'openai/gpt-5'), 'Co-Authored-By: Mitzi (openai/gpt-5) <noreply@mitzi.invalid>');
+  assert.equal(commitTrailer('Co-Authored-By: Bot <bot@example.com> [{model}]', 'x/y'), 'Co-Authored-By: Bot <bot@example.com> [x/y]');
+  assert.equal(commitTrailer(false, 'x/y'), undefined);
+
+  const cwd = tempDir();
+  assert.match(buildSystemPrompt({ cwd, model: 'x/y', mode: 'default' }), /Co-Authored-By: Mitzi \(x\/y\)/);
+  assert.doesNotMatch(buildSystemPrompt({ cwd, model: 'x/y', mode: 'default', attribution: false }), /Commit attribution/);
 });

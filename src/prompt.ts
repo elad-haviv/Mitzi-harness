@@ -42,7 +42,21 @@ function git(cwd: string, args: string[]): string | undefined {
   }
 }
 
-export function buildSystemPrompt(opts: { cwd: string; model: string; mode: PermissionMode }): string {
+export const DEFAULT_ATTRIBUTION = 'Co-Authored-By: Mitzi ({model}) <noreply@mitzi.invalid>';
+
+/** The commit trailer for the given setting, or undefined when attribution is off. */
+export function commitTrailer(attribution: boolean | string | undefined, model: string): string | undefined {
+  if (attribution === false || attribution === '') return undefined;
+  const template = typeof attribution === 'string' ? attribution : DEFAULT_ATTRIBUTION;
+  return template.replaceAll('{model}', model);
+}
+
+export function buildSystemPrompt(opts: {
+  cwd: string;
+  model: string;
+  mode: PermissionMode;
+  attribution?: boolean | string;
+}): string {
   const branch = git(opts.cwd, ['rev-parse', '--abbrev-ref', 'HEAD']);
   const status = branch !== undefined ? git(opts.cwd, ['status', '--short']) : undefined;
   const instructions = findInstructionFiles(opts.cwd);
@@ -79,6 +93,14 @@ libraries and style. Never assume a library is available; check the project's ma
       status ? `\n- Git status (short):\n${status.split('\n').slice(0, 30).map((l) => `    ${l}`).join('\n')}` : ''
     }`,
   ];
+
+  const trailer = commitTrailer(opts.attribution ?? true, opts.model);
+  if (trailer) {
+    sections.push(`# Commit attribution
+When you create a git commit, end the commit message with a blank line followed by exactly:
+${trailer}
+Keep the user as the author; don't change git's user.name or user.email.`);
+  }
 
   if (opts.mode === 'plan') {
     sections.push(`# Plan mode

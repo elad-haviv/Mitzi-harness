@@ -22,6 +22,11 @@ export interface Config {
   /** Auto-compact once a request's prompt exceeds this many tokens. 0 disables. */
   autoCompactTokens: number;
   showReasoning: boolean;
+  /**
+   * Trailer appended to commit messages Mitzi writes. `true` uses the default co-author line,
+   * `false` disables it, and a string replaces it (`{model}` expands to the current model id).
+   */
+  attribution: boolean | string;
 }
 
 export const DEFAULT_MODEL = 'anthropic/claude-sonnet-4.5';
@@ -36,6 +41,7 @@ const DEFAULTS: Omit<Config, 'apiKey'> = {
   allowedTools: [],
   autoCompactTokens: 150_000,
   showReasoning: false,
+  attribution: true,
 };
 
 function readJson(path: string): Partial<Config> {
