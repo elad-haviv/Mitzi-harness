@@ -261,6 +261,8 @@ export const api = {
   deleteWorkflow: (id: string) => request('DELETE', `/api/workflows/${id}`),
   runWorkflow: (id: string, input: string, onEvent: (e: WorkflowEvent) => void) => stream<WorkflowEvent>(`/api/workflows/${id}/run`, { input }, onEvent),
   stopWorkflow: (id: string) => request('POST', `/api/workflows/${id}/stop`, {}),
+  /** Approves or rejects a run waiting at an approval step. */
+  decideWorkflowRun: (id: string, runId: string, approved: boolean, note?: string) => request('POST', `/api/workflows/${id}/runs/${runId}/decide`, { approved, note }),
   answerPermission: (id: string, requestId: string, answer: 'yes' | 'always' | 'no' | 'feedback', feedback?: string) =>
     request('POST', `/api/chats/${id}/permission`, { requestId, answer, feedback }),
   context: (id: string) => request<ContextBreakdown>('GET', `/api/chats/${id}/context`),

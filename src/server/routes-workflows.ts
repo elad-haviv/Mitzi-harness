@@ -88,6 +88,12 @@ export function registerWorkflowRoutes(route: Route, deps: { store: Store; engin
     return { ok: true };
   });
   route('POST', '/api/workflows/:id/stop', ({ params }) => ({ stopped: engine.stop(params.id) }));
+  /** Approves or rejects a run waiting at an approval step. */
+  route('POST', '/api/workflows/:id/runs/:runId/decide', ({ params, body }) => {
+    get(params.id);
+    if (!engine.decide(params.runId, { approved: body?.approved === true, note: str(body?.note) || undefined })) throw new HttpError(404, 'That run isn’t waiting for approval');
+    return { ok: true };
+  });
 
   /** Runs the workflow, streaming each step as it starts and finishes. */
   route('POST', '/api/workflows/:id/run', async ({ params, body, req, res }) => {

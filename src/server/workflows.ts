@@ -8,6 +8,8 @@ import type { MemoryService } from './memory/index.js';
 import type { ChatRunner } from './runner.js';
 import { newId, now, Store } from './store.js';
 import { withUsage } from './usage.js';
+import type { PythonSandbox } from './python.js';
+import vm from 'node:vm';
 
 const MAX_RUNS = 20;
 const MAX_OUTPUT = 40_000;
@@ -26,6 +28,25 @@ export const NODE_SPECS: Record<WorkflowNodeType, NodeSpec> = {
   browse: { label: 'Read a web page', description: 'Fetches a page and returns its text.', outputs: ['out'], defaults: { url: '{{input}}' } },
   http: { label: 'HTTP request', description: 'Calls an API and returns the response body.', outputs: ['out'], defaults: { method: 'GET', url: '', headers: '', body: '' } },
   condition: { label: 'If', description: 'Continues on "yes" or "no" depending on the input.', outputs: ['true', 'false'], defaults: { test: 'contains', value: '', text: '{{input}}' } },
+  loop: {
+    label: 'For each',
+    description: 'Splits the input into items (lines, a JSON list…) and runs a prompt or text on each; the results are joined.',
+    outputs: ['out'],
+    defaults: { split: 'lines', separator: ',', mode: 'ai', prompt: 'Summarize this in one sentence:\n\n{{item}}', template: '- {{item}}', botId: DEFAULT_BOT_ID, model: '', parallel: 3, join: 'paragraphs' },
+  },
+  code: {
+    label: 'Code',
+    description: 'Runs a snippet of JavaScript or Python on the input; its result is passed on.',
+    outputs: ['out'],
+    defaults: { language: 'javascript', code: 'return input.toUpperCase();' },
+  },
+  delay: { label: 'Wait', description: 'Waits a while, then passes the input on.', outputs: ['out'], defaults: { seconds: 60 } },
+  approval: {
+    label: 'Approval',
+    description: 'Pauses the run until you approve or reject it, then continues on "yes" or "no".',
+    outputs: ['true', 'false'],
+    defaults: { message: 'Approve this?\n\n{{input}}' },
+  },
   transform: { label: 'Text', description: 'Builds text from earlier steps with {{placeholders}}.', outputs: ['out'], defaults: { template: '{{input}}' } },
   image: { label: 'Generate image', description: 'Creates an image from a prompt (needs an image model).', outputs: ['out'], defaults: { prompt: '{{input}}' } },
   artifact: { label: 'Save artifact', description: 'Saves the text as an artifact you can open later.', outputs: ['out'], defaults: { title: 'Workflow result', type: 'markdown', content: '{{input}}' } },
@@ -33,10 +54,11 @@ export const NODE_SPECS: Record<WorkflowNodeType, NodeSpec> = {
   output: { label: 'Result', description: 'The workflow’s result.', outputs: [], defaults: { template: '{{input}}' } },
 };
 
-/** Fills {{input}}, {{trigger}}, {{date}} and {{Step label}} placeholders. */
-export function render(template: string, vars: { input: string; trigger: string; outputs: Map<string, string> }): string {
+/** Fills {{input}}, {{trigger}}, {{date}} and {{Step label}} placeholders (and {{item}}/{{index}} in a loop). */
+export function render(template: string, vars: { input: string; trigger: string; outputs: Map<string, string>; extra?: Record<string, string> }): string {
   return String(template ?? '').replace(/\{\{\s*([^}]+?)\s*\}\}/g, (whole, key: string) => {
     const k = key.toLowerCase();
+    if (vars.extra && k in vars.extra) return vars.extra[k];
     if (k === 'input') return vars.input;
     if (k === 'trigger') return vars.trigger;
     if (k === 'date') return new Date().toDateString();
@@ -91,19 +113,72 @@ export function testCondition(test: string, text: string, value: string): boolea
   }
 }
 
+/** Splits a loop's input into items: lines, paragraphs, a JSON list, or by a separator. */
+export function splitItems(text: string, how: string, separator = ','): string[] {
+  const t = text.trim();
+  if (!t) return [];
+  if (how === 'json') {
+    let list: unknown;
+    try {
+      // The list may be wrapped in prose or a code fence; take the outermost brackets.
+      list = JSON.parse(t.slice(t.indexOf('['), t.lastIndexOf(']') + 1));
+    } catch {
+      throw new Error('The input isn’t a JSON list');
+    }
+    if (!Array.isArray(list)) throw new Error('The input isn’t a JSON list');
+    return list.map((x) => (typeof x === 'string' ? x : JSON.stringify(x)));
+  }
+  const parts = how === 'paragraphs' ? t.split(/\n\s*\n/) : how === 'separator' ? t.split(separator || ',') : t.split('\n');
+  // Bullets and numbering are list syntax, not part of the item.
+  return parts.map((p) => p.trim().replace(/^([-*•]|\d+[.)])\s+/, '')).filter(Boolean);
+}
+
+/** Runs JavaScript with `input`, `trigger` and `steps` (outputs by step name); `return` gives the result. */
+export function runJavaScript(code: string, vars: { input: string; trigger: string; steps: Record<string, string> }, timeoutMs = 5000): string {
+  const logs: string[] = [];
+  const context = vm.createContext({ ...vars, console: { log: (...a: unknown[]) => logs.push(a.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join(' ')) } });
+  const value = new vm.Script(`(function () {\n${code}\n})()`, { filename: 'step.js' }).runInContext(context, { timeout: timeoutMs });
+  if (value === undefined || value === null) return logs.join('\n');
+  return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+}
+
 export interface WorkflowDeps {
   store: Store;
   runner: ChatRunner;
   media: MediaService;
   memory: MemoryService;
+  /** For Python code steps, when Pyodide is installed. */
+  python?: PythonSandbox;
   /** Creates an empty chat (the same as POST /api/chats). */
   newChat: (fields: Partial<Chat>) => Chat;
 }
 
 export class WorkflowEngine {
   private readonly active = new Map<string, AbortController>();
+  /** Runs paused at an approval step, by run id. */
+  private readonly waiting = new Map<string, (decision: { approved: boolean; note?: string }) => void>();
 
-  constructor(private readonly deps: WorkflowDeps) {}
+  constructor(private readonly deps: WorkflowDeps) {
+    // Runs that were going when Mitzi stopped can't continue.
+    for (const w of deps.store.workflows.all()) {
+      if (!w.runs.some((r) => r.status === 'running' || r.status === 'waiting')) continue;
+      for (const r of w.runs) {
+        if (r.status !== 'running' && r.status !== 'waiting') continue;
+        r.status = 'error';
+        r.error = 'Mitzi was closed before the run finished';
+        r.finishedAt = r.finishedAt ?? now();
+        for (const s of r.steps) if (s.status === 'running' || s.status === 'waiting') s.status = 'error';
+      }
+      deps.store.workflows.put(w);
+    }
+  }
+
+  /** Answers a run waiting at an approval step. */
+  decide(runId: string, decision: { approved: boolean; note?: string }): boolean {
+    const resolve = this.waiting.get(runId);
+    resolve?.(decision);
+    return !!resolve;
+  }
 
   isRunning(workflowId: string): boolean {
     return this.active.has(workflowId);
@@ -153,7 +228,26 @@ export class WorkflowEngine {
           const t0 = Date.now();
           try {
             const vars = { input: nodeInput, trigger: input, outputs: byLabel };
-            const result = await this.step(workflow, node, vars, signal);
+            // An approval step pauses the run until the user decides (or the run is stopped).
+            const pause = async (ask: string) => {
+              Object.assign(step, { status: 'waiting', ask });
+              run.status = 'waiting';
+              save();
+              onEvent({ type: 'step', runId: run.id, step: { ...step } });
+              onEvent({ type: 'run', run });
+              try {
+                return await new Promise<{ approved: boolean; note?: string }>((resolve, reject) => {
+                  this.waiting.set(run.id, resolve);
+                  signal.addEventListener('abort', () => reject(new Error('Stopped')), { once: true });
+                });
+              } finally {
+                this.waiting.delete(run.id);
+                run.status = 'running';
+                step.status = 'running';
+                onEvent({ type: 'run', run });
+              }
+            };
+            const result = await this.step(workflow, node, vars, signal, pause);
             const output = result.output.slice(0, MAX_OUTPUT);
             outputs.set(node.id, output);
             byLabel.set(node.label.trim().toLowerCase(), output);
@@ -184,7 +278,13 @@ export class WorkflowEngine {
     return run;
   }
 
-  private async step(workflow: Workflow, node: WorkflowNode, vars: { input: string; trigger: string; outputs: Map<string, string> }, signal: AbortSignal): Promise<{ output: string; port?: string }> {
+  private async step(
+    workflow: Workflow,
+    node: WorkflowNode,
+    vars: { input: string; trigger: string; outputs: Map<string, string> },
+    signal: AbortSignal,
+    pause: (ask: string) => Promise<{ approved: boolean; note?: string }>,
+  ): Promise<{ output: string; port?: string }> {
     const c = { ...NODE_SPECS[node.type]?.defaults, ...node.config } as Record<string, any>;
     const r = (t: unknown) => render(String(t ?? ''), vars);
     switch (node.type) {
@@ -258,6 +358,65 @@ export class WorkflowEngine {
         };
         this.deps.store.artifacts.put(artifact);
         return { output: r(c.content) };
+      }
+      case 'delay': {
+        const seconds = Math.min(3600, Math.max(0, Number(c.seconds) || 0));
+        await new Promise<void>((resolve, reject) => {
+          const t = setTimeout(resolve, seconds * 1000);
+          signal.addEventListener('abort', () => (clearTimeout(t), reject(new Error('Stopped'))), { once: true });
+        });
+        return { output: vars.input };
+      }
+      case 'approval': {
+        const decision = await pause(r(c.message) || vars.input);
+        const note = decision.note?.trim();
+        return { output: note ? `${vars.input}\n\nReviewer’s note: ${note}` : vars.input, port: decision.approved ? 'true' : 'false' };
+      }
+      case 'code': {
+        const steps = Object.fromEntries(vars.outputs);
+        if (c.language === 'python') {
+          const python = this.deps.python;
+          if (!python?.available()) throw new Error('Python isn’t installed (the optional "pyodide" package)');
+          const prelude = `import json as _json\ninput = ${JSON.stringify(vars.input)}\ntrigger = ${JSON.stringify(vars.trigger)}\nsteps = _json.loads(${JSON.stringify(JSON.stringify(steps))})\n`;
+          const res = await python.run(`workflow-${workflow.id}`, python.sandboxDir(`workflow-${workflow.id}`), prelude + String(c.code ?? ''), { signal });
+          if (res.error) throw new Error(res.error.split('\n').filter(Boolean).slice(-3).join('\n'));
+          return { output: res.result ?? res.output.trimEnd() };
+        }
+        try {
+          return { output: runJavaScript(String(c.code ?? ''), { input: vars.input, trigger: vars.trigger, steps }) };
+        } catch (err) {
+          throw new Error(/timed out/i.test((err as Error).message) ? 'The code ran longer than 5 seconds' : (err as Error).message);
+        }
+      }
+      case 'loop': {
+        const items = splitItems(vars.input, String(c.split), String(c.separator ?? ','));
+        if (items.length > 100) throw new Error(`Too many items (${items.length}); a loop handles up to 100`);
+        const results: string[] = new Array(items.length);
+        let next = 0;
+        // A few items at a time, each with its own {{item}} and {{index}}.
+        const worker = async () => {
+          while (next < items.length) {
+            if (signal.aborted) throw new Error('Stopped');
+            const i = next++;
+            const each = { ...vars, extra: { item: items[i], index: String(i + 1) } };
+            results[i] =
+              c.mode === 'template'
+                ? render(String(c.template ?? ''), each)
+                : await this.deps.runner.runOnce({
+                    botId: c.botId || DEFAULT_BOT_ID,
+                    model: c.model || undefined,
+                    prompt: render(String(c.prompt ?? ''), each),
+                    tools: false,
+                    autoApprove: false,
+                    note: `This is item ${i + 1} of ${items.length} in the step "${node.label}" of the workflow "${workflow.name}". Reply with the result for this item only.`,
+                    signal,
+                  });
+          }
+        };
+        const parallel = c.mode === 'template' ? 1 : Math.min(5, Math.max(1, Number(c.parallel) || 1));
+        await Promise.all(Array.from({ length: Math.min(parallel, items.length) }, worker));
+        const output = c.join === 'json' ? JSON.stringify(results.map((x) => x.trim()), null, 2) : results.map((x) => x.trim()).join(c.join === 'lines' ? '\n' : '\n\n');
+        return { output };
       }
       case 'memory': {
         const bot = this.deps.store.bots.get(c.botId || DEFAULT_BOT_ID);

@@ -657,7 +657,7 @@ export function createApp(opts: AppOptions) {
   registerFolderRoutes(route, store, projectView);
   const updates = registerUpdateRoutes(route, store);
   registerImportRoutes(route, { store, memory, client, config, newChat, memoryOn: (bot) => runner.memoryOn(bot) });
-  const workflows = new WorkflowEngine({ store, runner, media, memory, newChat });
+  const workflows = new WorkflowEngine({ store, runner, media, memory, newChat, python });
   runner.extraTools = () => {
     const tool = workflowTool(store, workflows);
     return tool ? [tool] : [];

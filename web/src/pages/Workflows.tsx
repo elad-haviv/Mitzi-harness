@@ -25,6 +25,10 @@ import {
   Workflow as WorkflowIcon,
   X,
   AlertTriangle,
+  Repeat,
+  Code2,
+  Timer,
+  Hand,
 } from 'lucide-react';
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, NodeSpec, WorkflowEdge, WorkflowNode, WorkflowNodeType, WorkflowRun, WorkflowStep, WorkflowView } from '../api';
@@ -45,10 +49,17 @@ export const NODE_ICON: Record<WorkflowNodeType, ReactNode> = {
   image: <ImageIcon size={15} />,
   artifact: <FileText size={15} />,
   memory: <Brain size={15} />,
+  loop: <Repeat size={15} />,
+  code: <Code2 size={15} />,
+  delay: <Timer size={15} />,
+  approval: <Hand size={15} />,
   output: <Send size={15} />,
 };
 
-const PALETTE: WorkflowNodeType[] = ['ai', 'browse', 'http', 'condition', 'transform', 'image', 'artifact', 'memory', 'output', 'trigger'];
+const PALETTE: WorkflowNodeType[] = ['ai', 'browse', 'http', 'condition', 'loop', 'code', 'approval', 'delay', 'transform', 'image', 'artifact', 'memory', 'output', 'trigger'];
+
+/** Steps with "yes" and "no" outputs. */
+const twoWay = (t: WorkflowNodeType) => t === 'condition' || t === 'approval';
 
 // ---------- List ----------
 
@@ -102,7 +113,11 @@ export function WorkflowsPage() {
                 <div className="tile-title">{w.name}</div>
                 <div className="tile-desc">{w.description || `${w.nodes.length} steps`}</div>
                 <div className="tile-foot">
-                  {w.running ? (
+                  {last?.status === 'waiting' ? (
+                    <span className="badge warn">
+                      <Hand size={11} /> Waiting for you
+                    </span>
+                  ) : w.running ? (
                     <>
                       <Loader2 size={12} className="spin" /> Running
                     </>
@@ -194,6 +209,19 @@ export function WorkflowEditor({ id }: { id: string }) {
     api.workflowNodeTypes().then(setSpecs, () => {});
   }, [id, toast]);
 
+  // A run going on without this page streaming it (from a chat, a schedule, or after an approval): follow it.
+  const streaming = useRef(false);
+  useEffect(() => {
+    if (!run || (run.status !== 'running' && run.status !== 'waiting') || streaming.current) return;
+    const timer = setInterval(() => {
+      api.workflow(id).then((w) => {
+        setWf((cur) => (cur ? { ...cur, runs: w.runs, running: w.running } : w));
+        setRun((r) => w.runs.find((x) => x.id === r?.id) ?? r);
+      }, () => {});
+    }, 1500);
+    return () => clearInterval(timer);
+  }, [id, run?.id, run?.status]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /** Applies a change locally and saves it shortly after. */
   const change = useCallback(
     (patch: Partial<WorkflowView>) => {
@@ -231,7 +259,7 @@ export function WorkflowEditor({ id }: { id: string }) {
     const node: WorkflowNode = { id: nodeId, type, label: specs[type].label, x: Math.round(center.x), y: Math.round(center.y), config: { ...specs[type].defaults } };
     // Connect it after the selected step, as you'd usually want.
     const from = selected?.kind === 'node' ? wf.nodes.find((n) => n.id === selected.id) : undefined;
-    const edges = from && from.type !== 'output' ? [...wf.edges, { id: `${from.id}-${nodeId}`, from: from.id, to: nodeId, ...(from.type === 'condition' ? { port: 'true' } : {}) }] : wf.edges;
+    const edges = from && from.type !== 'output' ? [...wf.edges, { id: `${from.id}-${nodeId}`, from: from.id, to: nodeId, ...(twoWay(from.type) ? { port: 'true' } : {}) }] : wf.edges;
     if (from && !at) Object.assign(node, { x: from.x + NODE_W + 60, y: from.y });
     change({ nodes: [...wf.nodes, node], edges });
     setSelected({ kind: 'node', id: nodeId });
@@ -327,6 +355,7 @@ export function WorkflowEditor({ id }: { id: string }) {
       setSaveState('saved');
       setRunOpen(true);
       setWf((w) => w && { ...w, running: true });
+      streaming.current = true;
       await api.runWorkflow(id, input, (e) => {
         if (e.type === 'run') setRun(e.run);
         else setRun((r) => (r && r.id === e.runId ? { ...r, steps: [...r.steps.filter((s) => s.nodeId !== e.step.nodeId), e.step] } : r));
@@ -334,6 +363,7 @@ export function WorkflowEditor({ id }: { id: string }) {
     } catch (err) {
       toast((err as Error).message);
     } finally {
+      streaming.current = false;
       setWf((w) => w && { ...w, running: false });
       api.workflow(id).then((w) => setWf((cur) => (cur ? { ...cur, runs: w.runs } : w)), () => {});
     }
@@ -349,8 +379,8 @@ export function WorkflowEditor({ id }: { id: string }) {
       const a = wf.nodes.find((n) => n.id === e.from);
       const b = wf.nodes.find((n) => n.id === e.to);
       if (!a || !b) return null;
-      const ports = a.type === 'condition' ? ['true', 'false'] : ['out'];
-      const pi = Math.max(0, ports.indexOf(e.port ?? (a.type === 'condition' ? 'true' : 'out')));
+      const ports = twoWay(a.type) ? ['true', 'false'] : ['out'];
+      const pi = Math.max(0, ports.indexOf(e.port ?? (twoWay(a.type) ? 'true' : 'out')));
       const x1 = a.x + NODE_W;
       const y1 = a.y + (ports.length === 2 ? (pi === 0 ? NODE_H * 0.32 : NODE_H * 0.72) : NODE_H / 2);
       const x2 = b.x;
@@ -364,7 +394,7 @@ export function WorkflowEditor({ id }: { id: string }) {
 
   const wire = drag?.kind === 'wire' && drag.id && drag.x !== undefined ? (() => {
     const a = wf.nodes.find((n) => n.id === drag.id)!;
-    const two = a.type === 'condition';
+    const two = twoWay(a.type);
     const x1 = a.x + NODE_W;
     const y1 = a.y + (two ? (drag.port === 'false' ? NODE_H * 0.72 : NODE_H * 0.32) : NODE_H / 2);
     const c = Math.max(40, Math.abs(drag.x! - x1) / 2);
@@ -463,7 +493,7 @@ export function WorkflowEditor({ id }: { id: string }) {
             )}
             {wf.nodes.map((n) => {
               const step = stepOf(n.id);
-              const two = n.type === 'condition';
+              const two = twoWay(n.type);
               return (
                 <div
                   key={n.id}
@@ -484,7 +514,15 @@ export function WorkflowEditor({ id }: { id: string }) {
                     <span className="wf-node-sub">{nodeSummary(n, bots)}</span>
                   </span>
                   <span className="wf-node-state">
-                    {step?.status === 'running' ? <Loader2 size={14} className="spin" /> : step?.status === 'done' ? <Check size={14} /> : step?.status === 'error' ? <AlertTriangle size={14} /> : null}
+                    {step?.status === 'running' ? (
+                      <Loader2 size={14} className="spin" />
+                    ) : step?.status === 'waiting' ? (
+                      <Hand size={14} className="waiting" />
+                    ) : step?.status === 'done' ? (
+                      <Check size={14} />
+                    ) : step?.status === 'error' ? (
+                      <AlertTriangle size={14} />
+                    ) : null}
                   </span>
                   {(two ? ['true', 'false'] : n.type === 'output' ? [] : ['out']).map((port, i) => (
                     <span
@@ -499,7 +537,7 @@ export function WorkflowEditor({ id }: { id: string }) {
                         setDrag({ kind: 'wire', id: n.id, port, startX: e.clientX, startY: e.clientY, origX: 0, origY: 0, x: p.x, y: p.y });
                       }}
                     >
-                      {two && <span className="wf-port-label">{port === 'true' ? 'yes' : 'no'}</span>}
+                      {two && <span className="wf-port-label">{n.type === 'approval' ? (port === 'true' ? 'approved' : 'rejected') : port === 'true' ? 'yes' : 'no'}</span>}
                     </span>
                   ))}
                 </div>
@@ -556,6 +594,12 @@ export function WorkflowEditor({ id }: { id: string }) {
               wf={wf}
               onClose={() => setRunOpen(false)}
               onPick={(r) => setRun(r)}
+              onDecide={(approved, note) =>
+                void api.decideWorkflowRun(id, run.id, approved, note).then(
+                  () => setRun((r) => r && { ...r, status: 'running', steps: r.steps.map((s) => (s.status === 'waiting' ? { ...s, status: 'running' } : s)) }),
+                  (err) => toast(err.message),
+                )
+              }
             />
           )}
         </aside>
@@ -582,6 +626,16 @@ function nodeSummary(n: WorkflowNode, bots: { id: string; name: string; emoji: s
       return String(c.inputHint || 'Manual, schedule or chat');
     case 'artifact':
       return String(c.title || 'Untitled');
+    case 'loop':
+      return `each ${c.split === 'json' ? 'JSON item' : c.split === 'paragraphs' ? 'paragraph' : c.split === 'separator' ? `“${c.separator}”-separated item` : 'line'} · ${c.mode === 'template' ? 'text' : 'ask a bot'}`;
+    case 'code':
+      return c.language === 'python' ? 'Python' : 'JavaScript';
+    case 'delay': {
+      const s = Number(c.seconds) || 0;
+      return s >= 60 ? `${Math.round(s / 6) / 10} min` : `${s} s`;
+    }
+    case 'approval':
+      return 'waits for you';
     default:
       return String(c.template ?? c.prompt ?? c.content ?? '').slice(0, 40);
   }
@@ -708,6 +762,83 @@ function NodeConfig({ node, spec, onLabel, onConfig, onDelete }: { node: Workflo
           {text('content', 'Memory', '{{input}}', 3)}
         </>
       )}
+      {node.type === 'loop' && (
+        <>
+          <label className="field">
+            <span className="field-label">Split the input into</span>
+            <select className="select" value={c.split ?? 'lines'} onChange={(e) => onConfig('split', e.target.value)}>
+              <option value="lines">Lines (bullets and numbers removed)</option>
+              <option value="paragraphs">Paragraphs</option>
+              <option value="json">A JSON list</option>
+              <option value="separator">Pieces split by…</option>
+            </select>
+          </label>
+          {c.split === 'separator' && text('separator', 'Separator', ',')}
+          <div className="segmented" style={{ marginBottom: 10 }}>
+            <button className={c.mode !== 'template' ? 'active' : ''} onClick={() => onConfig('mode', 'ai')}>
+              Ask a bot
+            </button>
+            <button className={c.mode === 'template' ? 'active' : ''} onClick={() => onConfig('mode', 'template')}>
+              Text only
+            </button>
+          </div>
+          {c.mode === 'template' ? (
+            text('template', 'For each item', '- {{item}}', 3)
+          ) : (
+            <>
+              {botSelect}
+              {text('prompt', 'Prompt for each item', 'Use {{item}} for the item and {{index}} for its number', 5)}
+              <label className="field">
+                <span className="field-label">At the same time</span>
+                <select className="select" value={c.parallel ?? 3} onChange={(e) => onConfig('parallel', Number(e.target.value))}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <option key={n} value={n}>
+                      {n} item{n === 1 ? '' : 's'}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
+          <label className="field">
+            <span className="field-label">Join the results as</span>
+            <select className="select" value={c.join ?? 'paragraphs'} onChange={(e) => onConfig('join', e.target.value)}>
+              <option value="paragraphs">Paragraphs</option>
+              <option value="lines">Lines</option>
+              <option value="json">A JSON list</option>
+            </select>
+          </label>
+        </>
+      )}
+      {node.type === 'code' && (
+        <>
+          <div className="segmented" style={{ marginBottom: 10 }}>
+            {(['javascript', 'python'] as const).map((l) => (
+              <button key={l} className={(c.language ?? 'javascript') === l ? 'active' : ''} onClick={() => onConfig('language', l)}>
+                {l === 'python' ? 'Python' : 'JavaScript'}
+              </button>
+            ))}
+          </div>
+          {text('code', 'Code', c.language === 'python' ? 'input.upper()' : 'return input.toUpperCase();', 9)}
+          <p className="muted small">
+            {c.language === 'python'
+              ? 'input, trigger and steps (outputs by step name) are set; the value of the last line is the result (or what it prints).'
+              : 'input, trigger and steps (outputs by step name) are set; return the result (or console.log it). Runs up to 5 seconds.'}
+          </p>
+        </>
+      )}
+      {node.type === 'delay' && (
+        <label className="field">
+          <span className="field-label">Wait (seconds, up to an hour)</span>
+          <input className="input" type="number" min={0} max={3600} value={c.seconds ?? 60} onChange={(e) => onConfig('seconds', Number(e.target.value))} />
+        </label>
+      )}
+      {node.type === 'approval' && (
+        <>
+          {text('message', 'What to ask', 'Send this email?\n\n{{input}}', 5)}
+          <p className="muted small">The run pauses here until you approve or reject it, in this editor. Connect “approved” and “rejected” to what should happen next.</p>
+        </>
+      )}
       <button className="btn btn-sm btn-ghost danger-text" onClick={onDelete}>
         <Trash2 size={13} /> Delete step
       </button>
@@ -715,12 +846,13 @@ function NodeConfig({ node, spec, onLabel, onConfig, onDelete }: { node: Workflo
   );
 }
 
-function RunLog({ run, wf, onClose, onPick }: { run: WorkflowRun; wf: WorkflowView; onClose(): void; onPick(r: WorkflowRun): void }) {
+function RunLog({ run, wf, onClose, onPick, onDecide }: { run: WorkflowRun; wf: WorkflowView; onClose(): void; onPick(r: WorkflowRun): void; onDecide(approved: boolean, note?: string): void }) {
+  const [note, setNote] = useState('');
   return (
     <div className="wf-side-section wf-runlog">
       <div className="wf-side-title">
-        {run.status === 'running' ? <Loader2 size={14} className="spin" /> : run.status === 'error' ? <AlertTriangle size={14} /> : <Check size={14} />}
-        <span>{run.status === 'running' ? 'Running…' : run.status === 'error' ? 'Run failed' : 'Run finished'}</span>
+        {run.status === 'running' ? <Loader2 size={14} className="spin" /> : run.status === 'waiting' ? <Hand size={14} /> : run.status === 'error' ? <AlertTriangle size={14} /> : <Check size={14} />}
+        <span>{run.status === 'running' ? 'Running…' : run.status === 'waiting' ? 'Waiting for your approval' : run.status === 'error' ? 'Run failed' : 'Run finished'}</span>
         <span className="muted small" style={{ marginLeft: 'auto' }}>
           {run.finishedAt ? duration(new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime()) : ''}
           {run.cost ? ` · ${money(run.cost)}` : ''}
@@ -735,12 +867,29 @@ function RunLog({ run, wf, onClose, onPick }: { run: WorkflowRun; wf: WorkflowVi
           const n = wf.nodes.find((x) => x.id === s.nodeId);
           return (
             <li key={s.nodeId} className={s.status}>
-              <details open={s.status === 'error' || n?.type === 'output'}>
+              <details open={s.status === 'error' || s.status === 'waiting' || n?.type === 'output'}>
                 <summary>
                   {n ? NODE_ICON[n.type] : null} <span>{n?.label ?? s.nodeId}</span>
                   <span className="muted small">{s.ms !== undefined ? duration(s.ms) : ''}</span>
                 </summary>
-                {s.error ? <div className="small" style={{ color: 'var(--danger)' }}>{s.error}</div> : s.output ? <StepOutput text={s.output} /> : null}
+                {s.status === 'waiting' ? (
+                  <div className="wf-approval">
+                    <StepOutput text={s.ask ?? ''} />
+                    <textarea className="textarea" rows={2} placeholder="A note for the next steps (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+                    <div className="row" style={{ gap: 8 }}>
+                      <button className="btn btn-primary btn-sm" onClick={() => onDecide(true, note)}>
+                        <Check size={14} /> Approve
+                      </button>
+                      <button className="btn btn-sm" onClick={() => onDecide(false, note)}>
+                        <X size={14} /> Reject
+                      </button>
+                    </div>
+                  </div>
+                ) : s.error ? (
+                  <div className="small" style={{ color: 'var(--danger)' }}>{s.error}</div>
+                ) : s.output ? (
+                  <StepOutput text={s.output} />
+                ) : null}
               </details>
             </li>
           );

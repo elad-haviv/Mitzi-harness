@@ -455,7 +455,7 @@ export interface FeedbackLoop {
 
 // ---------- Workflows ----------
 
-export type WorkflowNodeType = 'trigger' | 'ai' | 'http' | 'condition' | 'transform' | 'image' | 'artifact' | 'memory' | 'browse' | 'output';
+export type WorkflowNodeType = 'trigger' | 'ai' | 'http' | 'condition' | 'transform' | 'image' | 'artifact' | 'memory' | 'browse' | 'loop' | 'code' | 'delay' | 'approval' | 'output';
 
 export interface WorkflowNode {
   id: string;
@@ -476,7 +476,10 @@ export interface WorkflowEdge {
 
 export interface WorkflowStep {
   nodeId: string;
-  status: 'running' | 'done' | 'error' | 'skipped';
+  /** `waiting`: an approval step waiting for the user. */
+  status: 'running' | 'waiting' | 'done' | 'error' | 'skipped';
+  /** What an approval step asks the user. */
+  ask?: string;
   output?: string;
   error?: string;
   startedAt: string;
@@ -487,7 +490,8 @@ export interface WorkflowRun {
   id: string;
   trigger: 'manual' | 'schedule' | 'chat';
   input: string;
-  status: 'running' | 'done' | 'error';
+  /** `waiting`: paused at an approval step until the user decides. */
+  status: 'running' | 'waiting' | 'done' | 'error';
   steps: WorkflowStep[];
   output?: string;
   error?: string;

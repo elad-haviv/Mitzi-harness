@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { chunk, KnowledgeIndex, scanFolder } from '../server/knowledge.js';
+import { runJavaScript, splitItems } from '../server/workflows.js';
 import type { Project } from '../shared/types.js';
 import { tempDir } from './helpers.js';
 
@@ -59,4 +60,17 @@ test('linked folders: text files count, dependencies and binaries don’t', () =
   const p = project([], [dir]);
   assert.equal(index.size(p).docs, 2);
   assert.match(index.search(p, 'when is the launch')[0].text, /Tuesday/);
+});
+
+test('workflow helpers: splitting items for a loop, and JavaScript code steps', () => {
+  assert.deepEqual(splitItems('- one\n2. two\n\n* three', 'lines'), ['one', 'two', 'three']);
+  assert.deepEqual(splitItems('Here you go:\n```json\n["a", {"b": 1}]\n```', 'json'), ['a', '{"b":1}']);
+  assert.deepEqual(splitItems('a; b ;c', 'separator', ';'), ['a', 'b', 'c']);
+  assert.throws(() => splitItems('not a list', 'json'), /JSON list/);
+  assert.equal(runJavaScript('return input.length + steps.first.length;', { input: 'abc', trigger: '', steps: { first: 'xy' } }), '5');
+  assert.equal(runJavaScript('console.log("hi", 1)', { input: '', trigger: '', steps: {} }), 'hi 1');
+  assert.equal(runJavaScript('return { n: 1 };', { input: '', trigger: '', steps: {} }), '{\n  "n": 1\n}');
+  assert.throws(() => runJavaScript('while (true) {}', { input: '', trigger: '', steps: {} }, 200), /timed out/i);
+  // No Node APIs inside.
+  assert.throws(() => runJavaScript('return require("fs")', { input: '', trigger: '', steps: {} }), /require is not defined/);
 });

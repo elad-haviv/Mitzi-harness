@@ -948,6 +948,44 @@ test('large project knowledge is searched per message; small knowledge goes in w
   assert.ok(lastMain().tools.some((t: any) => t.function.name === 'ProjectKnowledge'));
 });
 
+test('workflow steps: code, for each, wait and approval', async () => {
+  reply = (body) => textChunks(`Fact about ${body.messages.at(-1).content.replace(/^Fact: /, '')}`);
+  const wf = (await call('POST', '/api/workflows', {})).data;
+  const n = (id: string, type: string, config: object = {}) => ({ id, type, label: id, x: 0, y: 0, config });
+  const nodes = [
+    n('start', 'trigger'),
+    n('split', 'code', { language: 'javascript', code: 'return input.split(",").map((s) => s.trim()).join("\\n");' }),
+    n('each', 'loop', { split: 'lines', mode: 'ai', prompt: 'Fact: {{item}}', parallel: 2, join: 'lines' }),
+    n('pause', 'delay', { seconds: 0 }),
+    n('check', 'approval', { message: 'Publish these?\n\n{{input}}' }),
+    n('yes', 'transform', { template: 'Published:\n{{input}}' }),
+    n('no', 'transform', { template: 'Not published' }),
+    n('out', 'output'),
+  ];
+  const e = (from: string, to: string, port?: string) => ({ from, to, ...(port ? { port } : {}) });
+  const edges = [e('start', 'split'), e('split', 'each'), e('each', 'pause'), e('pause', 'check'), e('check', 'yes', 'true'), e('check', 'no', 'false'), e('yes', 'out'), e('no', 'out')];
+  assert.equal((await call('PATCH', `/api/workflows/${wf.id}`, { nodes, edges })).status, 200);
+
+  const running = fetch(`${base}/api/workflows/${wf.id}/run`, { method: 'POST', headers: { 'x-mitzi-token': TOKEN, 'content-type': 'application/json' }, body: JSON.stringify({ input: 'cats, dogs, owls' }) }).then((r) => r.text());
+  // The run pauses at the approval step.
+  let waiting: any;
+  for (let i = 0; i < 200 && !waiting; i++) {
+    waiting = (await call('GET', `/api/workflows/${wf.id}`)).data.runs.find((r: any) => r.status === 'waiting');
+    if (!waiting) await new Promise((r) => setTimeout(r, 25));
+  }
+  assert.ok(waiting, 'the run waits for approval');
+  const step = waiting.steps.find((s: any) => s.nodeId === 'check');
+  assert.equal(step.status, 'waiting');
+  assert.equal(step.ask, 'Publish these?\n\nFact about cats\nFact about dogs\nFact about owls');
+  assert.equal((await call('POST', `/api/workflows/${wf.id}/runs/nope/decide`, { approved: true })).status, 404);
+  await call('POST', `/api/workflows/${wf.id}/runs/${waiting.id}/decide`, { approved: true, note: 'Looks good' });
+  await running;
+  const run = (await call('GET', `/api/workflows/${wf.id}`)).data.runs[0];
+  assert.equal(run.status, 'done');
+  assert.equal(run.output, 'Published:\nFact about cats\nFact about dogs\nFact about owls\n\nReviewer’s note: Looks good');
+  assert.ok(!run.steps.some((s: any) => s.nodeId === 'no'), 'the rejected branch didn’t run');
+});
+
 /** Polls until a server reaches a status. */
 async function waitFor(id: string, status: string) {
   for (let i = 0; i < 200; i++) {

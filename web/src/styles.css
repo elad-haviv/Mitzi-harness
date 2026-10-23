@@ -6652,3 +6652,34 @@ button.todo-check:not(:disabled):hover {
   min-width: 64px;
   image-rendering: auto;
 }
+
+/* Workflow approval steps */
+.wf-approval {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0 4px;
+}
+.wf-node-state .waiting {
+  color: var(--warn);
+}
+.wf-steps li.waiting > details > summary {
+  color: var(--warn);
+  font-weight: 600;
+}
+.wf-node-icon.t-loop {
+  background: color-mix(in srgb, #7c5cff 14%, transparent);
+  color: #7c5cff;
+}
+.wf-node-icon.t-code {
+  background: color-mix(in srgb, #0f9d76 14%, transparent);
+  color: #0f9d76;
+}
+.wf-node-icon.t-delay {
+  background: color-mix(in srgb, #8a8f98 16%, transparent);
+  color: #6b7280;
+}
+.wf-node-icon.t-approval {
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+  color: var(--warn);
+}
