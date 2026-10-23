@@ -7,7 +7,7 @@ import { Config, loadConfig, MITZI_HOME, PERMISSION_MODES, PermissionMode } from
 import { PROVIDER_PRESETS, providerView, resolveProviders, RoutingClient, usable } from '../providers.js';
 import type { ProviderConfig, ProviderKind, SearchKind } from '../shared/types.js';
 import type { ApprovalAnswer } from '../permissions.js';
-import { Attachment, BankProfile, BankSummary, Bot, BotTools, Chat, DEFAULT_BOT_ID, MemoryType, Project, PublicSettings, SettingsUpdate, StreamEvent } from '../shared/types.js';
+import { Attachment, AUTO_MODEL, BankProfile, BankSummary, Bot, BotTools, Chat, DEFAULT_BOT_ID, MemoryType, Project, PublicSettings, SettingsUpdate, StreamEvent } from '../shared/types.js';
 import { toToolSpecs } from '../tools/index.js';
 import { compactChat, contextBreakdown, ModelCatalog } from './context.js';
 import { MemoryService } from './memory/index.js';
@@ -195,6 +195,10 @@ export function createApp(opts: AppOptions) {
         hardStop: update.budget.hardStop === true,
       };
     }
+    if (update.routing && typeof update.routing === 'object') {
+      const model = (v: unknown) => (typeof v === 'string' && v.trim() !== AUTO_MODEL ? v.trim() : '');
+      ui.routing = { fast: model(update.routing.fast), strong: model(update.routing.strong), newChats: update.routing.newChats === true };
+    }
     store.updateSettings(ui);
     return publicSettings();
   });
@@ -325,7 +329,7 @@ export function createApp(opts: AppOptions) {
       updatedAt: now(),
       ...fields,
       botId: bot.id,
-      model: fields.model || bot.model || config().model,
+      model: fields.model || bot.model || (store.settings.routing?.newChats ? AUTO_MODEL : config().model),
     };
   };
   route('POST', '/api/chats', ({ body }) => {
@@ -401,13 +405,13 @@ export function createApp(opts: AppOptions) {
     const chat = getChat(params.id);
     const setup = runner.setup(chat);
     const specs = toToolSpecs(runner.tools(chat, () => {}));
-    return contextBreakdown(setup, specs, await catalog.contextLength(chat.model));
+    return contextBreakdown(setup, specs, await catalog.contextLength(runner.modelOf(chat)));
   });
   route('POST', '/api/chats/:id/compact', async ({ params, body }) => {
     const chat = getChat(params.id);
     if (runner.isRunning(chat.id)) throw new HttpError(409, 'Wait for the response to finish first');
     const keep = typeof body?.keepRecentTurns === 'number' ? body.keepRecentTurns : store.settings.keepRecentTurns;
-    const compacted = await compactChat(chat, client(), config().smallModel ?? chat.model, keep);
+    const compacted = await compactChat(chat, client(), config().smallModel ?? runner.modelOf(chat), keep);
     if (compacted) store.chats.put(chat);
     return { compacted, chat: summarizeChat(chat) };
   });

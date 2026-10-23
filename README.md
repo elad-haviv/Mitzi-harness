@@ -11,6 +11,7 @@ An open-source, Claude-style AI workspace that runs on **any model available thr
 - Responses stream in smoothly, at an even pace rather than in bursts, with Markdown, tables and syntax-highlighted code.
 - Attach documents (PDF, Word, Excel, PowerPoint), text and code files, or images. You can paste or drag and drop them into the message box. Documents are read in your browser: Word keeps its headings, lists and tables, Excel sheets arrive as CSV, slides keep their speaker notes. Project knowledge accepts the same documents.
 - **Budgets and alerts**: set a daily or monthly spending limit (Settings → Usage & budget). Mitzi warns you when you near it (at 80% by default), and can stop new requests, scheduled tasks and workflows included, once a limit is reached.
+- **Auto model**: pick *Auto* in the model picker and Mitzi chooses a model for each message: a quick, cheap one for everyday questions and a strong one for code, analysis, long documents and multi-step work. Each answer shows which model it used and why, and Insights shows the split and the estimated savings. Choose the two models in Settings → Models.
 - Edit any earlier message, regenerate the last answer, stop a response mid-stream, and copy replies.
 - Switch models per chat. The model picker is searchable and shows each model's price, context size, and vision and tool support.
 - One-click web search uses OpenRouter's `:online` option.

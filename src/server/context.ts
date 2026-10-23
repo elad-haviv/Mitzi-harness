@@ -27,6 +27,8 @@ export interface ChatSetup {
   toolNames: string[];
   /** The artifact open in the workspace beside the chat. */
   focus?: Artifact;
+  /** The model answering, when it isn't the chat's own (Auto picked it). */
+  model?: string;
   /** Bots this bot can hand tasks to with the Delegate tool. */
   team?: Bot[];
   /** Planning with /plan: look, don't change. */
@@ -62,7 +64,7 @@ function basePrompt(setup: ChatSetup): string {
     'Format responses with GitHub-flavored Markdown: headings for long answers, lists and tables where they help, and fenced code blocks with a language tag. ' +
       'Match length to the question: brief for simple questions, thorough for complex ones. If something is ambiguous, ask. ' +
       'Reply in the language the user writes or speaks in, unless they ask for another.',
-    `Today is ${date}. You are running as the model ${setup.chat.model}.`,
+    `Today is ${date}. You are running as the model ${setup.model ?? setup.chat.model}.`,
   ];
   if (setup.chat.webSearch) lines.push('Web search results may be provided; cite sources with markdown links.');
   return lines.filter(Boolean).join('\n\n');
@@ -76,7 +78,7 @@ export function promptSections(setup: ChatSetup): PromptSection[] {
     sections.push({
       label: 'Coding agent',
       kind: 'system',
-      text: buildSystemPrompt({ cwd: project.folder, model: chat.model, mode: project.permissionMode, surface: 'web' }),
+      text: buildSystemPrompt({ cwd: project.folder, model: setup.model ?? chat.model, mode: project.permissionMode, surface: 'web' }),
     });
     if (!bot.builtIn) sections.push({ label: `${bot.name} instructions`, kind: 'system', text: `# Role\nYou are ${bot.name}.\n${bot.systemPrompt}` });
   } else {

@@ -1,7 +1,7 @@
-import { ChevronDown, Eye } from 'lucide-react';
+import { ChevronDown, Eye, Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ModelInfo } from '../api';
-import { formatTokens, modelLabel, useApp } from '../state';
+import { AUTO_MODEL, type ModelInfo } from '../api';
+import { autoModels, formatTokens, modelLabel, useApp } from '../state';
 
 const FEATURED = [
   'anthropic/claude-sonnet-4.5',
@@ -34,6 +34,7 @@ export function ModelPicker({
   allowEmpty,
   options,
   emptyHint,
+  auto,
 }: {
   value: string;
   onChange(id: string): void;
@@ -45,6 +46,8 @@ export function ModelPicker({
   options?: ModelInfo[];
   /** Shown when there are no options. */
   emptyHint?: string;
+  /** Offers "Auto", which picks a fast or strong model for each message. */
+  auto?: boolean;
 }) {
   const app = useApp();
   const models = options ?? app.models;
@@ -80,8 +83,9 @@ export function ModelPicker({
     const matches = (m: ModelInfo) => !q || m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q);
     const featured = (options ? [] : FEATURED).map((id) => models.find((m) => m.id === id)).filter((m): m is ModelInfo => !!m && matches(m));
     const rest = models.filter((m) => (options || !FEATURED.includes(m.id)) && matches(m)).sort((a, b) => a.name.localeCompare(b.name));
-    const out: { section?: string; model?: ModelInfo; custom?: string; empty?: boolean }[] = [];
+    const out: { section?: string; model?: ModelInfo; custom?: string; empty?: boolean; auto?: boolean }[] = [];
     if (allowEmpty && !q) out.push({ empty: true });
+    if (auto && (!q || 'auto'.includes(q))) out.push({ auto: true });
     if (/[/:]/.test(q) && !models.some((m) => m.id === q)) out.push({ custom: query.trim() });
     if (featured.length) out.push({ section: 'Popular on OpenRouter' }, ...featured.map((model) => ({ model })));
     // Directly connected providers first, then OpenRouter's catalog.
@@ -96,11 +100,12 @@ export function ModelPicker({
       out.push({ section: order.length > 1 ? `${p} · ${list.length}` : q ? 'Matches' : 'All models' }, ...list.slice(0, 300).map((model) => ({ model })));
     }
     return out;
-  }, [models, query, allowEmpty, options]);
+  }, [models, query, allowEmpty, options, auto]);
 
   const selectable = items.filter((i) => !i.section);
   const choose = (i: (typeof items)[number]) => {
     if (i.empty) onChange('');
+    else if (i.auto) onChange(AUTO_MODEL);
     else if (i.custom) onChange(i.custom);
     else if (i.model) onChange(i.model.id);
     setOpen(false);
@@ -163,6 +168,21 @@ export function ModelPicker({
                     <span className="picker-name">{allowEmpty}</span>
                   </button>
                 );
+              if (item.auto) {
+                const pair = autoModels(app.settings);
+                return (
+                  <button key="auto" className={`${cls}${value === AUTO_MODEL ? ' selected' : ''}`} onMouseEnter={() => setFocus(index)} onClick={() => choose(item)}>
+                    <span className="picker-name">
+                      <Sparkles size={13} className="accent" /> Auto
+                    </span>
+                    <span className="picker-meta">
+                      <span>
+                        Picks for each message: {modelLabel(pair.fast, models)} for quick ones, {modelLabel(pair.strong, models)} for in-depth work
+                      </span>
+                    </span>
+                  </button>
+                );
+              }
               if (item.custom)
                 return (
                   <button key="custom" className={cls} onMouseEnter={() => setFocus(index)} onClick={() => choose(item)}>

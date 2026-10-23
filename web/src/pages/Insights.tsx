@@ -1,6 +1,6 @@
 // Insights: what Mitzi costs (tokens and money by day, model, project, bot and chat) and how the
 // bots are learning from feedback loops (attempts needed and first-try ratings over time).
-import { BarChart3, GraduationCap, Loader2, Trash2 } from 'lucide-react';
+import { BarChart3, GraduationCap, Loader2, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, BudgetStatus, FeedbackLoop, LearningCurve, UsageGroup, UsageReport } from '../api';
 import { Breakdown, Chart, movingAverage } from '../components/Charts';
@@ -111,6 +111,7 @@ export function UsageView({ projectId: fixedProject, compact }: { projectId?: st
         <Kpi label="Requests" value={t.requests.toLocaleString()} />
         <Kpi label="Average per day" value={priced ? money(t.cost / days) : formatTokens((t.prompt + t.completion) / days)} />
       </div>
+      {data.auto && <AutoCard auto={data.auto} />}
       <section className="card chart-card">
         <h2>{priced ? 'Cost per day' : 'Tokens per day'}</h2>
         {!priced && t.requests > 0 && <p className="muted small">Your providers didn’t report prices, so this shows tokens.</p>}
@@ -380,5 +381,43 @@ export function BudgetMeters({ budget }: { budget: BudgetStatus }) {
         );
       })}
     </div>
+  );
+}
+
+/** How Auto split the answers between its quick and in-depth models. */
+function AutoCard({ auto }: { auto: NonNullable<UsageReport['auto']> }) {
+  const all = auto.fast.requests + auto.strong.requests;
+  const share = (n: number) => `${Math.round((n / all) * 100)}%`;
+  return (
+    <section className="card chart-card">
+      <h2>
+        <Sparkles size={15} className="accent" style={{ verticalAlign: -2, marginRight: 6 }} />
+        Auto model
+      </h2>
+      <div className="route-split">
+        <div>
+          <div className="v">{share(auto.fast.requests)}</div>
+          <div className="muted small">
+            to the quick model · {money(auto.fast.cost)}
+          </div>
+        </div>
+        <div>
+          <div className="v">{share(auto.strong.requests)}</div>
+          <div className="muted small">
+            to the in-depth model · {money(auto.strong.cost)}
+          </div>
+        </div>
+        <div>
+          <div className="v">{money(auto.saved)}</div>
+          <div className="muted small" title="What the quick model's requests would have cost on the in-depth model, at listed prices">
+            saved, estimated
+          </div>
+        </div>
+      </div>
+      <div className="route-bar" role="img" aria-label={`${share(auto.fast.requests)} quick, ${share(auto.strong.requests)} in-depth`}>
+        <span className="fast" style={{ width: share(auto.fast.requests) }} />
+        <span className="strong" style={{ width: share(auto.strong.requests) }} />
+      </div>
+    </section>
   );
 }

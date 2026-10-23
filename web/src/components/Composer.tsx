@@ -226,7 +226,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
             <Globe size={15} />
             <span className="search-label">Search</span>
           </button>
-          <ModelPicker value={props.model} onChange={props.onModelChange} />
+          <ModelPicker value={props.model} onChange={props.onModelChange} auto />
           {props.leading}
           <div style={{ flex: 1 }} />
           {props.extra}

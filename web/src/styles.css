@@ -6268,3 +6268,53 @@ button.todo-check:not(:disabled):hover {
 .budget-banner {
   align-items: center;
 }
+
+/* ---------- Auto model routing ---------- */
+.live-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.live-meta .route-badge {
+  margin-top: 8px;
+}
+.route-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  white-space: nowrap;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.route-badge.strong {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.route-split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.route-split .v {
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.route-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.route-bar .fast {
+  background: var(--muted);
+  opacity: 0.55;
+}
+.route-bar .strong {
+  background: var(--accent);
+}

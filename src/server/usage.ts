@@ -13,6 +13,8 @@ export interface UsageTag {
   botId?: string;
   workflowId?: string;
   taskId?: string;
+  /** How Auto routed the message these calls answer. */
+  route?: 'fast' | 'strong';
   /** Also told about each call (a run adds up its own cost this way). */
   sink?: (e: UsageEvent) => void;
 }
@@ -61,18 +63,21 @@ export class UsageLog {
     if (!usage) return undefined;
     const prompt = usage.prompt_tokens ?? 0;
     const completion = usage.completion_tokens ?? 0;
-    let cost = usage.cost;
-    if (cost === undefined) {
-      const info = this.prices().find((m) => m.id === model.replace(/:online$/, ''));
-      cost = info?.promptPrice !== undefined ? (prompt * info.promptPrice + completion * (info.completionPrice ?? 0)) / 1e6 : 0;
-    }
+    const cost = usage.cost ?? this.priceOf(model, prompt, completion) ?? 0;
     const event: UsageEvent = { ts: Date.now(), model: model.replace(/:online$/, ''), prompt, completion, cost, kind: tag?.kind ?? 'other' };
     for (const k of ['chatId', 'projectId', 'botId', 'workflowId', 'taskId'] as const) if (tag?.[k]) event[k] = tag[k];
+    if (tag?.route) event.route = tag.route;
     tag?.sink?.(event);
     this.load().push(event);
     const d = new Date(event.ts);
     appendFileSync(join(this.dir, `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}.jsonl`), `${JSON.stringify(event)}\n`);
     return event;
+  }
+
+  /** What tokens cost on a model, from the model list; undefined when its prices aren't known. */
+  priceOf(model: string, prompt: number, completion: number): number | undefined {
+    const info = this.prices().find((m) => m.id === model.replace(/:online$/, ''));
+    return info?.promptPrice !== undefined ? (prompt * info.promptPrice + completion * (info.completionPrice ?? 0)) / 1e6 : undefined;
   }
 
   all(since = 0): UsageEvent[] {

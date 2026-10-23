@@ -218,6 +218,7 @@ function ModelSettings() {
         <span className="field-hint">A cheaper model for titles, summaries, memory, suggestions and learning from ratings.</span>
       </div>
     </section>
+    <AutoSettings />
     <section className="settings-section card">
       <h2>Who does what</h2>
       <p className="muted small" style={{ marginTop: 0 }}>
@@ -314,6 +315,42 @@ function BudgetSettings() {
         </section>
       ) : null}
     </>
+  );
+}
+
+/** The two models "Auto" picks between, per message. */
+function AutoSettings() {
+  const { settings } = useApp();
+  const save = useSave();
+  if (!settings) return null;
+  const routing = { fast: '', strong: '', newChats: false, ...settings.routing };
+  const update = (patch: Partial<typeof routing>) => void save({ routing: { ...routing, ...patch } }, 'Auto updated');
+  return (
+    <section className="settings-section card">
+      <h2>
+        <Sparkles size={16} className="accent" style={{ verticalAlign: -2, marginRight: 6 }} />
+        Auto
+      </h2>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        Choose <b>Auto</b> in the model picker and Mitzi picks a model for each message: the quick model for everyday questions and small talk, the in-depth model for code,
+        analysis, long documents, planning and multi-step work. Each answer shows which one it used and why.
+      </p>
+      <div className="field">
+        <span className="field-label">Quick model</span>
+        <ModelPicker value={routing.fast} onChange={(m) => update({ fast: m })} variant="input" direction="down" allowEmpty="The fast model (above)" />
+      </div>
+      <div className="field">
+        <span className="field-label">In-depth model</span>
+        <ModelPicker value={routing.strong} onChange={(m) => update({ strong: m })} variant="input" direction="down" allowEmpty="The default model (above)" />
+      </div>
+      <div className="tool-toggle" style={{ padding: 0, border: 0 }}>
+        <div className="grow">
+          <div className="t">Start new chats on Auto</div>
+          <div className="s">Bots with their own model keep it.</div>
+        </div>
+        <Toggle label="Start new chats on Auto" on={routing.newChats} onChange={(v) => update({ newChats: v })} />
+      </div>
+    </section>
   );
 }
 

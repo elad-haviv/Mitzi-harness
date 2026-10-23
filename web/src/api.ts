@@ -51,7 +51,7 @@ import type {
 export type * from '../../src/shared/types';
 import type { UpdateEvent, UpdateInfo } from '../../src/updater';
 export type { UpdateEvent, UpdateInfo, UpdateStep } from '../../src/updater';
-export { DEFAULT_BOT_ID, TEXT_ARTIFACT_TYPES } from '../../src/shared/types';
+export { AUTO_MODEL, DEFAULT_BOT_ID, TEXT_ARTIFACT_TYPES } from '../../src/shared/types';
 
 export type ProjectView = Project & { chatCount: number };
 export type WorkflowView = Workflow & { running: boolean };
@@ -82,6 +82,8 @@ export interface UsageReport {
   byProject: UsageGroup[];
   byBot: UsageGroup[];
   topChats: UsageGroup[];
+  /** How Auto routed answers; absent when nothing used Auto. */
+  auto?: { fast: UsageTotalsView; strong: UsageTotalsView; saved: number };
 }
 export interface LearningPoint {
   n: number;

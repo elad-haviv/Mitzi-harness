@@ -630,7 +630,7 @@ function NodeConfig({ node, spec, onLabel, onConfig, onDelete }: { node: Workflo
           {botSelect}
           <div className="field">
             <span className="field-label">Model</span>
-            <ModelPicker value={c.model ?? ''} onChange={(m) => onConfig('model', m)} variant="input" direction="down" allowEmpty="The bot’s model" />
+            <ModelPicker value={c.model ?? ''} onChange={(m) => onConfig('model', m)} variant="input" direction="down" allowEmpty="The bot’s model" auto />
           </div>
           {text('prompt', 'Prompt', 'What should the bot do? Use {{input}} for the previous step.', 6)}
           <div className="tool-toggle">

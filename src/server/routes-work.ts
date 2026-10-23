@@ -3,7 +3,7 @@
 import type { ServerResponse } from 'node:http';
 import type { Config } from '../config.js';
 import type { RoutingClient } from '../providers.js';
-import { Chat, ChatMessage, DEFAULT_BOT_ID, FeedbackIteration, FeedbackLoop, Lesson, UsageEvent } from '../shared/types.js';
+import { AUTO_MODEL, Chat, ChatMessage, DEFAULT_BOT_ID, FeedbackIteration, FeedbackLoop, Lesson, UsageEvent } from '../shared/types.js';
 import { addSubgoal, BUILTIN_COMMANDS, DEFAULT_GOAL_TURNS, newGoal, parseBuiltin } from './agentic.js';
 import { contextMessages } from './context.js';
 import type { MemoryService } from './memory/index.js';
@@ -139,7 +139,8 @@ export function registerWorkRoutes(route: Route, deps: WorkDeps): void {
       await withUsage({ kind: 'btw', chatId: chat.id, projectId: chat.projectId, botId: chat.botId ?? DEFAULT_BOT_ID }, () =>
         client.chat(
           {
-            model: chat.model,
+            // A side question is quick: on Auto it goes to the fast model.
+            model: chat.model === AUTO_MODEL ? runner.routeModels().fast : chat.model,
             messages: [
               { role: 'system', content: 'Answer a quick side question about this conversation. You have no tools; answer from what is already in the conversation and your own knowledge. Be brief.' },
               ...history.map((m) => (m.role === 'assistant' ? { role: 'assistant' as const, content: m.content } : m)),
@@ -192,8 +193,20 @@ export function registerWorkRoutes(route: Route, deps: WorkDeps): void {
       byProject: groupBy(events, (e) => e.projectId ?? (e.chatId ? '' : undefined)).map((g) => ({ ...g, name: g.key ? name.project(g.key) : 'No project' })).slice(0, 12),
       byBot: groupBy(events, (e) => e.botId).map((g) => ({ ...g, name: name.bot(g.key) })).slice(0, 12),
       topChats: groupBy(events, (e) => e.chatId).map((g) => ({ ...g, name: name.chat(g.key) })).slice(0, 10),
+      auto: autoReport(events),
     };
   });
+
+  /** How Auto routed answers, and roughly what sending the easy ones to the fast model saved. */
+  const autoReport = (events: UsageEvent[]) => {
+    const routed = events.filter((e) => e.route && (e.kind === 'chat' || e.kind === 'task'));
+    if (!routed.length) return undefined;
+    const answers = (tier: 'fast' | 'strong') => routed.filter((e) => e.route === tier);
+    const { strong } = runner.routeModels();
+    // What the fast model's calls would have cost on the strong model, at its listed prices.
+    const saved = answers('fast').reduce((n, e) => n + Math.max(0, (usage.priceOf(strong, e.prompt, e.completion) ?? e.cost) - e.cost), 0);
+    return { fast: total(answers('fast')), strong: total(answers('strong')), saved };
+  };
 
   // ---- Feedback loops ----------------------------------------------------------------------
 
@@ -210,7 +223,7 @@ export function registerWorkRoutes(route: Route, deps: WorkDeps): void {
       .join('\n\n');
     const prompt = LOOP_LESSON_PROMPT.replace('{task}', loop.task.slice(0, 3000)).replace('{attempts}', attempts);
     const res = await withUsage({ kind: 'learning', chatId: chat.id, botId: loop.botId }, () =>
-      deps.client().chat({ model: deps.config().smallModel ?? chat.model, messages: [{ role: 'user', content: prompt }], maxTokens: 250 }),
+      deps.client().chat({ model: deps.config().smallModel ?? runner.modelOf(chat), messages: [{ role: 'user', content: prompt }], maxTokens: 250 }),
     );
     const lessonText = res.content.trim().replace(/^["'\s]+|["'\s]+$/g, '').slice(0, 500);
     if (!lessonText) return;

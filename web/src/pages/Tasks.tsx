@@ -368,7 +368,7 @@ function TaskEditor({
       </div>
       <div className="field">
         <span className="field-label">Model</span>
-        <ModelPicker value={model} onChange={setModel} variant="input" direction="down" allowEmpty="Bot's default model" />
+        <ModelPicker value={model} onChange={setModel} variant="input" direction="down" allowEmpty="Bot's default model" auto />
       </div>
       <div className="setting-row">
         <div>

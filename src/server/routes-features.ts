@@ -112,7 +112,7 @@ export function registerFeatureRoutes(route: Route, deps: FeatureDeps): { schedu
       .replace('{rating}', rating.value > 0 ? 'liked (thumbs up)' : 'disliked (thumbs down)')
       .replace('{comment}', rating.comment ? `User's comment: ${rating.comment}` : 'No comment.');
     const config = deps.config();
-    const res = await deps.client().chat({ model: config.smallModel ?? chat.model, messages: [{ role: 'user', content: prompt }], maxTokens: 200 });
+    const res = await deps.client().chat({ model: config.smallModel ?? runner.modelOf(chat), messages: [{ role: 'user', content: prompt }], maxTokens: 200 });
     const text = res.content.trim().replace(/^["'\s]+|["'\s]+$/g, '');
     // The rating may have changed while the lesson was being written.
     if (!text || /^NONE\b/i.test(text) || chat.messages[index]?.rating !== rating) return;

@@ -4,7 +4,7 @@ import type { Config } from '../config.js';
 import type { ContentPart, LlmClient, Message } from '../openrouter.js';
 import type { RoutingClient } from '../providers.js';
 import { ApprovalAnswer, Approver, Permissions } from '../permissions.js';
-import { Artifact, Attachment, Bot, Chat, ChatMessage, ChatSummary, DEFAULT_BOT_ID, RecalledMemory, StreamEvent } from '../shared/types.js';
+import { Artifact, Attachment, AUTO_MODEL, Bot, Chat, ChatMessage, ChatSummary, DEFAULT_BOT_ID, RecalledMemory, RouteChoice, StreamEvent } from '../shared/types.js';
 import { ALL_TOOLS, Tool, toToolSpecs } from '../tools/index.js';
 import { webFetchTool } from '../tools/web.js';
 import type { Todo } from '../tools/types.js';
@@ -21,7 +21,8 @@ import { MediaService, mediaTools } from './media.js';
 import { delegateTool } from './team.js';
 import { checkGoal, goalTool, newGoal, parseBuiltin, submitPlanTool } from './agentic.js';
 import { todoTool } from '../tools/todo.js';
-import { UsageLog, withUsage } from './usage.js';
+import { currentUsageTag, UsageLog, withUsage } from './usage.js';
+import { concreteModel, route, RouteInput, RouteModels, routeModels } from './routing.js';
 import { BrowserService, browserTool } from './browser.js';
 
 const MAX_EVENT_OUTPUT = 20_000;
@@ -198,6 +199,23 @@ export class ChatRunner {
     return bot.tools.team === false ? [] : this.deps.store.bots.all().filter((b) => b.id !== bot.id);
   }
 
+  /** The fast and strong models the Auto model picks from. */
+  routeModels(): RouteModels {
+    return routeModels(this.deps.store.settings.routing, this.deps.config());
+  }
+
+  /** The model a chat uses outside a turn; Auto counts as its strong model. */
+  modelOf(chat: Chat): string {
+    return concreteModel(chat.model, this.routeModels());
+  }
+
+  /** The model to answer with: `model` itself, or Auto's pick for this input. */
+  private async pick(model: string, input: RouteInput): Promise<{ model: string; route?: RouteChoice }> {
+    if (model !== AUTO_MODEL) return { model };
+    const choice = route(input, this.routeModels(), await this.deps.catalog.list().catch(() => []));
+    return { model: choice.model, route: choice };
+  }
+
   /** The chat's project, bot, recalled memories and artifacts, as used to build its prompt. */
   setup(chat: Chat): ChatSetup {
     const { store } = this.deps;
@@ -267,7 +285,7 @@ export class ChatRunner {
   async runOnce(opts: { botId?: string; model?: string; prompt: string; projectId?: string; tools: boolean; autoApprove: boolean; note?: string; signal?: AbortSignal }): Promise<string> {
     const { store, catalog } = this.deps;
     const bot = store.bots.get(opts.botId ?? DEFAULT_BOT_ID) ?? store.bots.get(DEFAULT_BOT_ID)!;
-    const model = opts.model || bot.model || this.deps.config().model;
+    const { model } = await this.pick(opts.model || bot.model || this.deps.config().model, { content: opts.prompt, working: opts.tools, planning: false });
     const project = opts.projectId ? store.projects.get(opts.projectId) : undefined;
     const chat: Chat = {
       id: `once-${newId()}`,
@@ -322,7 +340,7 @@ export class ChatRunner {
   private async recall(bot: Bot, query: string, emit: (e: StreamEvent) => void): Promise<RecalledMemory[]> {
     const { memory, store } = this.deps;
     try {
-      return await withUsage({ kind: 'memory', sink: undefined }, () => memory.backend().recall(memory.bankFor(bot), query, { maxTokens: store.settings.recallTokens }));
+      return await withUsage({ kind: 'memory', sink: undefined, route: undefined }, () => memory.backend().recall(memory.bankFor(bot), query, { maxTokens: store.settings.recallTokens }));
     } catch (err: any) {
       emit({ type: 'warn', message: `Couldn't recall memories: ${err.message}` });
       return [];
@@ -338,11 +356,11 @@ export class ChatRunner {
     lead: Bot,
     mate: Bot,
     task: string,
-    run: { callId: string; permissions: Permissions; emit: (e: StreamEvent) => void; signal?: AbortSignal },
+    run: { callId: string; permissions: Permissions; emit: (e: StreamEvent) => void; signal?: AbortSignal; model: string },
   ): Promise<string> {
     const { store, catalog } = this.deps;
     const project = chat.projectId ? store.projects.get(chat.projectId) : undefined;
-    const model = mate.model ?? chat.model;
+    const { model } = await this.pick(mate.model ?? run.model, { content: task, working: true, planning: false });
     const virtual: Chat = { ...chat, botId: mate.id, model, webSearch: false, messages: [], contextStart: 0, summary: undefined, focusArtifactId: undefined };
     const send = (event: 'start' | 'text' | 'tool' | 'done' | 'error', text: string) => run.emit({ type: 'delegate', callId: run.callId, botId: mate.id, event, text });
     send('start', task);
@@ -387,7 +405,7 @@ export class ChatRunner {
       .join('\n\n');
     if (!userText.trim() || !assistant.trim()) return;
     const project = chat.projectId ? this.deps.store.projects.get(chat.projectId) : undefined;
-    withUsage({ kind: 'memory', sink: undefined }, () => memory.backend().retain(memory.bankFor(bot), {
+    withUsage({ kind: 'memory', sink: undefined, route: undefined }, () => memory.backend().retain(memory.bankFor(bot), {
         content: `User: ${userText.slice(0, 8000)}\n\nAssistant: ${assistant.slice(0, 8000)}`,
         context: `Conversation "${chat.title}"${project ? ` in project "${project.name}"` : ''}`,
         timestamp: new Date().toISOString(),
@@ -491,16 +509,26 @@ export class ChatRunner {
       if (!chat.contextStart) chat.summary = undefined;
     }
     const isFirstTurn = chat.messages.length === 0;
+    const working = chat.mode === 'work' || chat.goal?.status === 'active';
+
+    // On Auto, pick the model for this message.
+    const previous = chat.messages.findLast((m) => m.role === 'assistant' && m.route)?.route?.tier;
+    const { model, route: routed } = await this.pick(chat.model, { content, working, planning: !!planRequest, previous });
+    if (routed) {
+      emit({ type: 'route', route: routed });
+      const tag = currentUsageTag();
+      if (tag) tag.route = routed.tier;
+    }
 
     // Compact before sending if the last request came close to the context limit.
-    const contextLength = (await catalog.contextLength(chat.model)) ?? 128_000;
+    const contextLength = (await catalog.contextLength(model)) ?? 128_000;
     const { autoCompactPercent, keepRecentTurns } = store.settings;
     if (autoCompactPercent > 0 && chat.lastPromptTokens > (contextLength * autoCompactPercent) / 100) {
       emit({ type: 'status', message: 'Compacting earlier messages to free up context…' });
       try {
         // The message being sent counts as one of the recent turns to keep.
         const keep = Math.max(0, keepRecentTurns - 1);
-        if (await compactChat(chat, client, this.deps.config().smallModel ?? chat.model, keep, signal)) {
+        if (await compactChat(chat, client, this.deps.config().smallModel ?? model, keep, signal)) {
           store.chats.put(chat);
           emit({ type: 'compacted', contextStart: chat.contextStart });
         }
@@ -549,9 +577,8 @@ export class ChatRunner {
     const team = this.teamFor(bot);
     const permissions = new Permissions(project?.permissionMode ?? 'default', chat.allowedRules, approver);
     if (team.length && !planRequest) {
-      tools.push(delegateTool(team, (mate, task, callId, toolSignal) => this.runTeammate(chat, bot, mate, task, { callId, permissions, emit, signal: toolSignal ?? signal })));
+      tools.push(delegateTool(team, (mate, task, callId, toolSignal) => this.runTeammate(chat, bot, mate, task, { callId, permissions, emit, signal: toolSignal ?? signal, model })));
     }
-    const working = chat.mode === 'work' || chat.goal?.status === 'active';
     if (working && !tools.some((t) => t.name === 'TodoWrite')) tools.push(todoTool);
     if (chat.goal?.status === 'active') {
       const goal = chat.goal;
@@ -561,7 +588,7 @@ export class ChatRunner {
       // Planning looks around but changes nothing.
       tools = [...tools.filter((t) => t.kind === 'read' && !/^(TodoWrite|Artifact|ArtifactComment|Generate\w+)$/.test(t.name)), submitPlanTool(chat, planRequest, (plan) => emit({ type: 'plan', plan }))];
     }
-    const supportsTools = (await catalog.list().catch(() => [])).find((m) => m.id === chat.model)?.tools ?? true;
+    const supportsTools = (await catalog.list().catch(() => [])).find((m) => m.id === model)?.tools ?? true;
     // The task list is kept with the chat, so it survives reloads and shows in the side panel.
     const ui = new WebUI((e) => {
       if (e.type === 'todos') chat.todos = e.todos;
@@ -570,7 +597,7 @@ export class ChatRunner {
     const config: Config = {
       ...this.deps.config(),
       // Web search is OpenRouter's :online feature.
-      model: chat.webSearch && client.isOpenRouter(chat.model) ? `${chat.model}:online` : chat.model,
+      model: chat.webSearch && client.isOpenRouter(model) ? `${model}:online` : model,
       temperature: bot.temperature,
       autoCompactTokens: 0, // the runner compacts per chat instead
       maxTurns: working ? 100 : 50,
@@ -582,7 +609,7 @@ export class ChatRunner {
       permissions,
       ui,
       cwd: project?.folder ?? homedir(),
-      systemPrompt: () => systemPrompt({ ...this.setup(chat), planning: !!planRequest }),
+      systemPrompt: () => systemPrompt({ ...this.setup(chat), model, planning: !!planRequest }),
     });
     const firstText = typeof content === 'string' ? content : content.map((p) => (p.type === 'text' ? p.text : '')).join(' ');
     // Save the user's message right away so a reload mid-turn still shows it.
@@ -609,11 +636,11 @@ export class ChatRunner {
     agent.messages = contextMessages(chat);
     const before = agent.messages.length;
 
-    const titleModel = this.deps.config().smallModel ?? chat.model;
+    const titleModel = this.deps.config().smallModel ?? model;
     // Name the chat in parallel with the answer, and show the title as soon as it's ready.
     const title =
       isFirstTurn && chat.title === 'New chat'
-        ? withUsage({ kind: 'title', sink: undefined }, () => generateTitle(client, titleModel, firstText)).then((generated) => {
+        ? withUsage({ kind: 'title', sink: undefined, route: undefined }, () => generateTitle(client, titleModel, firstText)).then((generated) => {
             chat.title = generated || firstText.slice(0, 60).replace(/\s+/g, ' ').trim() || 'New chat';
             emit({ type: 'chat', chat: summarizeChat(chat) });
           })
@@ -632,7 +659,7 @@ export class ChatRunner {
           .map((m) => (m.role === 'assistant' ? (typeof m.content === 'string' ? m.content : '') : m.role === 'tool' ? `[tool result] ${String(m.content).slice(0, 600)}` : ''))
           .filter(Boolean)
           .join('\n\n');
-        const verdict = await withUsage({ kind: 'goal' }, () => checkGoal(client, this.deps.config().smallModel ?? chat.model, goal, work, signal));
+        const verdict = await withUsage({ kind: 'goal' }, () => checkGoal(client, this.deps.config().smallModel ?? model, goal, work, signal));
         for (const id of verdict.done) {
           const sub = goal.subgoals.find((x) => x.id === id);
           if (sub) sub.done = true;
@@ -666,12 +693,13 @@ export class ChatRunner {
         added.push({ role: 'assistant', content: ui.partialText, ...(ui.partialReasoning.trim() ? { reasoning: ui.partialReasoning } : {}) });
       }
       const ts = Date.now();
-      const saved: ChatMessage[] = added.map((m) => ({ ...m, ts, ...(m.role === 'assistant' ? { model: chat.model } : {}) }));
+      const saved: ChatMessage[] = added.map((m) => ({ ...m, ts, ...(m.role === 'assistant' ? { model } : {}) }));
       // The whole response's time, tokens and cost (teammates and goal checks included) go on its last answer.
       const stats = { durationMs: ts - started, promptTokens: totals.prompt, completionTokens: totals.completion, cost: totals.cost, requests: totals.requests };
       const last = saved.findLast((m) => m.role === 'assistant');
       if (last) {
         last.stats = stats;
+        if (routed) last.route = routed;
         if (input.kind === 'message' && input.feedbackLoopId) last.feedbackLoopId = input.feedbackLoopId;
       }
       emit({ type: 'stats', stats });

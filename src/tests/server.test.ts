@@ -724,6 +724,41 @@ test('budgets warn, and the hard stop refuses requests once a limit is reached',
   assert.equal((await call('GET', '/api/budget')).data.state, 'ok');
 });
 
+test('Auto routes quick messages to the fast model and in-depth ones to the strong model', async () => {
+  reply = () => textChunks('Sure.');
+  await call('PUT', '/api/settings', { routing: { fast: 'test/fast', strong: 'test/strong', newChats: true } });
+  // New chats start on Auto.
+  const chat = (await call('POST', '/api/chats', {})).data;
+  assert.equal(chat.model, 'auto');
+
+  let events = await stream(`/api/chats/${chat.id}/messages`, { content: 'hi there' });
+  assert.equal(lastMain().model, 'test/fast');
+  assert.deepEqual(events.find((e) => e.type === 'route').route, { tier: 'fast', reason: 'Small talk', model: 'test/fast' });
+  // The system prompt names the model that's answering, not "auto".
+  assert.match(lastMain().messages[0].content, /running as the model test\/fast/);
+
+  events = await stream(`/api/chats/${chat.id}/messages`, { content: 'Analyze the trade-offs between these two database designs' });
+  assert.equal(lastMain().model, 'test/strong');
+  assert.equal(events.find((e) => e.type === 'route').route.tier, 'strong');
+  // A short follow-up to in-depth work stays on the strong model.
+  await stream(`/api/chats/${chat.id}/messages`, { content: 'continue' });
+  assert.equal(lastMain().model, 'test/strong');
+
+  const saved = (await call('GET', `/api/chats/${chat.id}`)).data;
+  assert.equal(saved.model, 'auto');
+  const answers = saved.messages.filter((m: any) => m.role === 'assistant');
+  assert.deepEqual(answers.map((m: any) => [m.model, m.route.tier]), [['test/fast', 'fast'], ['test/strong', 'strong'], ['test/strong', 'strong']]);
+
+  const auto = (await call('GET', `/api/usage?chatId=${chat.id}`)).data.auto;
+  assert.equal(auto.fast.requests, 1);
+  assert.equal(auto.strong.requests, 2);
+
+  // "auto" can't be one of Auto's own models.
+  const settings = (await call('PUT', '/api/settings', { routing: { fast: 'auto', strong: '', newChats: false } })).data;
+  assert.deepEqual(settings.routing, { fast: '', strong: '', newChats: false });
+  assert.equal((await call('POST', '/api/chats', {})).data.model, 'test/model');
+});
+
 /** Polls until a server reaches a status. */
 async function waitFor(id: string, status: string) {
   for (let i = 0; i < 200; i++) {

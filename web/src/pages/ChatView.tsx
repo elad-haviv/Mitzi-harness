@@ -24,7 +24,7 @@ import {
   X,
 } from 'lucide-react';
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, Artifact, Attachment, Chat, ChatMessage, ChatMode, DEFAULT_BOT_ID, FeedbackLoop, Goal, RecalledMemory, RepoStatus, StreamEvent } from '../api';
+import { api, Artifact, Attachment, AUTO_MODEL, Chat, ChatMessage, ChatMode, DEFAULT_BOT_ID, FeedbackLoop, Goal, RecalledMemory, RepoStatus, RouteChoice, StreamEvent } from '../api';
 import { ImportModal } from '../components/Import';
 import { LiveMode } from '../components/LiveMode';
 import { ProjectChip } from '../components/ProjectChip';
@@ -49,7 +49,7 @@ import {
   UsagePanel,
 } from '../components/Work';
 import { Markdown } from '../components/Markdown';
-import { AssistantTurn, Avatar, buildTurns, messageText, Reasoning, CompactDivider, MemoryRecall, PermissionCard, PermissionRequest, ToolBlock, UserTurn } from '../components/Messages';
+import { AssistantTurn, Avatar, buildTurns, messageText, Reasoning, CompactDivider, MemoryRecall, PermissionCard, PermissionRequest, RouteBadge, ToolBlock, UserTurn } from '../components/Messages';
 import { Menu, useConfirm } from '../components/ui';
 import { href, navigate, parseRoute } from '../router';
 import { LOGO, relativeTime, useApp } from '../state';
@@ -69,6 +69,8 @@ interface Live {
   status?: string;
   /** When the response started, for the stopwatch. */
   startedAt: number;
+  /** The model Auto picked for this response. */
+  route?: RouteChoice;
 }
 
 /** The side panel: a tab, and in the artifacts tab optionally one open artifact. */
@@ -177,8 +179,8 @@ export function ChatView({
   }, [routeId, chatId]);
 
   useEffect(() => {
-    setDraftModel(draftBot?.model ?? settings?.defaultModel ?? '');
-  }, [draftBot?.model, settings?.defaultModel, botId]);
+    setDraftModel(draftBot?.model ?? (settings?.routing?.newChats ? AUTO_MODEL : settings?.defaultModel) ?? '');
+  }, [draftBot?.model, settings?.defaultModel, settings?.routing?.newChats, botId]);
 
   const reload = useCallback(
     async (id: string) => {
@@ -306,6 +308,9 @@ export function ChatView({
         break;
       case 'status':
         setLive((l) => l && { ...l, status: e.message });
+        break;
+      case 'route':
+        setLive((l) => l && { ...l, route: e.route });
         break;
       case 'recall':
         setLive((l) => l && { ...l, memories: e.memories });
@@ -767,7 +772,10 @@ export function ChatView({
               {live.status ?? (live.blocks.length === 0 ? 'Thinking…' : 'Working…')}
             </div>
           )}
-          <Stopwatch since={live.startedAt} />
+          <div className="live-meta">
+            {live.route && <RouteBadge route={live.route} />}
+            <Stopwatch since={live.startedAt} />
+          </div>
         </div>
       </div>
     </>

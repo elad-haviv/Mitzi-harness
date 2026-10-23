@@ -33,9 +33,10 @@ import {
   Terminal,
   Wrench,
   X,
+  Zap,
 } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import type { Artifact, Attachment, Bot, ChatMessage, ContentPart, Rating, RecalledMemory, Todo } from '../api';
+import type { Artifact, Attachment, Bot, ChatMessage, ContentPart, Rating, RecalledMemory, RouteChoice, Todo } from '../api';
 import { speaker, useSpeaking } from '../speech';
 import { href } from '../router';
 import { LOGO, modelLabel, useApp } from '../state';
@@ -315,6 +316,7 @@ export function AssistantTurn({
   const model = messages.find((m) => m.model)?.model;
   const rating = messages.at(-1)?.rating;
   const stats = messages.at(-1)?.stats;
+  const route = messages.findLast((m) => m.route)?.route;
   const actions = useChatActions();
   const loopId = messages.at(-1)?.feedbackLoopId;
   const loop = loopId ? actions?.loops.find((l) => l.id === loopId) : undefined;
@@ -351,7 +353,7 @@ export function AssistantTurn({
               <Star size={14} /> <span>Review</span>
             </button>
           )}
-          {model && <span className="meta">{modelLabel(model, models)}</span>}
+          {route ? <RouteBadge route={route} /> : model && <span className="meta">{modelLabel(model, models)}</span>}
           {stats && <StatsLine stats={stats} />}
         </div>
         {loop && reviewIndex !== undefined && <LoopBadge loop={loop} index={reviewIndex} />}
@@ -363,6 +365,18 @@ export function AssistantTurn({
         )}
       </div>
     </div>
+  );
+}
+
+/** Which model Auto picked for an answer, and why. */
+export function RouteBadge({ route }: { route: RouteChoice }) {
+  const { models } = useApp();
+  const name = modelLabel(route.model, models);
+  return (
+    <span className={`route-badge ${route.tier}`} title={`Auto picked ${name} (${route.model}): ${route.reason.toLowerCase()}`}>
+      {route.tier === 'fast' ? <Zap size={11} /> : <Sparkles size={11} />}
+      Auto · {name}
+    </span>
   );
 }
 

@@ -32,6 +32,27 @@ export interface UiSettings {
   browserHeaded?: boolean;
   /** Spending limits, in US dollars. */
   budget?: BudgetSettings;
+  /** The models the "Auto" model chooses between. */
+  routing?: RoutingSettings;
+}
+
+/** The model id that picks a fast or strong model for each message. */
+export const AUTO_MODEL = 'auto';
+
+export interface RoutingSettings {
+  /** Empty: the fast-tasks model. */
+  fast: string;
+  /** Empty: the default model. */
+  strong: string;
+  /** Start new chats on Auto. */
+  newChats: boolean;
+}
+
+/** How Auto routed one message. */
+export interface RouteChoice {
+  tier: 'fast' | 'strong';
+  model: string;
+  reason: string;
 }
 
 export interface PublicSettings extends UiSettings {
@@ -155,6 +176,8 @@ export type ChatMessage = Message & {
   rating?: Rating;
   /** Time, tokens and cost of the whole response; set on a turn's last assistant message. */
   stats?: ResponseStats;
+  /** Set when the chat is on Auto: which model answered, and why. */
+  route?: RouteChoice;
   /** The feedback loop this answer belongs to (an attempt the user reviewed or asked to redo). */
   feedbackLoopId?: string;
   /** Set on user messages Mitzi sent for the user: redo directions, plan approval, goal follow-ups. */
@@ -358,6 +381,8 @@ export interface UsageEvent {
   botId?: string;
   workflowId?: string;
   taskId?: string;
+  /** Set on calls Auto routed. */
+  route?: RouteChoice['tier'];
 }
 
 // ---------- Feedback loops ----------
@@ -591,6 +616,7 @@ export type StreamEvent =
   | { type: 'goal'; goal: Goal | null }
   | { type: 'plan'; plan: Plan }
   | { type: 'stats'; stats: ResponseStats }
+  | { type: 'route'; route: RouteChoice }
   | { type: 'browser'; url: string; title: string; screenshot?: string }
   | { type: 'status'; message: string }
   | { type: 'recall'; memories: RecalledMemory[] }

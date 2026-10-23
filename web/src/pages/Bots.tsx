@@ -177,7 +177,7 @@ function BotEditor({ bot, onClose, onSaved }: { bot?: Bot; onClose(): void; onSa
       </label>
       <div className="field">
         <span className="field-label">Model</span>
-        <ModelPicker value={form.model} onChange={(m) => set('model', m)} variant="input" direction="down" allowEmpty="Default model (from Settings)" />
+        <ModelPicker value={form.model} onChange={(m) => set('model', m)} variant="input" direction="down" allowEmpty="Default model (from Settings)" auto />
       </div>
       <div className="field">
         <span className="field-label row" style={{ justifyContent: 'space-between' }}>

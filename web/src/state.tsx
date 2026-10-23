@@ -1,6 +1,6 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { speaker } from './speech';
-import { api, ApiError, BudgetStatus, Bot, ChatListItem, ModelInfo, ProjectView, PublicSettings, TaskView, UpdateStatus } from './api';
+import { api, ApiError, AUTO_MODEL, BudgetStatus, Bot, ChatListItem, ModelInfo, ProjectView, PublicSettings, TaskView, UpdateStatus } from './api';
 
 export type Theme = 'system' | 'light' | 'dark';
 
@@ -202,7 +202,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 }
 
 /** Formats a model id like "anthropic/claude-sonnet-4.5" as "Claude Sonnet 4.5". */
+/** The fast and strong models Auto picks from (as the server resolves them). */
+export function autoModels(settings: PublicSettings | undefined): { fast: string; strong: string } {
+  const strong = settings?.routing?.strong || settings?.defaultModel || '';
+  return { fast: settings?.routing?.fast || settings?.smallModel || strong, strong };
+}
+
 export function modelLabel(id: string, models: ModelInfo[]): string {
+  if (id === AUTO_MODEL) return 'Auto';
   const found = models.find((m) => m.id === id);
   if (found) return found.name.replace(/^[^:]+:\s*/, '');
   const base = id.split(/[/:]/).pop() ?? id;
