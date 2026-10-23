@@ -1,3 +1,4 @@
+import { extractText, isDocument } from '../documents';
 import { ProjectUsage } from './Insights';
 import { BookOpen, FileText, FolderGit2, FolderOpen, FolderSearch, GitBranch, Loader2, RefreshCw, Layers, MessageSquare, MoreHorizontal, Pencil, Plus, ShieldCheck, SquarePen, Terminal, Trash2, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -218,8 +219,9 @@ export function ProjectPage({ id }: { id: string }) {
   const upload = async (files: FileList) => {
     for (const f of Array.from(files)) {
       try {
-        const text = await readFileAsText(f);
-        if (text.includes('\u0000')) throw new Error(`${f.name} is not a text file`);
+        // Documents (PDF, Word, Excel, PowerPoint) become text; other files must be text already.
+        const text = isDocument(f.name) ? (await extractText(f)).text : await readFileAsText(f);
+        if (text.includes('\u0000')) throw new Error(`${f.name} isn't a file Mitzi can read. Add text, PDF, Word, Excel or PowerPoint files.`);
         await api.addProjectFile(project.id, f.name, text);
       } catch (err) {
         toast((err as Error).message);

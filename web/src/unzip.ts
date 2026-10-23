@@ -83,3 +83,21 @@ export async function readZipText(file: Blob, suffix: string): Promise<string | 
   const stream = data.stream().pipeThrough(new DecompressionStream('deflate-raw'));
   return new Response(stream).text();
 }
+
+/** Names of the files in a zip. */
+export async function zipNames(file: Blob): Promise<string[]> {
+  return (await centralDirectory(file)).map((e) => e.name);
+}
+
+/** The text of every file whose name matches, by name (Office documents are zips of XML parts). */
+export async function readZipTexts(file: Blob, match: (name: string) => boolean): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  for (const entry of (await centralDirectory(file)).filter((e) => match(e.name))) {
+    const local = await view(file, entry.localOffset, entry.localOffset + 30);
+    const start = entry.localOffset + 30 + u16(local, 26) + u16(local, 28);
+    const data = file.slice(start, start + entry.compressedSize);
+    if (entry.method === 0) out.set(entry.name, await data.text());
+    else if (entry.method === 8) out.set(entry.name, await new Response(data.stream().pipeThrough(new DecompressionStream('deflate-raw'))).text());
+  }
+  return out;
+}

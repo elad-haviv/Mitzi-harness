@@ -9,7 +9,7 @@ An open-source, Claude-style AI workspace that runs on **any model available thr
 **Chats**
 - **Search everything** with Ctrl+K (⌘K on a Mac): chats down to the exact message, artifacts and memories, with the matching words highlighted. Choosing a result jumps to the message. With an embedding model set (Settings → Memory), results also match by meaning.
 - Responses stream in smoothly, at an even pace rather than in bursts, with Markdown, tables and syntax-highlighted code.
-- Attach text files or images. You can paste or drag and drop them into the message box.
+- Attach documents (PDF, Word, Excel, PowerPoint), text and code files, or images. You can paste or drag and drop them into the message box. Documents are read in your browser: Word keeps its headings, lists and tables, Excel sheets arrive as CSV, slides keep their speaker notes. Project knowledge accepts the same documents.
 - Edit any earlier message, regenerate the last answer, stop a response mid-stream, and copy replies.
 - Switch models per chat. The model picker is searchable and shows each model's price, context size, and vision and tool support.
 - One-click web search uses OpenRouter's `:online` option.

@@ -1,10 +1,11 @@
-import { ArrowUp, Globe, Paperclip, Square, X } from 'lucide-react';
+import { ArrowUp, Globe, Loader2, Paperclip, Square, X } from 'lucide-react';
 import { forwardRef, ReactNode, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { api, Attachment, SlashCommandInfo } from '../api';
 import { formatTokens, useApp } from '../state';
 import { AttachmentChips } from './Messages';
 import { ModelPicker } from './ModelPicker';
 import { readFileAsDataUrl, readFileAsText, useAutoResize } from './ui';
+import { extractText, isDocument } from '../documents';
 
 const MAX_TEXT_FILE = 1024 * 1024;
 const MAX_IMAGE = 5 * 1024 * 1024;
@@ -37,6 +38,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
   const { toast } = useApp();
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  /** Documents whose text is being extracted. */
+  const [reading, setReading] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -76,10 +79,21 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
           if (file.size > MAX_IMAGE) throw new Error(`${file.name} is larger than 5 MB`);
           const content = await readFileAsDataUrl(file);
           setAttachments((a) => [...a, { name: file.name || 'image.png', content, kind: 'image' }]);
+        } else if (isDocument(file.name)) {
+          // PDFs and Office files are read here, in the browser; the bot gets their text.
+          setReading((r) => [...r, file.name]);
+          try {
+            const doc = await extractText(file);
+            const header = `(Text extracted from ${file.name}: ${doc.summary}${doc.truncated ? '; the end was cut because the document is very long' : ''}.)`;
+            setAttachments((a) => [...a, { name: file.name, content: `${header}\n\n${doc.text}`, kind: 'text' }]);
+            if (doc.truncated) toast(`${file.name} is very long, so only its first part was attached.`, 'info');
+          } finally {
+            setReading((r) => r.filter((n) => n !== file.name));
+          }
         } else {
           if (file.size > MAX_TEXT_FILE) throw new Error(`${file.name} is larger than 1 MB`);
           const content = await readFileAsText(file);
-          if (content.includes('\u0000')) throw new Error(`${file.name} looks like a binary file; only text files and images can be attached`);
+          if (content.includes('\u0000')) throw new Error(`${file.name} isn't a file Mitzi can read. Attach text, PDF, Word, Excel or PowerPoint files, or images.`);
           setAttachments((a) => [...a, { name: file.name, content, kind: 'text' }]);
         }
       } catch (err) {
@@ -90,7 +104,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
 
   // Side questions and goal controls can be sent while Mitzi is working.
   const sideCommand = /^\/(btw|subgoal)\s+\S|^\/goal(\s+(pause|resume|clear|status|stop))?\s*$/i.test(text.trim());
-  const canSend = (!props.running || sideCommand) && (text.trim() || attachments.length > 0);
+  const canSend = (!props.running || sideCommand) && !reading.length && (text.trim() || attachments.length > 0);
   const send = () => {
     if (!canSend) return;
     props.onSend(text.trim(), attachments);
@@ -139,8 +153,14 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
             ))}
           </div>
         )}
-        {attachments.length > 0 && (
+        {(attachments.length > 0 || reading.length > 0) && (
           <div className="composer-attachments">
+            {reading.map((name) => (
+              <span key={name} className="chip reading" title="Reading the document">
+                <Loader2 size={13} className="spin" />
+                <span>Reading {name}…</span>
+              </span>
+            ))}
             {images.map(({ a, i }) => (
               <div className="thumb" key={i}>
                 <img src={a.content} alt={a.name} />
@@ -193,7 +213,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
         />
         <div className="composer-bar">
           <input ref={fileInput} type="file" multiple hidden onChange={(e) => e.target.files && void addFiles(e.target.files).then(() => (e.target.value = ''))} />
-          <button className="icon-btn" title="Attach files or images" aria-label="Attach files" onClick={() => fileInput.current?.click()}>
+ <button className="icon-btn" title="Attach files, documents (PDF, Word, Excel, PowerPoint) or images" aria-label="Attach files" onClick={() => fileInput.current?.click()}>
             <Paperclip size={17} />
           </button>
           <button
