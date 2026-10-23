@@ -63,11 +63,14 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
     return q ? chats.filter((c) => c.title.toLowerCase().includes(q)) : chats;
   }, [chats, query]);
 
+  const isDefaultBot = (c: ChatListItem) => !c.botId || !!bots.find((b) => b.id === c.botId)?.builtIn;
   const groups = useMemo(() => {
     // `start` is what a new chat started from the group gets: its project, bot or model.
     const out: { label: string; chats: ChatListItem[]; start?: { projectId?: string; botId?: string; model?: string } }[] = [];
+    // By date, pinned chats get their own section; otherwise they lead their own group.
+    const byDate = groupBy === 'date';
     const pinned = filtered.filter((c) => c.pinned);
-    if (pinned.length) out.push({ label: 'Pinned', chats: pinned });
+    if (byDate && pinned.length) out.push({ label: 'Pinned', chats: pinned });
     const keyOf = (c: ChatListItem): string => {
       switch (groupBy) {
         case 'project':
@@ -95,14 +98,16 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
             ? { model: c.model }
             : undefined;
     const rest: typeof out = [];
-    for (const c of filtered.filter((c) => !c.pinned && c.messageCount > 0)) {
+    for (const c of filtered.filter((c) => (byDate ? !c.pinned && c.messageCount > 0 : c.pinned || c.messageCount > 0))) {
       const label = keyOf(c);
       const g = rest.find((x) => x.label === label);
       if (g) g.chats.push(c);
       else rest.push({ label, chats: [c], start: startOf(c) });
     }
-    // Chats without a project come after the projects.
-    if (groupBy === 'project') rest.sort((a, b) => Number(a.label === 'No project') - Number(b.label === 'No project'));
+    // Chats without a project, and the default bot's chats, come first.
+    if (groupBy === 'project') rest.sort((a, b) => Number(b.label === 'No project') - Number(a.label === 'No project'));
+    if (groupBy === 'bot') rest.sort((a, b) => Number(!!b.chats.some(isDefaultBot)) - Number(!!a.chats.some(isDefaultBot)));
+    if (!byDate) for (const g of rest) g.chats.sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned));
     return [...out, ...rest];
   }, [filtered, groupBy, projects, bots, models]);
 
