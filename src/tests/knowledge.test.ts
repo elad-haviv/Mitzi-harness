@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { chunk, KnowledgeIndex, scanFolder } from '../server/knowledge.js';
 import { NODE_SPECS, order, runJavaScript, splitItems } from '../server/workflows.js';
 import { fromGallery, GALLERY, parseDraft } from '../server/workflow-gallery.js';
+import { splitMessage, toTelegramHtml } from '../server/telegram.js';
 import type { Project } from '../shared/types.js';
 import { tempDir } from './helpers.js';
 
@@ -96,4 +97,15 @@ test('the builder’s draft is checked: unknown steps, loops and missing ports',
   assert.throws(() => parseDraft('{"steps":[{"id":"s","type":"magic"}]}'), /unknown type "magic"/);
   assert.throws(() => parseDraft('{"steps":[{"id":"s","type":"trigger"},{"id":"o","type":"output"}],"edges":[{"from":"s","to":"o"},{"from":"o","to":"s"}]}'), /loop/);
   assert.throws(() => parseDraft('no json here'), /valid JSON/);
+});
+
+test('Telegram: markdown becomes Telegram HTML, and long answers are split', () => {
+  assert.equal(
+    toTelegramHtml('## Title\n\nCats are **crepuscular** & *cute* <3. See [docs](https://x.dev).\n- one\n\n```js\nif (a < b) x = "**";\n```'),
+    '<b>Title</b>\n\nCats are <b>crepuscular</b> &amp; <i>cute</i> &lt;3. See <a href="https://x.dev">docs</a>.\n• one\n\n<pre>if (a &lt; b) x = "**";</pre>',
+  );
+  const long = Array.from({ length: 30 }, (_, i) => `Paragraph ${i} ${'word '.repeat(40)}`).join('\n\n');
+  const parts = splitMessage(long, 1000);
+  assert.ok(parts.length > 1 && parts.every((p) => p.length <= 1000));
+  assert.equal(parts.join('\n\n').replace(/\s+/g, ' ').trim(), long.replace(/\s+/g, ' ').trim());
 });

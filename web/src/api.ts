@@ -59,6 +59,16 @@ export { AUTO_MODEL, DEFAULT_BOT_ID, TEXT_ARTIFACT_TYPES } from '../../src/share
 /** `knowledge.searched`: too big to send whole, so each message gets the relevant excerpts. */
 export type ProjectView = Project & { chatCount: number; knowledge?: { chars: number; docs: number; searched: boolean } };
 export type WorkflowView = Workflow & { running: boolean };
+export interface TelegramView {
+  running: boolean;
+  username?: string;
+  error?: string;
+  enabled: boolean;
+  hasToken: boolean;
+  pairingCode: string;
+  notify: boolean;
+  links: { chatId: number; name: string; mitziChatId?: string; linkedAt: string }[];
+}
 export interface GalleryItem {
   id: string;
   category: string;
@@ -277,6 +287,8 @@ export const api = {
   deleteWorkflow: (id: string) => request('DELETE', `/api/workflows/${id}`),
   runWorkflow: (id: string, input: string, onEvent: (e: WorkflowEvent) => void) => stream<WorkflowEvent>(`/api/workflows/${id}/run`, { input }, onEvent),
   stopWorkflow: (id: string) => request('POST', `/api/workflows/${id}/stop`, {}),
+  telegram: () => request<TelegramView>('GET', '/api/telegram'),
+  updateTelegram: (body: Partial<{ token: string; enabled: boolean; notify: boolean; newCode: boolean; unlink: number }>) => request<TelegramView>('PUT', '/api/telegram', body),
   /** Approves or rejects a run waiting at an approval step. */
   decideWorkflowRun: (id: string, runId: string, approved: boolean, note?: string) => request('POST', `/api/workflows/${id}/runs/${runId}/decide`, { approved, note }),
   answerPermission: (id: string, requestId: string, answer: 'yes' | 'always' | 'no' | 'feedback', feedback?: string) =>

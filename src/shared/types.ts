@@ -36,6 +36,27 @@ export interface UiSettings {
   routing?: RoutingSettings;
   /** Approval level for chats that don't set their own. */
   approval?: ApprovalLevel;
+  /** Chatting with Mitzi through a Telegram bot. */
+  telegram?: TelegramSettings;
+}
+
+export interface TelegramSettings {
+  enabled: boolean;
+  /** The bot's token from @BotFather (masked in public settings). */
+  token: string;
+  /** Sent to the bot as "/start <code>" to pair a Telegram chat. */
+  pairingCode: string;
+  links: TelegramLink[];
+  /** Send workflow approvals and finished scheduled tasks to paired chats. */
+  notify: boolean;
+}
+
+/** A Telegram chat paired with Mitzi, and the Mitzi chat it talks in. */
+export interface TelegramLink {
+  chatId: number;
+  name: string;
+  mitziChatId?: string;
+  linkedAt: string;
 }
 
 /** The model id that picks a fast or strong model for each message. */

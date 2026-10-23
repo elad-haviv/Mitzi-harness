@@ -6732,3 +6732,18 @@ button.todo-check:not(:disabled):hover {
   background: var(--accent);
   display: inline-block;
 }
+
+/* Telegram settings */
+.steps-list {
+  margin: 0 0 14px;
+  padding-left: 20px;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+.pairing-code {
+  font-size: 16px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  letter-spacing: 0.04em;
+}

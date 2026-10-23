@@ -15,6 +15,7 @@ const EXT: Record<string, string> = {
   'audio/mpeg': 'mp3',
   'audio/wav': 'wav',
   'audio/webm': 'webm',
+  'audio/ogg': 'ogg',
 };
 
 export interface MediaFile {

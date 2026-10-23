@@ -7,7 +7,7 @@ import { Config, loadConfig, MITZI_HOME, PERMISSION_MODES, PermissionMode } from
 import { PROVIDER_PRESETS, providerView, resolveProviders, RoutingClient, usable } from '../providers.js';
 import type { ProviderConfig, ProviderKind, SearchKind } from '../shared/types.js';
 import type { ApprovalAnswer } from '../permissions.js';
-import { APPROVAL_LEVELS, Attachment, AUTO_MODEL, BankProfile, BankSummary, Bot, BotTools, Chat, DEFAULT_BOT_ID, MemoryType, Project, PublicSettings, SettingsUpdate, StreamEvent } from '../shared/types.js';
+import { APPROVAL_LEVELS, Attachment, TelegramSettings, AUTO_MODEL, BankProfile, BankSummary, Bot, BotTools, Chat, DEFAULT_BOT_ID, MemoryType, Project, PublicSettings, SettingsUpdate, StreamEvent } from '../shared/types.js';
 import { toToolSpecs } from '../tools/index.js';
 import { compactChat, contextBreakdown, ModelCatalog } from './context.js';
 import { MemoryService } from './memory/index.js';
@@ -30,6 +30,7 @@ import { newId, now, Store } from './store.js';
 import { INLINE_LIMIT, KnowledgeIndex } from './knowledge.js';
 import { PythonSandbox } from './python.js';
 import { WorkflowTriggers } from './workflow-triggers.js';
+import { newPairingCode, TelegramBot } from './telegram.js';
 import { budgetMessage, BudgetExceeded, budgetStatus, UsageLog } from './usage.js';
 import { SearchIndex } from './search.js';
 import { BrowserService } from './browser.js';
@@ -156,8 +157,9 @@ export function createApp(opts: AppOptions) {
 
   const publicSettings = (): PublicSettings => {
     const c = config();
+    const { telegram: _telegram, ...ui } = store.settings;
     return {
-      ...store.settings,
+      ...ui,
       hasApiKey: hasChatProvider(),
       hasHindsightKey: !!c.hindsightApiKey,
       apiKeySource: process.env.OPENROUTER_API_KEY ? 'env' : c.apiKey ? 'config' : null,
@@ -667,6 +669,39 @@ export function createApp(opts: AppOptions) {
   triggers.start();
   registerWorkflowRoutes(route, { store, engine: workflows, client, config, triggers, validateFolder });
   const { scheduler } = registerFeatureRoutes(route, { store, runner, client, config, memory, media, newChat, workflows });
+
+  // ---- Telegram ----------------------------------------------------------------------------
+  const telegram = new TelegramBot({ store, runner, media, workflows, newChat, apiBase: process.env.MITZI_TELEGRAM_API });
+  void telegram.sync();
+  scheduler.finishedListeners.add((task) => {
+    const run = task.runs.at(-1);
+    if (run) void telegram.notify(`${run.status === 'error' ? '⚠️' : '✅'} “${task.name}” ${run.status === 'error' ? `failed: ${run.error}` : `is done.${run.preview ? `\n\n${run.preview}` : ''}`}`);
+  });
+  const telegramView = () => {
+    const t = store.settings.telegram;
+    return {
+      ...telegram.status(),
+      enabled: !!t?.enabled,
+      hasToken: !!t?.token,
+      pairingCode: t?.pairingCode ?? '',
+      notify: t?.notify ?? true,
+      links: t?.links ?? [],
+    };
+  };
+  route('GET', '/api/telegram', () => telegramView());
+  route('PUT', '/api/telegram', async ({ body }) => {
+    const cur: TelegramSettings = store.settings.telegram ?? { enabled: false, token: '', pairingCode: newPairingCode(), links: [], notify: true };
+    const next: TelegramSettings = { ...cur };
+    if (typeof body?.token === 'string') next.token = body.token.trim();
+    if (typeof body?.enabled === 'boolean') next.enabled = body.enabled;
+    if (typeof body?.notify === 'boolean') next.notify = body.notify;
+    if (body?.newCode === true) next.pairingCode = newPairingCode();
+    if (typeof body?.unlink === 'number') next.links = next.links.filter((l) => l.chatId !== body.unlink);
+    if (next.enabled && !next.token) throw new HttpError(400, 'Paste the bot token from @BotFather first');
+    store.updateSettings({ telegram: next });
+    if (body?.token !== undefined || body?.enabled !== undefined) await telegram.sync();
+    return telegramView();
+  });
   registerWorkRoutes(route, { store, runner, client, config, memory, usage });
 
   // Search across chats, artifacts and memories.
@@ -739,6 +774,7 @@ export function createApp(opts: AppOptions) {
     dispose: () => {
       scheduler.stop();
       triggers.stop();
+      telegram.stop();
       void browser.close();
       python.close();
       updates.dispose();

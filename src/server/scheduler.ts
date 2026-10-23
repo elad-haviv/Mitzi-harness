@@ -165,6 +165,8 @@ export function describeSchedule(s: TaskSchedule): string {
 export class Scheduler {
   private timer?: NodeJS.Timeout;
   private readonly running = new Set<string>();
+  /** Told when a task's run ends (to let the user know elsewhere). */
+  readonly finishedListeners = new Set<(task: ScheduledTask) => void>();
 
   constructor(
     private readonly store: Store,
@@ -221,6 +223,7 @@ export class Scheduler {
         if (fresh.runs.length > MAX_RUNS_KEPT) fresh.runs = fresh.runs.slice(-MAX_RUNS_KEPT);
         if (fresh.schedule.kind === 'once') fresh.enabled = false;
         this.store.tasks.put(this.plan(fresh));
+        for (const l of this.finishedListeners) l(fresh);
       }
     }
   }

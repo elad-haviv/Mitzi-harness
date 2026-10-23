@@ -157,6 +157,8 @@ export class WorkflowEngine {
   private readonly active = new Map<string, AbortController>();
   /** Runs paused at an approval step, by run id. */
   private readonly waiting = new Map<string, (decision: { approved: boolean; note?: string }) => void>();
+  /** Told when a run starts waiting for approval (to ask the user elsewhere, e.g. on Telegram). */
+  readonly approvalListeners = new Set<(workflow: Workflow, run: WorkflowRun, ask: string) => void>();
 
   constructor(private readonly deps: WorkflowDeps) {
     // Runs that were going when Mitzi stopped can't continue.
@@ -235,6 +237,7 @@ export class WorkflowEngine {
               save();
               onEvent({ type: 'step', runId: run.id, step: { ...step } });
               onEvent({ type: 'run', run });
+              for (const l of this.approvalListeners) l(workflow, run, ask);
               try {
                 return await new Promise<{ approved: boolean; note?: string }>((resolve, reject) => {
                   this.waiting.set(run.id, resolve);

@@ -16,6 +16,9 @@ process.env.CLAUDE_CONFIG_DIR = tempDir();
 const TOKEN = 'a'.repeat(48);
 let base = '';
 let mock: Server;
+let telegram: Server;
+const tgCalls: { method: string; body: any }[] = [];
+const tgUpdates: any[] = [];
 let close: () => Promise<void>;
 /** Decides the mock model's reply to each request. */
 let reply: (body: any) => object[] = () => textChunks('Hello!');
@@ -54,6 +57,26 @@ before(async () => {
     });
   });
   await new Promise<void>((r) => mock.listen(0, '127.0.0.1', r));
+  // A fake Telegram Bot API: updates are queued by tests, calls are recorded.
+  telegram = createServer((req, res) => {
+    let raw = '';
+    req.on('data', (d) => (raw += d));
+    req.on('end', async () => {
+      const method = req.url!.split('/').pop()!;
+      const body = raw ? JSON.parse(raw) : {};
+      tgCalls.push({ method, body });
+      const ok = (result: unknown) => res.end(JSON.stringify({ ok: true, result }));
+      if (method === 'getMe') return ok({ username: 'mitzi_test_bot' });
+      if (method === 'getUpdates') {
+        for (let i = 0; i < 20 && !tgUpdates.length; i++) await new Promise((r) => setTimeout(r, 25));
+        return ok(tgUpdates.splice(0));
+      }
+      if (method === 'sendMessage') return ok({ message_id: tgCalls.length, chat: { id: body.chat_id } });
+      ok(true);
+    });
+  });
+  await new Promise<void>((r) => telegram.listen(0, '127.0.0.1', r));
+  process.env.MITZI_TELEGRAM_API = `http://127.0.0.1:${(telegram.address() as AddressInfo).port}`;
   process.env.OPENROUTER_BASE_URL = `http://127.0.0.1:${(mock.address() as AddressInfo).port}`;
   process.env.MITZI_MODEL = 'test/model';
 
@@ -64,6 +87,7 @@ before(async () => {
 });
 
 after(async () => {
+  telegram?.close();
   await close?.();
   mock?.close();
 });
@@ -1049,6 +1073,49 @@ test('workflow triggers: a secret webhook, and a watched folder', { timeout: 30_
   const runs = (await call('GET', `/api/workflows/${wf.id}`)).data.runs;
   assert.ok(!runs.some((r: any) => r.source === 'old.txt' || r.source === 'skip.md'));
   await call('PATCH', `/api/workflows/${wf.id}`, { triggers: { folder: { path: dir, pattern: '*.txt', enabled: false } } });
+});
+
+test('Telegram: pairing, chatting, and strangers kept out', { timeout: 30_000 }, async () => {
+  reply = (body) => textChunks(`Hi from Mitzi: ${body.messages.at(-1).content}`);
+  const sent = (chatId: number) => tgCalls.filter((c) => (c.method === 'sendMessage' || c.method === 'editMessageText') && c.body.chat_id === chatId).map((c) => c.body.text);
+  const until = async (test: () => boolean) => {
+    for (let i = 0; i < 200 && !test(); i++) await new Promise((r) => setTimeout(r, 25));
+    assert.ok(test());
+  };
+  let update = 1;
+  const say = (chatId: number, text: string) => tgUpdates.push({ update_id: update++, message: { message_id: update, chat: { id: chatId, first_name: 'Dana' }, text } });
+
+  assert.equal((await call('PUT', '/api/telegram', { enabled: true })).status, 400, 'a token comes first');
+  const tg = (await call('PUT', '/api/telegram', { token: 'secret-token', enabled: true })).data;
+  assert.equal(tg.running, true);
+  assert.equal(tg.username, 'mitzi_test_bot');
+  assert.match(tg.pairingCode, /^\d{6}$/);
+  // The token never comes back.
+  assert.ok(!JSON.stringify(tg).includes('secret-token'));
+  assert.ok(!JSON.stringify((await call('GET', '/api/settings')).data).includes('secret-token'));
+
+  say(42, 'hello?');
+  await until(() => sent(42).some((t) => /private/.test(t)));
+  say(42, '/start 000000');
+  await until(() => sent(42).some((t) => /pairing code/.test(t)));
+  say(42, `/start ${tg.pairingCode}`);
+  await until(() => sent(42).some((t) => /Connected/.test(t)));
+  const after = (await call('GET', '/api/telegram')).data;
+  assert.deepEqual(after.links.map((l: any) => [l.chatId, l.name]), [[42, 'Dana']]);
+  assert.notEqual(after.pairingCode, tg.pairingCode, 'a used code is replaced');
+
+  say(42, 'What is up');
+  await until(() => sent(42).some((t) => t === 'Hi from Mitzi: What is up'));
+  const link = (await call('GET', '/api/telegram')).data.links[0];
+  const chat = (await call('GET', `/api/chats/${link.mitziChatId}`)).data;
+  assert.equal(chat.title, 'Telegram: Dana');
+  assert.deepEqual(chat.messages.map((m: any) => m.content), ['What is up', 'Hi from Mitzi: What is up']);
+
+  // Another Telegram user can't use it.
+  say(99, 'let me in');
+  await until(() => sent(99).some((t) => /private/.test(t)));
+  await call('PUT', '/api/telegram', { unlink: 42, enabled: false });
+  assert.equal((await call('GET', '/api/telegram')).data.running, false);
 });
 
 /** Polls until a server reaches a status. */
