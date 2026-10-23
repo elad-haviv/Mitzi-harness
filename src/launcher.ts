@@ -1,6 +1,7 @@
 // `mitzi ui` and `mitzi web`: run the server in a child process and show it in a desktop window or
 // the browser. The child exits with RESTART_CODE after an in-app update, and is started again so the
 // new version loads; the window or browser tab reconnects by itself.
+import { qrTerminal } from './shared/qr.js';
 import { ChildProcess, fork, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -22,6 +23,8 @@ interface Ready {
   url: string;
   port: number;
   version: string;
+  /** With --lan: addresses for other devices on the network. */
+  lanUrls?: string[];
 }
 
 /** Is a Mitzi server already answering on this port with our token? */
@@ -37,9 +40,9 @@ async function running(port: number): Promise<string | undefined> {
   }
 }
 
-function startServer(port: number): Promise<{ child: ChildProcess; ready: Ready }> {
+function startServer(port: number, lan = false): Promise<{ child: ChildProcess; ready: Ready }> {
   return new Promise((resolve, reject) => {
-    const child = fork(ENTRY, ['__serve', '--port', String(port)], {
+    const child = fork(ENTRY, ['__serve', '--port', String(port), ...(lan ? ['--lan'] : [])], {
       env: { ...process.env, MITZI_SUPERVISED: '1' },
       stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
     });
@@ -102,7 +105,7 @@ function openWindow(url: string): Promise<void> | undefined {
 
 // ---------- The command ----------
 
-export async function runApp(mode: 'ui' | 'web', opts: { port?: number; open: boolean; version: string }): Promise<number> {
+export async function runApp(mode: 'ui' | 'web', opts: { port?: number; open: boolean; lan?: boolean; version: string }): Promise<number> {
   const port = opts.port ?? 4545;
   const banner = (url: string, version: string) =>
     `${color.bold(color.orange('🐱 Mitzi'))} ${color.dim(`v${version}`)} is running at\n\n  ${color.cyan(url)}\n\n`;
@@ -119,7 +122,7 @@ export async function runApp(mode: 'ui' | 'web', opts: { port?: number; open: bo
 
   let server: { child: ChildProcess; ready: Ready };
   try {
-    server = await startServer(port);
+    server = await startServer(port, opts.lan);
   } catch (err) {
     process.stderr.write(color.red(`${(err as Error).message}\n`));
     return 1;
@@ -144,7 +147,7 @@ export async function runApp(mode: 'ui' | 'web', opts: { port?: number; open: bo
         process.stdout.write(color.dim('Restarting Mitzi…\n'));
         try {
           const previous = server.ready.version;
-          server = await startServer(port);
+          server = await startServer(port, opts.lan);
           process.stdout.write(`${color.green('✓')} ${server.ready.version !== previous ? `Updated to v${server.ready.version}` : 'Restarted'}\n`);
           supervise(server);
           return;
@@ -160,8 +163,14 @@ export async function runApp(mode: 'ui' | 'web', opts: { port?: number; open: bo
   process.once('SIGINT', () => stop(0));
   process.once('SIGTERM', () => stop(0));
 
-  const { url, version } = server.ready;
+  const { url, version, lanUrls } = server.ready;
   process.stdout.write(banner(url, version));
+  if (opts.lan) {
+    if (lanUrls?.length) {
+      process.stdout.write(`${color.bold('On your phone')} (same Wi-Fi), scan this or open ${color.cyan(lanUrls[0])}\n\n${qrTerminal(lanUrls[0])}\n\n`);
+      process.stdout.write(color.yellow('Anyone on this network with the link can use Mitzi as you. Use --lan only on networks you trust.\n'));
+    } else process.stdout.write(color.yellow('No local network was found, so only this computer can open Mitzi.\n'));
+  }
   if (mode === 'ui' && opts.open) {
     const win = openWindow(url);
     if (win) {

@@ -6764,3 +6764,50 @@ button.todo-check:not(:disabled):hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Phone pairing */
+.phone-pair {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.phone-qr svg {
+  display: block;
+  border-radius: 10px;
+  max-width: 220px;
+  height: auto;
+}
+.phone-url {
+  display: block;
+  word-break: break-all;
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+/* Phones: the chat header keeps room for the title. */
+@media (max-width: 640px) {
+  .chat-header .mode-switch.compact button span,
+  .chat-header .pill-btn span {
+    display: none;
+  }
+  .chat-header .mode-switch.compact button {
+    padding: 4px 7px;
+  }
+  .chat-header .chat-title-btn,
+  .chat-header .chat-tabs {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .chat-header .badge {
+    display: none;
+  }
+  .chat-header {
+    padding-top: env(safe-area-inset-top);
+  }
+  .composer-wrap {
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+}

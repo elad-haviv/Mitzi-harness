@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowUpCircle, Wallet, Brain, Check, CircleDashed, Loader2, RefreshCw, Copy, Database, Download, KeyRound, MessagesSquare, Monitor, Moon, Palette, Plug, Puzzle, Sparkles, Sun, Volume2, WandSparkles, Send, X } from 'lucide-react';
+import { AlertTriangle, ArrowUpCircle, Wallet, Brain, Check, CircleDashed, Loader2, RefreshCw, Copy, Database, Download, KeyRound, MessagesSquare, Monitor, Moon, Palette, Plug, Puzzle, Sparkles, Sun, Volume2, WandSparkles, Send, X, Smartphone, Bell } from 'lucide-react';
 import { ReactNode, useEffect, useState } from 'react';
 import { api, TelegramView, UpdateStep } from '../api';
 import { ImportModal } from '../components/Import';
@@ -8,9 +8,10 @@ import { href } from '../router';
 import { Theme, useApp } from '../state';
 import { MediaSettingsSection, ProvidersSection } from './ProviderSettings';
 import { BudgetMeters } from './Insights';
+import { qrSvg } from '../../../src/shared/qr';
 import { APPROVAL, LEVELS } from '../components/Approval';
 
-type Section = 'general' | 'models' | 'providers' | 'media' | 'budget' | 'telegram' | 'memory' | 'data' | 'updates';
+type Section = 'general' | 'models' | 'providers' | 'media' | 'budget' | 'phone' | 'telegram' | 'memory' | 'data' | 'updates';
 
 const SECTIONS: { id: Section; label: string; icon: ReactNode; hint: string }[] = [
   { id: 'general', label: 'General', icon: <Palette size={16} />, hint: 'Appearance and long conversations' },
@@ -18,6 +19,7 @@ const SECTIONS: { id: Section; label: string; icon: ReactNode; hint: string }[] 
   { id: 'models', label: 'Models', icon: <Sparkles size={16} />, hint: 'The models Mitzi uses by default' },
   { id: 'media', label: 'Media & voice', icon: <Volume2 size={16} />, hint: 'Image, video, speech, sound and music models, and read-aloud voices' },
   { id: 'budget', label: 'Usage & budget', icon: <Wallet size={16} />, hint: 'Spending limits and alerts' },
+  { id: 'phone', label: 'Phone & notifications', icon: <Smartphone size={16} />, hint: 'Use Mitzi on your phone, and get notified when chats finish' },
   { id: 'telegram', label: 'Telegram', icon: <Send size={16} />, hint: 'Chat with Mitzi from Telegram, and get approvals there' },
   { id: 'memory', label: 'Memory', icon: <Brain size={16} />, hint: 'How bots remember, and importing memories from other AIs' },
   { id: 'data', label: 'Data & about', icon: <Database size={16} />, hint: 'Where your data lives, importing chats, and version' },
@@ -78,6 +80,7 @@ export function SettingsPage({ section }: { section?: string }) {
           {current === 'media' && <MediaSettingsSection />}
           {current === 'budget' && <BudgetSettings />}
           {current === 'telegram' && <TelegramSettingsView />}
+          {current === 'phone' && <PhoneSettings />}
           {current === 'memory' && <MemorySettings />}
           {current === 'data' && <DataSettings />}
           {current === 'updates' && <UpdateSettings />}
@@ -372,6 +375,71 @@ function AutoSettings() {
         <Toggle label="Start new chats on Auto" on={routing.newChats} onChange={(v) => update({ newChats: v })} />
       </div>
     </section>
+  );
+}
+
+function PhoneSettings() {
+  const { toast } = useApp();
+  const [phone, setPhone] = useState<{ lan: boolean; urls: string[] }>();
+  const [permission, setPermission] = useState(typeof Notification === 'undefined' ? 'unsupported' : Notification.permission);
+  useEffect(() => {
+    api.phone().then(setPhone, (err) => toast(err.message));
+  }, [toast]);
+  const url = phone?.urls[0];
+  return (
+    <>
+      <section className="settings-section card">
+        <h2>Use Mitzi on your phone</h2>
+        {!phone ? (
+          <Loader2 className="spin muted" size={18} />
+        ) : url ? (
+          <div className="phone-pair">
+            <div className="phone-qr" aria-label="QR code for your phone" dangerouslySetInnerHTML={{ __html: qrSvg(url, 5) }} />
+            <div>
+              <ol className="steps-list">
+                <li>On your phone, connect to the same Wi-Fi as this computer.</li>
+                <li>Scan the code with the camera, or open the address below.</li>
+                <li>
+                  To keep Mitzi on your home screen: <b>Share → Add to Home Screen</b> on iPhone, or <b>⋮ → Add to Home screen</b> on Android.
+                </li>
+              </ol>
+              <code className="phone-url">{url}</code>
+              {phone.urls.length > 1 && <p className="muted small">Other addresses of this computer: {phone.urls.slice(1).map((u) => new URL(u).host).join(', ')}</p>}
+              <p className="muted small">The address includes your private access token: anyone on this network who has it can use Mitzi as you.</p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="muted small" style={{ marginTop: 0 }}>
+              Mitzi only accepts connections from this computer right now. To open it on your phone (on the same Wi-Fi), start it with:
+            </p>
+            <pre className="trigger-example">mitzi web --lan</pre>
+            <p className="muted small">
+              It then shows a QR code here and in the terminal. Use it on networks you trust, like your home Wi-Fi. Away from home, a private network like Tailscale gives the same
+              access securely.
+            </p>
+          </>
+        )}
+      </section>
+      <section className="settings-section card">
+        <h2>Notifications</h2>
+        <p className="muted small" style={{ marginTop: 0 }}>
+          A system notification when a chat finishes or needs your approval while you’re in another window or app.
+          {!window.isSecureContext && ' Browsers allow notifications only over https or on this computer (localhost).'}
+        </p>
+        {permission === 'granted' ? (
+          <span className="badge ok">On</span>
+        ) : permission === 'denied' ? (
+          <p className="small">Notifications are blocked for this site in your browser’s settings.</p>
+        ) : permission === 'unsupported' || !window.isSecureContext ? (
+          <p className="small muted">Not available here.</p>
+        ) : (
+          <button className="btn btn-sm" onClick={() => void Notification.requestPermission().then(setPermission)}>
+            <Bell size={14} /> Turn on notifications
+          </button>
+        )}
+      </section>
+    </>
   );
 }
 

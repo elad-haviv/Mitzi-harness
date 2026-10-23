@@ -178,8 +178,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     for (const c of chats) {
       const was = previous.current.get(c.id);
       if (was && c.id !== open) {
-        if (was.running && !c.running) toast(`✓ “${c.title}” is done`, 'info');
-        else if (!was.waiting && c.waiting) toast(`🐾 “${c.title}” needs your approval`, 'info');
+        const say = (text: string) => {
+          toast(text, 'info');
+          // In another window or app: a system notification too, when allowed.
+          if (document.visibilityState === 'hidden' && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            const n = new Notification('Mitzi', { body: text, icon: '/icon-192.png', tag: c.id });
+            n.onclick = () => (window.focus(), (location.hash = `#/chat/${c.id}`));
+          }
+        };
+        if (was.running && !c.running) say(`✓ “${c.title}” is done`);
+        else if (!was.waiting && c.waiting) say(`🐾 “${c.title}” needs your approval`);
       }
     }
     previous.current = new Map(chats.map((c) => [c.id, { running: c.running, waiting: c.waiting }]));

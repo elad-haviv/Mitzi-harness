@@ -6,6 +6,7 @@ import { chunk, KnowledgeIndex, scanFolder } from '../server/knowledge.js';
 import { NODE_SPECS, order, runJavaScript, splitItems } from '../server/workflows.js';
 import { fromGallery, GALLERY, parseDraft } from '../server/workflow-gallery.js';
 import { splitMessage, toTelegramHtml } from '../server/telegram.js';
+import { qrMatrix, qrSvg } from '../shared/qr.js';
 import type { Project } from '../shared/types.js';
 import { tempDir } from './helpers.js';
 
@@ -108,4 +109,15 @@ test('Telegram: markdown becomes Telegram HTML, and long answers are split', () 
   const parts = splitMessage(long, 1000);
   assert.ok(parts.length > 1 && parts.every((p) => p.length <= 1000));
   assert.equal(parts.join('\n\n').replace(/\s+/g, ' ').trim(), long.replace(/\s+/g, ' ').trim());
+});
+
+test('QR codes: the smallest version that fits, with finder patterns in three corners', () => {
+  assert.equal(qrMatrix('hello').length, 21);
+  const url = 'http://192.168.1.23:4545/?token=0123456789abcdef0123456789abcdef0123456789abcdef';
+  const m = qrMatrix(url);
+  assert.equal(m.length, 37, 'version 5');
+  const finder = (x: number, y: number) => [0, 1, 2, 3, 4, 5, 6].every((i) => m[y][x + i] && m[y + 6][x + i] && m[y + i][x] && m[y + i][x + 6]);
+  assert.ok(finder(0, 0) && finder(m.length - 7, 0) && finder(0, m.length - 7));
+  assert.ok(!finder(m.length - 7, m.length - 7));
+  assert.match(qrSvg('hi'), /^<svg [^>]*viewBox="0 0 29 29"/);
 });

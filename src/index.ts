@@ -35,6 +35,7 @@ ${color.bold('Options')}
       --reasoning             Show model reasoning tokens when available
       --port <n>              Port for \`mitzi ui\` / \`mitzi web\` (default: 4545)
       --no-open               Start the server without opening a window or browser
+      --lan                   Also open Mitzi to your local network (phones, tablets); shows a QR code
   -v, --version               Print version
   -h, --help                  Show this help
 
@@ -87,6 +88,7 @@ async function main(): Promise<number> {
       reasoning: { type: 'boolean' },
       port: { type: 'string' },
       'no-open': { type: 'boolean' },
+      lan: { type: 'boolean' },
       version: { type: 'boolean', short: 'v' },
       help: { type: 'boolean', short: 'h' },
     },
@@ -103,19 +105,19 @@ async function main(): Promise<number> {
 
   if (positionals[0] === 'ui' || positionals[0] === 'web') {
     const { runApp } = await import('./launcher.js');
-    return runApp(positionals[0], { port: values.port ? Number(values.port) : undefined, open: !values['no-open'], version: VERSION });
+    return runApp(positionals[0], { port: values.port ? Number(values.port) : undefined, open: !values['no-open'], lan: !!values.lan, version: VERSION });
   }
   // The server process that `mitzi ui` / `mitzi web` start and restart after updates.
   if (positionals[0] === '__serve') {
     const { startServer } = await import('./server/index.js');
     let server;
     try {
-      server = await startServer({ port: values.port ? Number(values.port) : undefined });
+      server = await startServer({ port: values.port ? Number(values.port) : undefined, lan: !!values.lan });
     } catch (err: any) {
       if (err?.code === 'EADDRINUSE') return 98;
       throw err;
     }
-    process.send?.({ type: 'ready', url: server.url, port: server.port, version: VERSION });
+    process.send?.({ type: 'ready', url: server.url, port: server.port, version: VERSION, lanUrls: server.lanUrls });
     await new Promise<void>((resolve) => {
       process.once('SIGINT', resolve);
       process.once('SIGTERM', resolve);

@@ -173,6 +173,11 @@ function initToken(): string {
 
 const token = initToken();
 
+/** For installing as an app: the manifest's start address carries the token (iOS gives home-screen apps their own storage). */
+export function manifestHref(): string {
+  return token ? `/manifest.webmanifest?token=${encodeURIComponent(token)}` : '/manifest.webmanifest';
+}
+
 export class ApiError extends Error {
   constructor(readonly status: number, message: string) {
     super(message);
@@ -292,6 +297,7 @@ export const api = {
   shares: (targetId?: string) => request<ShareView[]>('GET', `/api/shares${targetId ? `?targetId=${targetId}` : ''}`),
   createShare: (body: { kind: 'chat' | 'artifact'; targetId: string; title: string; html: string; expiresInDays: number }) => request<ShareView>('POST', '/api/shares', body),
   deleteShare: (id: string) => request('DELETE', `/api/shares/${id}`),
+  phone: () => request<{ lan: boolean; urls: string[] }>('GET', '/api/phone'),
   telegram: () => request<TelegramView>('GET', '/api/telegram'),
   updateTelegram: (body: Partial<{ token: string; enabled: boolean; notify: boolean; newCode: boolean; unlink: number }>) => request<TelegramView>('PUT', '/api/telegram', body),
   /** Approves or rejects a run waiting at an approval step. */

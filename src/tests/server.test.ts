@@ -81,7 +81,9 @@ before(async () => {
   process.env.MITZI_MODEL = 'test/model';
 
   const { startServer } = await import('../server/index.js');
-  const server = await startServer({ port: 0, token: TOKEN, dataDir: join(tempDir(), 'data'), webDir: tempDir() });
+  const webDir = tempDir();
+  writeFileSync(join(webDir, 'manifest.webmanifest'), JSON.stringify({ name: 'Mitzi', start_url: '/' }));
+  const server = await startServer({ port: 0, token: TOKEN, dataDir: join(tempDir(), 'data'), webDir });
   base = `http://127.0.0.1:${server.port}`;
   close = server.close;
 });
@@ -1143,6 +1145,15 @@ test('share links: a sandboxed read-only page, turned off with the link or the c
   assert.equal(again.expiresAt, undefined);
   await call('DELETE', `/api/chats/${chat.id}`);
   assert.equal((await fetch(`${base}${again.url}`)).status, 404);
+});
+
+test('phone: LAN status, and an app manifest that signs in only with the token', async () => {
+  assert.deepEqual((await call('GET', '/api/phone')).data, { lan: false, urls: [] });
+  const signed = await fetch(`${base}/manifest.webmanifest?token=${TOKEN}`);
+  assert.equal((await signed.json()).start_url, `/?token=${TOKEN}`);
+  // Without the right token, the plain manifest.
+  const plain = await (await fetch(`${base}/manifest.webmanifest?token=nope`)).json();
+  assert.equal(plain.start_url, '/');
 });
 
 /** Polls until a server reaches a status. */

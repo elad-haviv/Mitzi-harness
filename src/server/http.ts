@@ -58,6 +58,7 @@ const MIME: Record<string, string> = {
   '.ico': 'image/x-icon',
   '.json': 'application/json',
   '.woff2': 'font/woff2',
+  '.webmanifest': 'application/manifest+json',
 };
 
 export interface AppOptions {
@@ -68,6 +69,8 @@ export interface AppOptions {
   allowedHosts: string[];
   /** The app's own origin, e.g. http://localhost:4545 (for OAuth redirects). */
   origin: () => string;
+  /** Addresses other devices on the network can open (with the token), when started with --lan. */
+  lanUrls?: () => string[];
 }
 
 export function createApp(opts: AppOptions) {
@@ -716,6 +719,7 @@ export function createApp(opts: AppOptions) {
     if (!model || !hasChatProvider()) return undefined;
     return { client: router(), model };
   });
+  route('GET', '/api/phone', () => ({ lan: !!opts.lanUrls?.().length, urls: opts.lanUrls?.() ?? [] }));
   route('GET', '/api/budget', () => budgetStatus(usage, store.settings.budget));
   route('GET', '/api/search', async ({ query }) => {
     const q = (query.get('q') ?? '').trim();
@@ -755,6 +759,17 @@ export function createApp(opts: AppOptions) {
 
     // Generated media have unguessable names, so <img> and <video> tags can load them without the token.
     if (url.pathname.startsWith('/media/')) return serveMedia(media, url.pathname.slice(7), req, res);
+    // The app manifest, with a start address that signs in (only for whoever already has the token).
+    if (url.pathname === '/manifest.webmanifest' && validToken(url.searchParams.get('token') ?? undefined)) {
+      try {
+        const manifest = JSON.parse(readFileSync(join(opts.webDir, 'manifest.webmanifest'), 'utf8'));
+        res.writeHead(200, { 'content-type': 'application/manifest+json', 'cache-control': 'no-store' });
+        return void res.end(JSON.stringify({ ...manifest, start_url: `/?token=${opts.token}` }));
+      } catch {
+        // Not built; fall through to the static file.
+      }
+    }
+    if (url.pathname === '/sw.js') res.setHeader('service-worker-allowed', '/');
     if (!url.pathname.startsWith('/api/')) return serveStatic(opts.webDir, url.pathname, res);
     // OAuth providers redirect the browser here; the one-time state value authenticates it.
     if (url.pathname === '/api/oauth/callback' && req.method === 'GET') return oauthCallback(extensions, url, res);
