@@ -135,7 +135,15 @@ test('computer: the X11 backend drives a real (virtual) display', { skip: !hasX 
   const before = process.env.DISPLAY;
   process.env.DISPLAY = display;
   try {
-    await new Promise((r) => setTimeout(r, 800));
+    // Wait for the display to come up (slower when the whole suite runs at once).
+    for (let i = 0; i < 100; i++) {
+      try {
+        execFileSync('xdotool', ['getdisplaygeometry'], { env: { ...process.env, DISPLAY: display }, stdio: 'ignore' });
+        break;
+      } catch {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    }
     const backend = new X11Backend();
     assert.equal(await backend.unavailable(), undefined);
     assert.deepEqual(await backend.screenSize(), { width: 1920, height: 1080 });
