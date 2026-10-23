@@ -48,6 +48,7 @@ import type {
   SearchKind,
   BudgetStatus,
   ApprovalLevel,
+  QueuedMessage,
 } from '../../src/shared/types';
 
 export type * from '../../src/shared/types';
@@ -228,6 +229,11 @@ export const api = {
   planAction: (id: string, action: 'approve' | 'revise') => request<{ plan: Plan; todos: Todo[]; mode: ChatMode }>('POST', `/api/chats/${id}/plan`, { action }),
   /** /goal pause|resume|clear|status and /subgoal. */
   command: (id: string, text: string) => request<{ goal: Goal | null; message: string; resume: boolean }>('POST', `/api/chats/${id}/command`, { text }),
+  /** Queues a message while the chat responds; `now` stops the response and sends it right away. */
+  queueMessage: (id: string, content: string, attachments: Attachment[], now = false) =>
+    request<{ queue: QueuedMessage[] }>('POST', `/api/chats/${id}/queue`, { content, attachments, now }),
+  unqueue: (id: string, qid: string) => request<{ queue: QueuedMessage[] }>('DELETE', `/api/chats/${id}/queue/${qid}`),
+  sendQueuedNow: (id: string, qid: string) => request<{ queue: QueuedMessage[] }>('POST', `/api/chats/${id}/queue/${qid}/now`),
   /** Follows a chat that is already responding: what it streamed so far, then the rest. */
   follow: (id: string, onEvent: (e: StreamEvent) => void) => stream(`/api/chats/${id}/stream`, undefined, onEvent),
   /** /btw: a side question, answered without tools and not saved. */

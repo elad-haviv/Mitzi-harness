@@ -15,6 +15,7 @@ An open-source, Claude-style AI workspace that runs on **any model available thr
 - Edit any earlier message, regenerate the last answer, stop a response mid-stream, and copy replies.
 - **Approval levels, cat style**: 🐱 *Kitten* asks before every change, 🐈 *House cat* works on its own and asks only before risky actions (deleting, installing, pushing, system changes, writing outside the project, acting in connected apps), and 🐈‍⬛ *Alley cat* never asks. Pick one per chat from the chat box (Shift+Tab cycles), and the default in Settings → General.
 - **Work in several chats at once**: chats keep working in the background when you switch away, and coming back picks the response up live, thought process and stopwatch included. Open chats show as tabs (with a spinner while working and 🐾 when one needs your approval), and you get a notice when a background chat finishes.
+- **Queue and interrupt**: keep typing while Mitzi works. Enter queues the message (it goes when the current response is done, even in the background), and *Send now* or Ctrl/⌘+Enter stops the response and sends it right away. Queued messages show above the chat box, where you can send one now or take it back.
 - Switch models per chat. The model picker is searchable and shows each model's price, context size, and vision and tool support.
 - One-click web search uses OpenRouter's `:online` option.
 - Chats get titles automatically. Rename, pin, delete or move a chat to a project from its **⋯** menu in the sidebar (or right-click it), and search them.

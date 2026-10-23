@@ -404,6 +404,20 @@ export function createApp(opts: AppOptions) {
     return stream(r.params.id, { kind: 'message', content, attachments, editIndex, focus: str(r.body?.focus) || undefined, auto, feedbackLoopId })(r);
   });
   route('POST', '/api/chats/:id/regenerate', (r) => stream(r.params.id, { kind: 'regenerate' })(r));
+  /** Queues a message while the chat is responding; `now` interrupts the response to send it right away. */
+  route('POST', '/api/chats/:id/queue', ({ params, body }) => {
+    getChat(params.id);
+    const content = str(body?.content);
+    const attachments: Attachment[] = Array.isArray(body?.attachments)
+      ? body.attachments
+          .filter((a: any) => typeof a?.name === 'string' && typeof a?.content === 'string')
+          .map((a: any) => ({ name: a.name, content: a.content, kind: a.kind === 'image' ? 'image' : 'text' }))
+      : [];
+    if (!content.trim() && !attachments.length) throw new HttpError(400, 'Message is empty');
+    return { queue: runner.enqueue(params.id, { content, ...(attachments.length ? { attachments } : {}) }, body?.now === true) };
+  });
+  route('DELETE', '/api/chats/:id/queue/:qid', ({ params }) => ({ queue: runner.dequeue(params.id, params.qid) }));
+  route('POST', '/api/chats/:id/queue/:qid/now', ({ params }) => ({ queue: runner.dequeue(params.id, params.qid, true) }));
   /** Follows a running chat: what it streamed so far, then live events until it's done. */
   route('GET', '/api/chats/:id/stream', ({ params, req, res }) => {
     getChat(params.id);

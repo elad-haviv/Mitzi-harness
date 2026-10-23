@@ -22,6 +22,8 @@ import {
   Trash2,
   Wallet,
   X,
+  ListPlus,
+  Zap,
 } from 'lucide-react';
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApprovalLevel, Artifact, Attachment, AUTO_MODEL, Chat, ChatMessage, ChatMode, DEFAULT_BOT_ID, FeedbackLoop, Goal, RecalledMemory, RepoStatus, RouteChoice, StreamEvent } from '../api';
@@ -317,6 +319,9 @@ export function ChatView({
       case 'run':
         setLive((l) => l && { ...l, startedAt: e.startedAt });
         break;
+      case 'queue':
+        setChat((c) => c && { ...c, queue: e.queue });
+        break;
       case 'recall':
         setLive((l) => l && { ...l, memories: e.memories });
         break;
@@ -349,8 +354,8 @@ export function ChatView({
   }, [toast, refreshChats]);
 
   /** Streams a turn; resolves to the reloaded chat. */
-  const runStream = async (id: string, start: (handler: (e: StreamEvent) => void) => Promise<void>, user?: ChatMessage): Promise<Chat | undefined> => {
-    let result: Chat | undefined;
+  const runStream = async (id: string, start: (handler: (e: StreamEvent) => void) => Promise<void>, user?: ChatMessage): Promise<(Chat & { running?: boolean }) | undefined> => {
+    let result: (Chat & { running?: boolean }) | undefined;
     setLastError(undefined);
     stick.current = true;
     setLive({ user, blocks: [], startedAt: Date.now() });
@@ -363,6 +368,7 @@ export function ChatView({
       if (first) (first = false), void refreshChats();
       if (mine()) onEvent(e);
     };
+    let next = false;
     try {
       await start(handler);
     } catch (err) {
@@ -370,12 +376,15 @@ export function ChatView({
     } finally {
       if (mine()) {
         result = await reload(id);
+        // A queued message goes next: keep following (it may take a moment to start).
+        next = !!(result?.running || result?.queue?.length);
         setLive(null);
         setContextVersion((v) => v + 1);
       }
       void refreshChats();
       onTurnDone?.();
     }
+    if (next) setTimeout(() => currentId.current === id && void runStream(id, (h) => api.follow(id, h)), result?.running ? 0 : 300);
     return result;
   };
 
@@ -586,6 +595,13 @@ export function ChatView({
         </>
       }
       onShiftTab={() => setApproval(nextLevel(approval))}
+      onQueue={(text, attachments, now) =>
+        chat &&
+        void api.queueMessage(chat.id, text, attachments, now).then(
+          (r) => setChat((c) => c && { ...c, queue: r.queue }),
+          (err) => toast(err.message),
+        )
+      }
       placeholder={placeholder ?? (customBot ? `Message ${customBot.name}…` : project ? `Message Mitzi in ${project.name}…` : undefined)}
       autoFocus
       extra={
@@ -903,6 +919,24 @@ export function ChatView({
           </div>
         )}
         {btw && <BtwCard state={btw} onClose={() => setBtw(undefined)} />}
+        {chat?.queue && chat.queue.length > 0 && (
+          <div className="queue-list" aria-label="Queued messages">
+            {chat.queue.map((q, i) => (
+              <div key={q.id} className="queue-item">
+                <ListPlus size={14} className="muted" />
+                <span className="queue-text" dir="auto" title={q.content}>
+                  <span className="muted small">{i === 0 ? 'Next' : `${i + 1}.`}</span> {q.content || q.attachments?.map((a) => a.name).join(', ')}
+                </span>
+                <button className="link-btn small" onClick={() => chat && void api.sendQueuedNow(chat.id, q.id).then((r) => setChat((c) => c && { ...c, queue: r.queue }), (err) => toast(err.message))}>
+                  <Zap size={12} /> Send now
+                </button>
+                <button className="icon-btn sm" aria-label="Remove from the queue" title="Remove" onClick={() => chat && void api.unqueue(chat.id, q.id).then((r) => setChat((c) => c && { ...c, queue: r.queue }), (err) => toast(err.message))}>
+                  <X size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         {chat?.goal && <GoalBar goal={chat.goal} onCommand={(t) => void runCommand(t)} onOpen={() => setPanel({ tab: 'tasks' })} />}
       </div>
       {composerNode}

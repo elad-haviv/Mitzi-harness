@@ -289,6 +289,8 @@ export interface Chat {
   mode?: ChatMode;
   /** How much the bot may do without asking; unset follows the project, then Settings. */
   approval?: ApprovalLevel;
+  /** Messages sent while the bot was working, sent one by one when it's done. */
+  queue?: QueuedMessage[];
   /** The task list the bot keeps while working. */
   todos?: Todo[];
   /** A goal set with /goal: the bot keeps working, turn after turn, until it's met. */
@@ -300,6 +302,14 @@ export interface Chat {
 }
 
 export type ChatMode = 'chat' | 'work';
+
+/** A message waiting for the bot to finish its current response. */
+export interface QueuedMessage {
+  id: string;
+  content: string;
+  attachments?: Attachment[];
+  createdAt: string;
+}
 
 /**
  * How much a bot may do without asking: a kitten asks before every change, a house cat only before risky ones
@@ -653,6 +663,8 @@ export type StreamEvent =
   | { type: 'compacted'; contextStart: number }
   | { type: 'chat'; chat: ChatSummary }
   | { type: 'error'; message: string }
+  /** The chat's queued messages changed. */
+  | { type: 'queue'; queue: QueuedMessage[] }
   /** First event when following a run that already started. */
   | { type: 'run'; startedAt: number }
   | { type: 'done' };

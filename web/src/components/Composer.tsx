@@ -1,4 +1,4 @@
-import { ArrowUp, Globe, Loader2, Paperclip, Square, X } from 'lucide-react';
+import { ArrowUp, Globe, ListPlus, Loader2, Paperclip, Square, X, Zap } from 'lucide-react';
 import { forwardRef, ReactNode, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { api, Attachment, SlashCommandInfo } from '../api';
 import { formatTokens, useApp } from '../state';
@@ -34,6 +34,8 @@ interface Props {
   leading?: ReactNode;
   /** Shift+Tab in the message box (switches the approval level). */
   onShiftTab?(): void;
+  /** While the bot works, messages are queued; `now` interrupts it to send right away (Ctrl/⌘+Enter). */
+  onQueue?(text: string, attachments: Attachment[], now: boolean): void;
 }
 
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(props, handle) {
@@ -106,10 +108,12 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
 
   // Side questions and goal controls can be sent while Mitzi is working.
   const sideCommand = /^\/(btw|subgoal)\s+\S|^\/goal(\s+(pause|resume|clear|status|stop))?\s*$/i.test(text.trim());
-  const canSend = (!props.running || sideCommand) && !reading.length && (text.trim() || attachments.length > 0);
-  const send = () => {
+  const queueing = !!props.running && !sideCommand && !!props.onQueue;
+  const canSend = (!props.running || sideCommand || queueing) && !reading.length && (text.trim() || attachments.length > 0);
+  const send = (now = false) => {
     if (!canSend) return;
-    props.onSend(text.trim(), attachments);
+    if (queueing) props.onQueue!(text.trim(), attachments, now);
+    else props.onSend(text.trim(), attachments);
     setText('');
     setAttachments([]);
   };
@@ -179,7 +183,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
           rows={1}
           value={text}
           autoFocus={props.autoFocus}
-          placeholder={props.placeholder ?? 'Message Mitzi…'}
+          placeholder={queueing ? `Queue a message for when it’s done · ${/Mac/.test(navigator.platform) ? '⌘' : 'Ctrl'}+Enter sends it now` : (props.placeholder ?? 'Message Mitzi…')}
           aria-label="Message"
           dir="auto"
           onChange={(e) => setText(e.target.value)}
@@ -214,7 +218,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
             }
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
-              send();
+              send(queueing && (e.ctrlKey || e.metaKey));
             }
           }}
         />
@@ -237,12 +241,22 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
           {props.leading}
           <div style={{ flex: 1 }} />
           {props.extra}
+          {queueing && canSend && (
+            <>
+              <button className="pill-btn interrupt-btn" onClick={() => send(true)} title="Stop the current response and send this now">
+                <Zap size={14} /> Send now
+              </button>
+              <button className="send-btn" onClick={() => send()} title="Queue: sends when the current response is done" aria-label="Queue message">
+                <ListPlus size={17} />
+              </button>
+            </>
+          )}
           {props.running && !sideCommand ? (
             <button className="send-btn stop" onClick={props.onStop} title="Stop" aria-label="Stop generating">
               <Square size={13} fill="currentColor" />
             </button>
           ) : (
-            <button className="send-btn" onClick={send} disabled={!canSend} title="Send" aria-label="Send message">
+            <button className="send-btn" onClick={() => send()} disabled={!canSend} title="Send" aria-label="Send message">
               <ArrowUp size={18} strokeWidth={2.4} />
             </button>
           )}

@@ -4,7 +4,7 @@ import type { Config, PermissionMode } from '../config.js';
 import type { ContentPart, LlmClient, Message } from '../openrouter.js';
 import type { RoutingClient } from '../providers.js';
 import { ApprovalAnswer, Approver, Permissions } from '../permissions.js';
-import { ApprovalLevel, Artifact, Attachment, AUTO_MODEL, Bot, Chat, ChatMessage, ChatSummary, DEFAULT_BOT_ID, RecalledMemory, RouteChoice, StreamEvent } from '../shared/types.js';
+import { ApprovalLevel, Artifact, Attachment, AUTO_MODEL, QueuedMessage, Bot, Chat, ChatMessage, ChatSummary, DEFAULT_BOT_ID, RecalledMemory, RouteChoice, StreamEvent } from '../shared/types.js';
 import { ALL_TOOLS, Tool, toToolSpecs } from '../tools/index.js';
 import { webFetchTool } from '../tools/web.js';
 import type { Todo } from '../tools/types.js';
@@ -95,6 +95,8 @@ interface ActiveRun {
   events: StreamEvent[];
   /** Browsers following the run besides the one that started it. */
   listeners: Set<(e: StreamEvent) => void>;
+  /** Streams an event to everyone following the run. */
+  emit?: (e: StreamEvent) => void;
   /** Resolves the /compare A/B/skip pick for this run, when one is waiting. */
   comparePick?: (choice: 'A' | 'B' | 'skip') => void;
 }
@@ -491,6 +493,7 @@ export class ChatRunner {
       caller(e);
       for (const l of run.listeners) l(e);
     };
+    run.emit = emit;
     const totals: RunTotals = { prompt: 0, completion: 0, cost: 0, requests: 0 };
     try {
       await withUsage(
@@ -511,10 +514,50 @@ export class ChatRunner {
       );
     } finally {
       this.active.delete(chatId);
+      // Messages sent while it worked go next, one per run, whether or not anyone is watching.
+      setImmediate(() => this.sendQueued(chatId));
     }
     emit({ type: 'chat', chat: summarizeChat(chat) });
     emit({ type: 'done' });
     run.listeners.clear();
+  }
+
+  /** Queues a message for when the current response is done; `now` stops the response and sends it next. */
+  enqueue(chatId: string, message: Omit<QueuedMessage, 'id' | 'createdAt'>, now = false): QueuedMessage[] {
+    const chat = this.deps.store.chats.get(chatId);
+    if (!chat) throw new Error('Chat not found');
+    const item: QueuedMessage = { id: newId(), ...message, createdAt: new Date().toISOString() };
+    chat.queue = now ? [item, ...(chat.queue ?? [])] : [...(chat.queue ?? []), item];
+    this.deps.store.chats.put(chat);
+    this.active.get(chatId)?.emit?.({ type: 'queue', queue: chat.queue });
+    if (now) this.stop(chatId);
+    if (!this.active.has(chatId)) this.sendQueued(chatId);
+    return chat.queue;
+  }
+
+  /** Takes a message off the queue, or moves it to the front and sends it now. */
+  dequeue(chatId: string, id: string, sendNow = false): QueuedMessage[] {
+    const chat = this.deps.store.chats.get(chatId);
+    if (!chat) throw new Error('Chat not found');
+    const item = chat.queue?.find((q) => q.id === id);
+    chat.queue = (chat.queue ?? []).filter((q) => q.id !== id);
+    if (sendNow && item) chat.queue.unshift(item);
+    this.deps.store.chats.put(chat);
+    this.active.get(chatId)?.emit?.({ type: 'queue', queue: chat.queue });
+    if (sendNow) this.stop(chatId);
+    return chat.queue;
+  }
+
+  /** Starts the next queued message, if the chat is free. */
+  private sendQueued(chatId: string): void {
+    const chat = this.deps.store.chats.get(chatId);
+    const next = chat?.queue?.[0];
+    if (!chat || !next || this.active.has(chatId)) return;
+    chat.queue = chat.queue!.slice(1);
+    this.deps.store.chats.put(chat);
+    this.run(chatId, { kind: 'message', content: next.content, attachments: next.attachments ?? [] }, () => {}, new AbortController().signal).catch((err) =>
+      console.warn(`Couldn't send a queued message in ${chatId}: ${err.message}`),
+    );
   }
 
   private async execute(

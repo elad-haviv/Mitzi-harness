@@ -6586,3 +6586,37 @@ button.todo-check:not(:disabled):hover {
 .chat-tab-new:hover {
   text-decoration: none;
 }
+
+/* ---------- Queued messages ---------- */
+.queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.queue-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  border: 1px dashed var(--border-strong, var(--border));
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 13px;
+}
+.queue-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.queue-item .link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+.interrupt-btn {
+  color: var(--warn);
+}

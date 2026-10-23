@@ -821,6 +821,63 @@ test('a running chat keeps going when the browser leaves, and coming back catche
   }
 });
 
+/** Waits until a chat has stopped responding (queued messages included). */
+async function idle(chatId: string) {
+  for (let i = 0; i < 400; i++) {
+    const c = (await call('GET', `/api/chats/${chatId}`)).data;
+    if (!c.running && !c.queue?.length) return c;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  throw new Error('Chat never finished');
+}
+
+test('messages sent while the bot works are queued and sent in order; "now" interrupts', async () => {
+  const words = Array.from({ length: 10 }, (_, i) => `w${i}`);
+  reply = (body) => {
+    const last = body.messages.findLast((m: any) => m.role === 'user')?.content;
+    if (last !== 'First') return textChunks(`Re: ${last}`);
+    return [...words.map((w, i) => ({ choices: [{ delta: { content: i ? ` ${w}` : w } }] })), ...textChunks('').slice(1)];
+  };
+  chunkDelay = 30;
+  try {
+    const chat = (await call('POST', '/api/chats', {})).data;
+    const first = stream(`/api/chats/${chat.id}/messages`, { content: 'First' });
+    await new Promise((r) => setTimeout(r, 80));
+    await call('POST', `/api/chats/${chat.id}/queue`, { content: 'Second' });
+    const queued = (await call('POST', `/api/chats/${chat.id}/queue`, { content: 'Third' })).data.queue;
+    assert.deepEqual(queued.map((q: any) => q.content), ['Second', 'Third']);
+    const events = await first;
+    // Followers hear about the queue.
+    assert.ok(events.some((e) => e.type === 'queue' && e.queue.length === 2));
+    const done = await idle(chat.id);
+    assert.deepEqual(
+      done.messages.map((m: any) => m.content),
+      ['First', words.join(' '), 'Second', 'Re: Second', 'Third', 'Re: Third'],
+    );
+
+    // Interrupt: the long answer stops early and the new message goes right away.
+    const again = stream(`/api/chats/${chat.id}/messages`, { content: 'First' });
+    await new Promise((r) => setTimeout(r, 100));
+    await call('POST', `/api/chats/${chat.id}/queue`, { content: 'Stop, do this', now: true });
+    await again;
+    const after = await idle(chat.id);
+    const tail = after.messages.slice(6).map((m: any) => m.content);
+    assert.equal(tail[0], 'First');
+    assert.ok(tail[1].length < words.join(' ').length, 'the first answer was cut short');
+    assert.deepEqual(tail.slice(2), ['Stop, do this', 'Re: Stop, do this']);
+
+    // Queued messages can be taken back.
+    const third = stream(`/api/chats/${chat.id}/messages`, { content: 'First' });
+    await new Promise((r) => setTimeout(r, 80));
+    const q = (await call('POST', `/api/chats/${chat.id}/queue`, { content: 'Never mind' })).data.queue;
+    assert.deepEqual((await call('DELETE', `/api/chats/${chat.id}/queue/${q[0].id}`)).data.queue, []);
+    await third;
+    assert.ok(!(await idle(chat.id)).messages.some((m: any) => m.content === 'Never mind'));
+  } finally {
+    chunkDelay = 0;
+  }
+});
+
 /** Polls until a server reaches a status. */
 async function waitFor(id: string, status: string) {
   for (let i = 0; i < 200; i++) {
