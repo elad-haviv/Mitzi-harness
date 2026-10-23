@@ -7,7 +7,7 @@ const MAX_LINE_LENGTH = 2000;
 
 function display(ctx: ToolContext, abs: string): string {
   const rel = relative(ctx.cwd, abs);
-  return rel && !rel.startsWith('..') ? rel : abs;
+  return (rel && !rel.startsWith('..') ? rel : abs).replace(/\\/g, '/');
 }
 
 async function statOrNull(path: string) {

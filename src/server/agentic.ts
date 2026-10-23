@@ -13,12 +13,13 @@ export const BUILTIN_COMMANDS = [
   { name: 'goal', description: 'Set a goal and keep working, turn after turn, until it is met (pause, resume, clear)', argumentHint: '<goal> | pause | resume | clear' },
   { name: 'subgoal', description: 'Add a milestone to the current goal (or "done <number>")', argumentHint: '<milestone>' },
   { name: 'btw', description: 'Ask a quick side question; the answer isn’t added to the chat', argumentHint: '<question>' },
+  { name: 'compare', description: 'Send one prompt to two models side by side, then pick the winner', argumentHint: '[modelA] [modelB] <prompt>' },
 ];
 
-export type Builtin = { name: 'plan' | 'goal' | 'subgoal' | 'btw'; args: string };
+export type Builtin = { name: 'plan' | 'goal' | 'subgoal' | 'btw' | 'compare'; args: string };
 
 export function parseBuiltin(text: string): Builtin | undefined {
-  const m = /^\/(plan|goal|subgoal|btw)(?:\s+([\s\S]*))?$/.exec(text.trim());
+  const m = /^\/(plan|goal|subgoal|btw|compare)(?:\s+([\s\S]*))?$/.exec(text.trim());
   return m ? { name: m[1] as Builtin['name'], args: (m[2] ?? '').trim() } : undefined;
 }
 

@@ -11,6 +11,7 @@ import type {
   SkillInfo,
   SlashCommandInfo,
   Chat,
+  CompareInsights,
   ChatSummary,
   ContextBreakdown,
   MemoryType,
@@ -232,6 +233,9 @@ export const api = {
   feedbackLoops: (botId?: string) => request<(FeedbackLoop & { chatTitle?: string })[]>('GET', `/api/feedback${botId ? `?botId=${botId}` : ''}`),
   deleteLoop: (id: string) => request('DELETE', `/api/feedback/${id}`),
   learning: (botId?: string) => request<LearningCurve>('GET', `/api/insights/learning${botId ? `?botId=${botId}` : ''}`),
+  /** /compare: pick the winner (A or B) or skip. */
+  comparePick: (chatId: string, choice: 'A' | 'B' | 'skip') => request('POST', `/api/chats/${chatId}/compare/pick`, { choice }),
+  compareInsights: () => request<CompareInsights>('GET', '/api/insights/compare'),
   budget: () => request<BudgetStatus>('GET', '/api/budget'),
   search: (q: string, kinds?: SearchKind[]) => request<{ hits: SearchHit[]; semantic: boolean }>('GET', `/api/search?q=${encodeURIComponent(q)}${kinds?.length ? `&kinds=${kinds.join(',')}` : ''}`),
   usage: (q: { days?: number; projectId?: string; chatId?: string; botId?: string } = {}) =>

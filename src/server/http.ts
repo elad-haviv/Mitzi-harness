@@ -18,6 +18,7 @@ import { McpManager } from './mcp/manager.js';
 import { OAuthFlows } from './mcp/oauth.js';
 import { oauthCallback, registerExtensionRoutes } from './routes-ext.js';
 import { ChatRunner, summarizeChat } from './runner.js';
+import { CompareInsightsStore } from './compare.js';
 import { MediaService } from './media.js';
 import { StarterService } from './starters.js';
 import { migrateDocs } from './workspace.js';
@@ -126,7 +127,8 @@ export function createApp(opts: AppOptions) {
   };
   const media = new MediaService(opts.dataDir, router, () => store.settings.media);
   const browser = new BrowserService(join(MITZI_HOME, 'browser-profile'), media, () => !!store.settings.browserHeaded);
-  const runner = new ChatRunner({ store, config, client, catalog, memory, mcp, skills, commands, media, usage, browser });
+  const compareInsights = new CompareInsightsStore(opts.dataDir);
+  const runner = new ChatRunner({ store, config, client, catalog, memory, mcp, skills, commands, media, usage, browser, compareInsights });
   const starters = new StarterService({ store, memory, client, config, memoryOn: (bot) => runner.memoryOn(bot) });
   seedBots(store, opts.dataDir);
   ensureDefaultBot(store);
@@ -394,6 +396,13 @@ export function createApp(opts: AppOptions) {
   });
   route('POST', '/api/chats/:id/regenerate', (r) => stream(r.params.id, { kind: 'regenerate' })(r));
   route('POST', '/api/chats/:id/stop', ({ params }) => ({ stopped: runner.stop(params.id) }));
+  route('POST', '/api/chats/:id/compare/pick', ({ params, body }) => {
+    const choice = str(body?.choice);
+    if (choice !== 'A' && choice !== 'B' && choice !== 'skip') throw new HttpError(400, 'choice must be A, B or skip');
+    if (!runner.resolveComparePick(params.id, choice)) throw new HttpError(404, 'No compare is waiting for a pick');
+    return { ok: true };
+  });
+  route('GET', '/api/insights/compare', () => compareInsights.insights);
   route('POST', '/api/chats/:id/permission', ({ params, body }) => {
     const a = body?.answer;
     const answer: ApprovalAnswer =

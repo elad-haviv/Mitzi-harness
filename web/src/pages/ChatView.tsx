@@ -54,6 +54,7 @@ import { Menu, useConfirm } from '../components/ui';
 import { href, navigate, parseRoute } from '../router';
 import { LOGO, relativeTime, useApp } from '../state';
 import { applyDelegateEvent, TeamProgress } from '../components/Team';
+import { applyCompareEvent, CompareState, CompareView } from '../components/Compare';
 
 type LiveBlock =
   | { kind: 'text'; text: string }
@@ -71,6 +72,8 @@ interface Live {
   startedAt: number;
   /** The model Auto picked for this response. */
   route?: RouteChoice;
+  /** A /compare race in progress (or awaiting a pick). */
+  compare?: CompareState;
 }
 
 /** The side panel: a tab, and in the artifacts tab optionally one open artifact. */
@@ -268,6 +271,12 @@ export function ChatView({
 
   const onEvent = useCallback((e: StreamEvent) => {
     switch (e.type) {
+      case 'compare_start':
+      case 'compare_text':
+      case 'compare_end':
+      case 'compare_pick':
+        setLive((l) => l && { ...l, compare: applyCompareEvent(l.compare, e) });
+        break;
       case 'text':
       case 'reasoning':
         setLive((l) => {
@@ -735,6 +744,13 @@ export function ChatView({
         <Avatar bot={bot} />
         <div className="assistant-body">
           {live.memories && live.memories.length > 0 && <MemoryRecall memories={live.memories} botId={bot?.id} />}
+          {live.compare && chat && (
+            <CompareView
+              chatId={chat.id}
+              state={live.compare}
+              onPicked={(choice) => setLive((l) => l && l.compare ? { ...l, compare: { ...l.compare, picked: choice } } : l)}
+            />
+          )}
           {live.blocks.map((b, i) => {
             if (b.kind === 'text') return <Markdown key={i} text={b.text} streaming={i === live.blocks.length - 1} />;
             if (b.kind === 'reasoning') return <Reasoning key={i} text={b.text} active={i === live.blocks.length - 1} />;

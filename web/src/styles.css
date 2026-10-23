@@ -6318,3 +6318,86 @@ button.todo-check:not(:disabled):hover {
 .route-bar .strong {
   background: var(--accent);
 }
+
+/* /compare: side-by-side model race */
+.compare {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  margin: 8px 0;
+  overflow: hidden;
+}
+.compare-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+.compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+@media (max-width: 720px) {
+  .compare-grid { grid-template-columns: 1fr; }
+}
+.compare-side {
+  min-width: 0;
+  padding: 10px 12px;
+}
+.compare-side:first-child {
+  border-right: 1px solid var(--border);
+}
+@media (max-width: 720px) {
+  .compare-side:first-child { border-right: 0; border-bottom: 1px solid var(--border); }
+}
+.compare-side.winner {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.compare-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+}
+.compare-badge {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  font-size: 11px;
+  font-weight: 700;
+}
+.compare-model {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.compare-trophy { color: var(--accent); }
+.compare-body { font-size: 13.5px; }
+.compare-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--danger);
+  font-size: 12.5px;
+}
+.compare-pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+}
+.compare-pick .small { color: var(--muted); margin-right: 4px; }
+.compare + .compare-pick { border-top: 0; }
+.compare > .small, .compare > div.small { padding: 8px 12px; border-top: 1px solid var(--border); }

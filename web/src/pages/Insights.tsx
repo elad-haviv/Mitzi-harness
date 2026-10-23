@@ -1,8 +1,8 @@
 // Insights: what Mitzi costs (tokens and money by day, model, project, bot and chat) and how the
 // bots are learning from feedback loops (attempts needed and first-try ratings over time).
-import { BarChart3, GraduationCap, Loader2, Sparkles, Trash2 } from 'lucide-react';
+import { BarChart3, Columns2, GraduationCap, Loader2, Sparkles, Trash2, Trophy } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { api, BudgetStatus, FeedbackLoop, LearningCurve, UsageGroup, UsageReport } from '../api';
+import { api, BudgetStatus, CompareInsights, FeedbackLoop, LearningCurve, UsageGroup, UsageReport } from '../api';
 import { Breakdown, Chart, movingAverage } from '../components/Charts';
 import { Stars } from '../components/Feedback';
 import { Kpi, money } from '../components/Work';
@@ -22,7 +22,7 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 export function InsightsPage({ tab }: { tab?: string }) {
-  const current = tab === 'learning' ? 'learning' : 'usage';
+  const current = tab === 'learning' ? 'learning' : tab === 'compare' ? 'compare' : 'usage';
   return (
     <div className="page insights">
       <div className="page-header">
@@ -38,8 +38,11 @@ export function InsightsPage({ tab }: { tab?: string }) {
         <a role="tab" aria-selected={current === 'learning'} className={`tab${current === 'learning' ? ' on' : ''}`} href={href({ page: 'insights', tab: 'learning' })}>
           <GraduationCap size={15} /> Learning
         </a>
+        <a role="tab" aria-selected={current === 'compare'} className={`tab${current === 'compare' ? ' on' : ''}`} href={href({ page: 'insights', tab: 'compare' })}>
+          <Columns2 size={15} /> Compare
+        </a>
       </div>
-      {current === 'usage' ? <UsageView /> : <LearningView />}
+      {current === 'usage' ? <UsageView /> : current === 'compare' ? <CompareInsightsView /> : <LearningView />}
     </div>
   );
 }
@@ -419,5 +422,62 @@ function AutoCard({ auto }: { auto: NonNullable<UsageReport['auto']> }) {
         <span className="strong" style={{ width: share(auto.strong.requests) }} />
       </div>
     </section>
+  );
+}
+
+// ---------- Compare (/compare picks) ----------
+
+function CompareInsightsView() {
+  const { toast } = useApp();
+  const [data, setData] = useState<CompareInsights>();
+  useEffect(() => {
+    api.compareInsights().then(setData, (err) => toast(err.message));
+  }, [toast]);
+  if (!data) return <Loader2 size={18} className="spin muted" />;
+  const played = (id: string) => (data.wins[id] ?? 0) + (data.losses[id] ?? 0);
+  const models = [...new Set([...Object.keys(data.wins), ...Object.keys(data.losses)])].sort(
+    (a, b) => (data.wins[b] ?? 0) - (data.wins[a] ?? 0) || played(a) - played(b) || a.localeCompare(b),
+  );
+  return (
+    <div className="insights-body">
+      <div className="kpis">
+        <Kpi label="Comparisons" value={String(data.comparisons)} hint={`${data.skipped} skipped`} />
+        <Kpi label="Models raced" value={String(models.length)} />
+      </div>
+      <section className="card chart-card">
+        <h2>Leaderboard</h2>
+        {!models.length ? (
+          <p className="muted">No picks yet. Race two models with /compare [modelA] [modelB] &lt;prompt&gt; in any chat, then pick the winner.</p>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Model</th>
+                <th>Wins</th>
+                <th>Losses</th>
+                <th>Win rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {models.map((id, i) => {
+                const w = data.wins[id] ?? 0;
+                const l = data.losses[id] ?? 0;
+                const rate = Math.round((w / (w + l)) * 100);
+                return (
+                  <tr key={id}>
+                    <td>{i === 0 ? <Trophy size={14} aria-label="Leader" /> : i + 1}</td>
+                    <td><code>{id}</code></td>
+                    <td>{w}</td>
+                    <td>{l}</td>
+                    <td>{rate}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </section>
+    </div>
   );
 }

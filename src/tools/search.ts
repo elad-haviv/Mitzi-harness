@@ -123,7 +123,7 @@ export const globTool: Tool<GlobArgs> = {
     }
     if (!files.length) return 'No files found';
     const sorted = await sortByMtime(files);
-    const shown = sorted.slice(0, MAX_RESULTS).map((f) => relative(ctx.cwd, f) || f);
+    const shown = sorted.slice(0, MAX_RESULTS).map((f) => (relative(ctx.cwd, f) || f).replace(/\\/g, '/'));
     if (sorted.length > MAX_RESULTS) shown.push(`… ${sorted.length - MAX_RESULTS} more files. Narrow the pattern.`);
     return shown.join('\n');
   },
@@ -159,7 +159,7 @@ async function grepFallback(args: GrepArgs, root: string, ctx: ToolContext): Pro
     const lines = buf.toString('utf8').split('\n');
     const hits = lines.flatMap((l, i) => (re.test(l) ? [i] : []));
     if (!hits.length) continue;
-    const rel = relative(ctx.cwd, file) || file;
+    const rel = (relative(ctx.cwd, file) || file).replace(/\\/g, '/');
     if (mode === 'files_with_matches') out.push(rel);
     else if (mode === 'count') out.push(`${rel}:${hits.length}`);
     else {
@@ -212,7 +212,14 @@ export const grepTool: Tool<GrepArgs> = {
       const rel = relative(ctx.cwd, root);
       if (rel) rgArgs.push('--', rel.startsWith('..') ? root : rel);
       const out = await rg(rgArgs, ctx.cwd, ctx.signal);
-      lines = out.split('\n').filter(Boolean);
+      // rg prints Windows-style paths; normalize the path portion (before the first `:` line-number separator) to forward slashes.
+      lines = out
+        .split('\n')
+        .filter(Boolean)
+        .map((l) => {
+          const m = /^((?:[A-Za-z]:)?[^:]*)((?::\d+.*)?)$/.exec(l);
+          return m ? m[1].replace(/\\/g, '/') + m[2] : l.replace(/\\/g, '/');
+        });
     } else {
       lines = await grepFallback(args, root, ctx);
     }

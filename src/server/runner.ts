@@ -20,6 +20,7 @@ import { commentTool } from './workspace.js';
 import { MediaService, mediaTools } from './media.js';
 import { delegateTool } from './team.js';
 import { checkGoal, goalTool, newGoal, parseBuiltin, submitPlanTool } from './agentic.js';
+import { CompareInsightsStore, parseCompareArgs, runCompareRace, tallyFor, CompareOutcome } from './compare.js';
 import { todoTool } from '../tools/todo.js';
 import { currentUsageTag, UsageLog, withUsage } from './usage.js';
 import { concreteModel, route, RouteInput, RouteModels, routeModels } from './routing.js';
@@ -44,6 +45,7 @@ export interface RunnerDeps {
   media: MediaService;
   usage: UsageLog;
   browser: BrowserService;
+  compareInsights: CompareInsightsStore;
 }
 
 export type RunInput =
@@ -81,6 +83,8 @@ interface RunTotals {
 interface ActiveRun {
   controller: AbortController;
   pending: Map<string, (answer: ApprovalAnswer) => void>;
+  /** Resolves the /compare A/B/skip pick for this run, when one is waiting. */
+  comparePick?: (choice: 'A' | 'B' | 'skip') => void;
 }
 
 /** Streams agent activity to the browser as StreamEvents. */
@@ -176,6 +180,15 @@ export class ChatRunner {
     const run = this.active.get(chatId);
     run?.controller.abort();
     return !!run;
+  }
+
+  /** The user picked a /compare winner (or skipped). */
+  resolveComparePick(chatId: string, choice: 'A' | 'B' | 'skip'): boolean {
+    const resolve = this.active.get(chatId)?.comparePick;
+    if (!resolve) return false;
+    this.active.get(chatId)!.comparePick = undefined;
+    resolve(choice);
+    return true;
   }
 
   resolvePermission(chatId: string, requestId: string, answer: ApprovalAnswer): boolean {
@@ -492,6 +505,11 @@ export class ChatRunner {
         chat.mode = 'work';
         emit({ type: 'goal', goal: chat.goal });
         content = buildUserContent(`Work on this goal until it's met:\n\n${builtin.args}`, input.attachments);
+      } else if (builtin?.name === 'compare') {
+        // /compare races two models outside the normal agent turn.
+        command = input.content.trim();
+        await this.runCompare(chat, run, builtin.args, input.content.trim(), emit, signal);
+        return;
       } else if (builtin) {
         throw new Error(`/${builtin.name}${builtin.args ? ` ${builtin.args}` : ''} isn't a message; send it with the command endpoint`);
       } else if (def) {
@@ -719,5 +737,72 @@ export class ChatRunner {
       await title;
       store.chats.put(chat);
     }
+  }
+
+  /**
+   * /compare: races one prompt against two models, streams both sides as compare events,
+   * waits for the user to pick the winner, and saves the winning answer as the turn.
+   */
+  private async runCompare(
+    chat: Chat,
+    run: ActiveRun,
+    args: string,
+    rawCommand: string,
+    emit: (e: StreamEvent) => void,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const { store, catalog } = this.deps;
+    const started = Date.now();
+    if (!args) throw new Error('Usage: /compare [modelA] [modelB] <prompt>');
+    const knownIds = new Set((await catalog.list().catch(() => [])).map((m) => m.id));
+    const parsed = parseCompareArgs(args, this.modelOf(chat), this.deps.config().compareModel, knownIds.size ? knownIds : undefined);
+    if ('error' in parsed) throw new Error(parsed.error);
+
+    // Save the user message right away, as a normal turn would.
+    const userMessage: ChatMessage = { role: 'user', content: parsed.prompt, ts: Date.now(), command: rawCommand };
+    chat.messages.push(userMessage);
+    chat.updatedAt = now();
+    store.chats.put(chat);
+
+    const waitForPick = (outcome: CompareOutcome) =>
+      new Promise<'A' | 'B' | 'skip'>((resolve) => {
+        run.comparePick = (choice) => {
+          run.comparePick = undefined;
+          resolve(choice);
+        };
+        signal.addEventListener('abort', () => {
+          run.comparePick = undefined;
+          resolve('skip');
+        }, { once: true });
+        emit({ type: 'compare_pick', modelA: outcome.modelA, modelB: outcome.modelB });
+      });
+
+    const outcome = await runCompareRace({
+      client: this.deps.client(),
+      modelA: parsed.modelA,
+      modelB: parsed.modelB,
+      prompt: parsed.prompt,
+      signal,
+      emit,
+      waitForPick,
+    });
+
+    const { winner, loser } = tallyFor(outcome);
+    this.deps.compareInsights.record(winner, loser);
+    const stats = { durationMs: Date.now() - started, promptTokens: 0, completionTokens: 0, cost: 0, requests: 2 };
+    emit({ type: 'stats', stats });
+
+    if (outcome.winner) {
+      const winningModel = outcome.winner === 'A' ? outcome.modelA : outcome.modelB;
+      const text = (outcome.winner === 'A' ? outcome.textA : outcome.textB) || '(the model returned no content)';
+      chat.messages.push({ role: 'assistant', content: text, ts: Date.now(), model: winningModel, stats });
+      emit({ type: 'status', message: `Winner (${winningModel}) kept as this turn's answer. The chat's model is unchanged.` });
+    } else if (signal.aborted) {
+      emit({ type: 'status', message: 'Race interrupted — nothing added, nothing tallied.' });
+    } else {
+      emit({ type: 'status', message: 'Skipped — nothing added to the conversation.' });
+    }
+    chat.updatedAt = now();
+    store.chats.put(chat);
   }
 }

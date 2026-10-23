@@ -193,6 +193,16 @@ export interface ResponseStats {
   requests: number;
 }
 
+/** The running tally of /compare picks. */
+export interface CompareInsights {
+  /** model id → times the user picked it */
+  wins: Record<string, number>;
+  /** model id → times the user saw both answers and picked the other */
+  losses: Record<string, number>;
+  comparisons: number;
+  skipped: number;
+}
+
 export type MemoryType = 'world' | 'experience' | 'observation';
 
 /** One unit in a memory bank: a fact, an experience, or a consolidated observation. */
@@ -603,6 +613,14 @@ export interface ContextBreakdown {
 }
 
 export type StreamEvent =
+  /** /compare: the race has started; the UI shows two columns. */
+  | { type: 'compare_start'; modelA: string; modelB: string; prompt: string }
+  /** /compare: streamed chunk for one side. */
+  | { type: 'compare_text'; side: 'A' | 'B'; text: string }
+  /** /compare: one side finished (or failed). */
+  | { type: 'compare_end'; side: 'A' | 'B'; error?: string }
+  /** /compare: both sides are done; the UI should show the A/B/skip picker. */
+  | { type: 'compare_pick'; modelA: string; modelB: string }
   | { type: 'text'; text: string }
   | { type: 'reasoning'; text: string }
   | { type: 'tool_call'; id: string; name: string; summary: string; args: unknown }

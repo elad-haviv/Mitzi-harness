@@ -67,7 +67,8 @@ test('Bash reports exit codes and persists cd', async () => {
   assert.match(await bashTool.run({ command: 'echo hi; exit 3' }, ctx), /hi\n\[Exit code 3\]/);
   await bashTool.run({ command: 'cd sub' }, ctx);
   assert.equal(ctx.cwd, join(cwd, 'sub'));
-  assert.equal((await bashTool.run({ command: 'pwd' }, ctx)).trim(), join(cwd, 'sub'));
+  // Git bash prints MSYS-style paths (/c/...); compare endsWith on the dir name instead.
+  assert.match((await bashTool.run({ command: 'pwd' }, ctx)).trim(), /[\\/]sub$/);
   assert.match(await bashTool.run({ command: 'sleep 5', timeout: 1000 }, ctx), /timed out/);
 });
 

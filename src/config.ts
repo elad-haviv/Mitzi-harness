@@ -16,6 +16,8 @@ export interface Config {
   model: string;
   /** Cheaper model used for summarising history on /compact. Defaults to `model`. */
   smallModel?: string;
+  /** Default challenger for /compare (the chat's model is the defender). */
+  compareModel?: string;
   maxTokens?: number;
   temperature?: number;
   maxTurns: number;
