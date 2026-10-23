@@ -3,6 +3,7 @@
 import { Mic, MicOff, PhoneOff } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
+import { VoiceCat } from './VoiceCat';
 
 type Phase = 'connecting' | 'listening' | 'hearing' | 'speaking' | 'muted' | 'error';
 
@@ -27,6 +28,7 @@ export function RealtimeMode({ chatId, title, emoji, onClose, onSaved }: { chatI
   const [error, setError] = useState('');
   const [lines, setLines] = useState<Line[]>([]);
   const [level, setLevel] = useState(0);
+  const [voice, setVoice] = useState(0);
   const pc = useRef<RTCPeerConnection>(undefined);
   const mic = useRef<MediaStream>(undefined);
   const muted = useRef(false);
@@ -66,16 +68,28 @@ export function RealtimeMode({ chatId, title, emoji, onClose, onSaved }: { chatI
         analyser.fftSize = 256;
         ctx.createMediaStreamSource(stream).connect(analyser);
         const buf = new Uint8Array(analyser.frequencyBinCount);
+        // Mitzi's voice is measured too, so the cat's mouth moves with it.
+        let out: AnalyserNode | undefined;
+        const outBuf = new Uint8Array(analyser.frequencyBinCount);
+        const loudness = (a: AnalyserNode, b: Uint8Array<ArrayBuffer>) => {
+          a.getByteFrequencyData(b);
+          return Math.min(1, b.reduce((n, v) => n + v, 0) / b.length / 80);
+        };
         const tick = () => {
-          analyser.getByteFrequencyData(buf);
-          setLevel(muted.current ? 0 : Math.min(1, buf.reduce((n, v) => n + v, 0) / buf.length / 80));
+          setLevel(muted.current ? 0 : loudness(analyser, buf));
+          if (out) setVoice(loudness(out, outBuf));
           meter = requestAnimationFrame(tick);
         };
         tick();
 
         const peer = new RTCPeerConnection();
         pc.current = peer;
-        peer.ontrack = (e) => (audio.srcObject = e.streams[0]);
+        peer.ontrack = (e) => {
+          audio.srcObject = e.streams[0];
+          out = ctx.createAnalyser();
+          out.fftSize = 256;
+          ctx.createMediaStreamSource(e.streams[0]).connect(out);
+        };
         stream.getTracks().forEach((t) => peer.addTrack(t, stream));
         const events = peer.createDataChannel('oai-events');
         events.onmessage = (m) => {
@@ -158,9 +172,7 @@ export function RealtimeMode({ chatId, title, emoji, onClose, onSaved }: { chatI
         <span className="muted small">Realtime voice · Esc to end</span>
       </div>
       <div className="live-center">
-        <div className={`live-orb ${phase === 'hearing' ? 'listening' : phase === 'muted' ? 'paused' : phase === 'connecting' ? 'starting' : phase}`} style={{ transform: `scale(${1 + level * 0.35})` }} aria-hidden>
-          <span />
-        </div>
+        <VoiceCat state={phase === 'muted' ? 'paused' : phase === 'connecting' ? 'starting' : phase} level={level} voice={voice} />
         <div className="live-phase" aria-live="polite">
           {LABEL[phase]}
         </div>

@@ -1,4 +1,5 @@
 import { Languages, Mic, MicOff, PhoneOff, SkipForward } from 'lucide-react';
+import { VoiceCat } from './VoiceCat';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { guessLanguage, languageName, LANGUAGES } from '../languages';
 import { hasBrowserRecognition, listen, ListenHandle, loadVoicePrefs, saveVoicePrefs, speaker, stripMarkdown } from '../speech';
@@ -153,7 +154,6 @@ export function LiveMode({
     startListening();
   };
 
-  const scale = phase === 'listening' ? 1 + level * 0.35 : 1;
   return (
     <div className="live-overlay" role="dialog" aria-label="Live conversation">
       <div className="live-top">
@@ -174,9 +174,7 @@ export function LiveMode({
         <span className="muted small">Live conversation · Esc to end</span>
       </div>
       <div className="live-center">
-        <div className={`live-orb ${phase}`} style={{ transform: `scale(${scale})` }} aria-hidden>
-          <span />
-        </div>
+        <VoiceCat state={phase === 'listening' && level > 0.12 ? 'hearing' : phase} level={level} />
         <div className="live-phase" aria-live="polite">
           {LABEL[phase]}
         </div>
