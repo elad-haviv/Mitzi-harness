@@ -926,6 +926,28 @@ test('a bot splits work off to subagents that run in parallel and report back', 
   }
 });
 
+test('large project knowledge is searched per message; small knowledge goes in whole', async () => {
+  reply = () => textChunks('Noted.');
+  const small = (await call('POST', '/api/projects', { name: 'Small' })).data;
+  await call('POST', `/api/projects/${small.id}/files`, { name: 'tiny.md', content: 'The office cat is called Pixel.' });
+  let chat = (await call('POST', '/api/chats', { projectId: small.id })).data;
+  await stream(`/api/chats/${chat.id}/messages`, { content: 'Hi' });
+  assert.match(lastMain().messages[0].content, /<document name="tiny.md">\nThe office cat is called Pixel./);
+  assert.ok(!lastMain().tools?.some((t: any) => t.function.name === 'ProjectKnowledge'));
+
+  const big = (await call('POST', '/api/projects', { name: 'Big' })).data;
+  const filler = Array.from({ length: 120 }, (_, i) => `## Section ${i}\n\n${'Ordinary operational text about warehouses and trucks. '.repeat(12)}`).join('\n\n');
+  await call('POST', `/api/projects/${big.id}/files`, { name: 'handbook.md', content: `${filler}\n\n## Zebra protocol\n\nDuring a zebra protocol, all forklifts stop and staff gather at door 7.` });
+  const view = (await call('GET', '/api/projects')).data.find((p: any) => p.id === big.id);
+  assert.equal(view.knowledge.searched, true);
+  chat = (await call('POST', '/api/chats', { projectId: big.id })).data;
+  await stream(`/api/chats/${chat.id}/messages`, { content: 'What happens during the zebra protocol?' });
+  const system = lastMain().messages[0].content;
+  assert.match(system, /<excerpt document="handbook.md" section="Zebra protocol">[\s\S]*door 7/);
+  assert.ok(system.length < filler.length / 2, 'only excerpts, not the whole handbook');
+  assert.ok(lastMain().tools.some((t: any) => t.function.name === 'ProjectKnowledge'));
+});
+
 /** Polls until a server reaches a status. */
 async function waitFor(id: string, status: string) {
   for (let i = 0; i < 200; i++) {

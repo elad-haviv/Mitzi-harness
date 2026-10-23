@@ -191,6 +191,7 @@ export function ProjectPage({ id }: { id: string }) {
   const [instructionsOpen, setInstructionsOpen] = useState(false);
   const [folder, setFolder] = useState(project?.folder ?? '');
   const [browsing, setBrowsing] = useState(false);
+  const [linking, setLinking] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const [confirmNode, confirm] = useConfirm();
 
@@ -231,7 +232,8 @@ export function ProjectPage({ id }: { id: string }) {
     await refreshProjects();
   };
 
-  const knowledgeTokens = project.files.reduce((n, f) => n + Math.ceil(f.size / 4), 0);
+  const knowledgeTokens = Math.ceil((project.knowledge?.chars ?? project.files.reduce((n, f) => n + f.size, 0)) / 4);
+  const linked = project.knowledgeFolders ?? [];
 
   return (
     <div className="page">
@@ -343,19 +345,57 @@ export function ProjectPage({ id }: { id: string }) {
             </div>
 
             <div className="card">
-              <div className="row" style={{ justifyContent: 'space-between' }}>
+              <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                 <div className="card-title">
                   <BookOpen size={15} /> Knowledge
                 </div>
-                <button className="btn btn-sm" onClick={() => fileInput.current?.click()}>
-                  <Upload size={14} /> Add files
-                </button>
+                <span className="row" style={{ gap: 6 }}>
+                  <button className="btn btn-sm" onClick={() => setLinking(true)} title="Use the text files in a folder on this computer, kept up to date">
+                    <FolderSearch size={14} /> Folder
+                  </button>
+                  <button className="btn btn-sm" onClick={() => fileInput.current?.click()}>
+                    <Upload size={14} /> Files
+                  </button>
+                </span>
                 <input ref={fileInput} type="file" multiple hidden onChange={(e) => e.target.files && void upload(e.target.files).then(() => (e.target.value = ''))} />
               </div>
               <p className="muted small" style={{ margin: '6px 0 8px' }}>
-                Text files included in every chat's context
-                {project.files.length > 0 && ` · ~${formatTokens(knowledgeTokens)} tokens`}.
+                {project.knowledge?.searched ? (
+                  <>
+                    <b>{project.knowledge.docs.toLocaleString()} documents, ~{formatTokens(knowledgeTokens)} tokens</b>: too much to send whole, so each message gets the passages
+                    most relevant to it, and Mitzi can search for more.
+                  </>
+                ) : (
+                  <>
+                    Documents included in every chat’s context
+                    {knowledgeTokens > 0 && ` · ~${formatTokens(knowledgeTokens)} tokens`}. Larger knowledge is searched per message instead.
+                  </>
+                )}
               </p>
+              {linked.map((path) => (
+                <div key={path} className="file-row">
+                  <FolderOpen size={15} className="muted" />
+                  <span className="name" title={path}>
+                    {path.split(/[\\/]/).filter(Boolean).pop()}
+                  </span>
+                  <span className="muted small">linked folder</span>
+                  <button className="icon-btn sm" aria-label={`Unlink ${path}`} title="Unlink (the folder itself isn’t touched)" onClick={() => void update({ knowledgeFolders: linked.filter((p) => p !== path) })}>
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+              {linking && (
+                <FolderPicker
+                  title="Link a folder as knowledge"
+                  action="Link this folder"
+                  start={linked[0] ?? project.folder}
+                  onClose={() => setLinking(false)}
+                  onPick={async (path) => {
+                    setLinking(false);
+                    await update({ knowledgeFolders: [...linked, path] });
+                  }}
+                />
+              )}
               {project.files.map((f) => (
                 <div key={f.id} className="file-row">
                   <FileText size={15} className="muted" />

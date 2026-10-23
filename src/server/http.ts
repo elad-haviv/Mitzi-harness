@@ -27,6 +27,7 @@ import { registerUpdateRoutes } from './routes-update.js';
 import { registerImportRoutes } from './importer.js';
 import { mediaUpdate, registerFeatureRoutes } from './routes-features.js';
 import { newId, now, Store } from './store.js';
+import { INLINE_LIMIT, KnowledgeIndex } from './knowledge.js';
 import { budgetMessage, BudgetExceeded, budgetStatus, UsageLog } from './usage.js';
 import { SearchIndex } from './search.js';
 import { BrowserService } from './browser.js';
@@ -128,7 +129,8 @@ export function createApp(opts: AppOptions) {
   const media = new MediaService(opts.dataDir, router, () => store.settings.media);
   const browser = new BrowserService(join(MITZI_HOME, 'browser-profile'), media, () => !!store.settings.browserHeaded);
   const compareInsights = new CompareInsightsStore(opts.dataDir);
-  const runner = new ChatRunner({ store, config, client, catalog, memory, mcp, skills, commands, media, usage, browser, compareInsights });
+  const knowledge = new KnowledgeIndex();
+  const runner = new ChatRunner({ store, config, client, catalog, memory, mcp, skills, commands, media, usage, browser, compareInsights, knowledge });
   const starters = new StarterService({ store, memory, client, config, memoryOn: (bot) => runner.memoryOn(bot) });
   seedBots(store, opts.dataDir);
   ensureDefaultBot(store);
@@ -472,7 +474,10 @@ export function createApp(opts: AppOptions) {
 
   // ---- Projects --------------------------------------------------------------
 
-  const projectView = (p: Project) => ({ ...p, chatCount: store.chats.all().filter((c) => c.projectId === p.id).length });
+  const projectView = (p: Project) => {
+    const size = knowledge.size(p);
+    return { ...p, chatCount: store.chats.all().filter((c) => c.projectId === p.id).length, knowledge: { ...size, searched: size.chars > INLINE_LIMIT } };
+  };
 
   route('GET', '/api/projects', () =>
     store.projects
@@ -507,6 +512,7 @@ export function createApp(opts: AppOptions) {
     }
     if (body.folder === null || body.folder === '') p.folder = undefined;
     else if (typeof body.folder === 'string') p.folder = validateFolder(body.folder);
+    if (Array.isArray(body.knowledgeFolders)) p.knowledgeFolders = [...new Set(body.knowledgeFolders.filter((f: unknown) => typeof f === 'string').map((f: string) => validateFolder(f)))].slice(0, 10) as string[];
     p.updatedAt = now();
     return projectView(store.projects.put(p));
   });

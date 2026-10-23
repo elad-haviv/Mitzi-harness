@@ -4,7 +4,7 @@ import type { Config, PermissionMode } from '../config.js';
 import type { ContentPart, LlmClient, Message } from '../openrouter.js';
 import type { RoutingClient } from '../providers.js';
 import { ApprovalAnswer, Approver, Permissions } from '../permissions.js';
-import { ApprovalLevel, Artifact, Attachment, AUTO_MODEL, QueuedMessage, Bot, Chat, ChatMessage, ChatSummary, DEFAULT_BOT_ID, RecalledMemory, RouteChoice, StreamEvent } from '../shared/types.js';
+import { ApprovalLevel, Artifact, Attachment, AUTO_MODEL, Project, QueuedMessage, Bot, Chat, ChatMessage, ChatSummary, DEFAULT_BOT_ID, RecalledMemory, RouteChoice, StreamEvent } from '../shared/types.js';
 import { ALL_TOOLS, Tool, toToolSpecs } from '../tools/index.js';
 import { webFetchTool } from '../tools/web.js';
 import type { Todo } from '../tools/types.js';
@@ -19,6 +19,7 @@ import { artifactTool } from './tools.js';
 import { commentTool } from './workspace.js';
 import { MediaService, mediaTools } from './media.js';
 import { delegateTool } from './team.js';
+import { KnowledgeIndex } from './knowledge.js';
 import { subagentId, subagentsTool } from './subagents.js';
 import { checkGoal, goalTool, newGoal, parseBuiltin, submitPlanTool } from './agentic.js';
 import { CompareInsightsStore, parseCompareArgs, runCompareRace, tallyFor, CompareOutcome } from './compare.js';
@@ -54,6 +55,7 @@ export interface RunnerDeps {
   usage: UsageLog;
   browser: BrowserService;
   compareInsights: CompareInsightsStore;
+  knowledge: KnowledgeIndex;
 }
 
 export type RunInput =
@@ -297,9 +299,22 @@ export class ChatRunner {
       // Memories recalled for the latest user message.
       recalled: chat.messages.findLast((m) => m.role === 'user')?.memories ?? [],
       skills: this.deps.skills.enabled(),
+      knowledge: project ? this.knowledgeFor(project, chat) : undefined,
       artifacts: store.artifacts.all().filter((a) => a.chatId === chat.id),
       focus: this.focusOf(chat),
     };
+  }
+
+  /** The project's knowledge for the chat: all of it when small, else the excerpts that match the latest messages. */
+  private knowledgeFor(project: Project, chat: Chat): ChatSetup['knowledge'] {
+    const { knowledge } = this.deps;
+    const docs = knowledge.docs(project);
+    if (!docs.length) return undefined;
+    if (!knowledge.isLarge(project)) return { mode: 'inline', docs };
+    // The last two things the user said: a follow-up ("and the second one?") leans on the message before.
+    const asked = chat.messages.filter((m) => m.role === 'user').slice(-2);
+    const query = asked.map((m) => (typeof m.content === 'string' ? m.content : (m.content ?? []).map((p) => (p.type === 'text' ? p.text : '')).join(' ')).replace(/<attachment[\s\S]*?<\/attachment>/g, ' ')).join('\n');
+    return { mode: 'search', names: docs.map((d) => d.name), excerpts: knowledge.search(project, query) };
   }
 
   /** The chat's artifact open in the workspace, if any. */
@@ -318,6 +333,7 @@ export class ChatRunner {
     if (bot.tools.artifacts || focus) tools.push(artifactTool(store, chat.id, chat.projectId, onArtifact));
     if (focus || store.artifacts.all().some((a) => a.chatId === chat.id && a.comments?.length)) tools.push(commentTool(store, chat.id, onArtifact));
     if (this.memoryOn(bot)) tools.push(memoryTool(memory, memory.bankFor(bot)));
+    if (project && this.deps.knowledge.isLarge(project)) tools.push(this.deps.knowledge.tool(project));
     if (bot.tools.skills && this.deps.skills.enabled().length) tools.push(skillTool(this.deps.skills));
     tools.push(...this.extraTools());
     if (bot.tools.browser !== false && !this.deps.browser.unavailable()) tools.push(browserTool(this.deps.browser, onBrowser));

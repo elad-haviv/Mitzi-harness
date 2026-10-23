@@ -18,7 +18,7 @@
     "dev:web": "vite --config web/vite.config.ts",
     "start": "node dist/index.js",
     "ui": "node dist/index.js ui",
-    "test": "tsc -p . && node --test dist/tests/agent.test.js dist/tests/browser.test.js dist/tests/compare.test.js dist/tests/extensions.test.js dist/tests/features.test.js dist/tests/launcher.test.js dist/tests/mcp.test.js dist/tests/memory.test.js dist/tests/routing.test.js dist/tests/server.test.js dist/tests/tools.test.js dist/tests/updater.test.js",
+    "test": "tsc -p . && node --test dist/tests/agent.test.js dist/tests/browser.test.js dist/tests/compare.test.js dist/tests/extensions.test.js dist/tests/features.test.js dist/tests/knowledge.test.js dist/tests/launcher.test.js dist/tests/mcp.test.js dist/tests/memory.test.js dist/tests/routing.test.js dist/tests/server.test.js dist/tests/tools.test.js dist/tests/updater.test.js",
     "typecheck": "tsc -p . --noEmit && tsc -p web",
     "web": "node dist/index.js web"
   },

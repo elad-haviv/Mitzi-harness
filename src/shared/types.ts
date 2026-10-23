@@ -90,8 +90,10 @@ export interface Project {
   description: string;
   /** Custom instructions added to every chat in the project. */
   instructions: string;
-  /** Knowledge files whose content is included in every chat's context. */
+  /** Knowledge files: included whole in every chat when small, searched per message when large. */
   files: ProjectFile[];
+  /** Folders on this computer whose text files are part of the project's knowledge (kept up to date). */
+  knowledgeFolders?: string[];
   /** Local folder; when set, chats get coding tools (Read, Edit, Bash…) scoped to it. */
   folder?: string;
   /** Set when the folder was cloned from a remote repository. */

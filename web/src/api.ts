@@ -56,7 +56,8 @@ import type { UpdateEvent, UpdateInfo } from '../../src/updater';
 export type { UpdateEvent, UpdateInfo, UpdateStep } from '../../src/updater';
 export { AUTO_MODEL, DEFAULT_BOT_ID, TEXT_ARTIFACT_TYPES } from '../../src/shared/types';
 
-export type ProjectView = Project & { chatCount: number };
+/** `knowledge.searched`: too big to send whole, so each message gets the relevant excerpts. */
+export type ProjectView = Project & { chatCount: number; knowledge?: { chars: number; docs: number; searched: boolean } };
 export type WorkflowView = Workflow & { running: boolean };
 export interface NodeSpec {
   label: string;
@@ -269,7 +270,7 @@ export const api = {
   projects: () => request<ProjectView[]>('GET', '/api/projects'),
   project: (id: string) => request<ProjectView>('GET', `/api/projects/${id}`),
   createProject: (body: { name: string; description?: string }) => request<ProjectView>('POST', '/api/projects', body),
-  updateProject: (id: string, body: Partial<{ name: string; description: string; instructions: string; folder: string | null; permissionMode: string }>) =>
+  updateProject: (id: string, body: Partial<{ name: string; description: string; instructions: string; folder: string | null; permissionMode: string; knowledgeFolders: string[] }>) =>
     request<ProjectView>('PATCH', `/api/projects/${id}`, body),
   deleteProject: (id: string, deleteChats = false) => request('DELETE', `/api/projects/${id}${deleteChats ? '?chats=delete' : ''}`),
   addProjectFile: (id: string, name: string, content: string) => request<ProjectView>('POST', `/api/projects/${id}/files`, { name, content }),

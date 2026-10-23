@@ -1,3 +1,4 @@
+import type { Excerpt, KnowledgeDoc } from './knowledge.js';
 import { COMPACT_PROMPT, renderForTranscript } from '../agent.js';
 import type { LlmClient, Message, ToolSpec } from '../openrouter.js';
 import { buildSystemPrompt } from '../prompt.js';
@@ -29,6 +30,8 @@ export interface ChatSetup {
   focus?: Artifact;
   /** The model answering, when it isn't the chat's own (Auto picked it). */
   model?: string;
+  /** The project's knowledge: all of it, or (when large) the excerpts relevant to the conversation. */
+  knowledge?: { mode: 'inline'; docs: KnowledgeDoc[] } | { mode: 'search'; names: string[]; excerpts: Excerpt[] };
   /** Bots this bot can hand tasks to with the Delegate tool. */
   team?: Bot[];
   /** Planning with /plan: look, don't change. */
@@ -92,13 +95,27 @@ export function promptSections(setup: ChatSetup): PromptSection[] {
       text: `# Project: ${project.name}\nFollow these project instructions:\n${project.instructions.trim()}`,
     });
   }
-  if (project?.files.length) {
+  const knowledge = setup.knowledge;
+  if (knowledge?.mode === 'inline') {
     sections.push({
-      label: `Project knowledge (${project.files.length} file${project.files.length === 1 ? '' : 's'})`,
+      label: `Project knowledge (${knowledge.docs.length} file${knowledge.docs.length === 1 ? '' : 's'})`,
       kind: 'project',
       text:
         '# Project knowledge\nReference documents the user added to this project:\n\n' +
-        project.files.map((f) => `<document name="${f.name}">\n${f.content}\n</document>`).join('\n\n'),
+        knowledge.docs.map((f) => `<document name="${f.name}">\n${f.content}\n</document>`).join('\n\n'),
+    });
+  } else if (knowledge?.mode === 'search') {
+    const names = knowledge.names.length > 60 ? [...knowledge.names.slice(0, 60), `…and ${knowledge.names.length - 60} more`] : knowledge.names;
+    sections.push({
+      label: `Project knowledge (${knowledge.excerpts.length} excerpts from ${knowledge.names.length} files)`,
+      kind: 'project',
+      text:
+        `# Project knowledge\nThe user added ${knowledge.names.length} reference documents to this project: ${names.join(', ')}.\n` +
+        'They are too long to include whole. Below are the passages most relevant to the conversation; search for more with the ProjectKnowledge tool. ' +
+        'Say which document a fact comes from when it matters.\n\n' +
+        (knowledge.excerpts.length
+          ? knowledge.excerpts.map((e) => `<excerpt document="${e.name}" section="${e.where}">\n${e.text}\n</excerpt>`).join('\n\n')
+          : '(No passage matched the latest message; search if the documents may help.)'),
     });
   }
 
