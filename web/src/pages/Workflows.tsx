@@ -1041,7 +1041,7 @@ function TriggersModal({ wf, onClose, onSaved }: { wf: WorkflowView; onClose(): 
               <button
                 className="btn btn-sm"
                 onClick={() => {
-                  void navigator.clipboard.writeText(url);
+                  navigator.clipboard.writeText(url).catch(() => {});
                   setCopied(true);
                   setTimeout(() => setCopied(false), 1500);
                 }}

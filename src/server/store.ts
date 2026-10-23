@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Artifact, Bot, Chat, Doc, FeedbackLoop, LegacyMemory, MarketplaceInfo, McpServerConfig, PluginInfo, Project, ScheduledTask, UiSettings, Workflow } from '../shared/types.js';
+import type { Artifact, Bot, Chat, Doc, FeedbackLoop, LegacyMemory, MarketplaceInfo, McpServerConfig, PluginInfo, Project, ScheduledTask, Share, UiSettings, Workflow } from '../shared/types.js';
 
 export function newId(): string {
   return `${Date.now().toString(36)}${randomBytes(4).toString('hex')}`;
@@ -87,6 +87,7 @@ export class Store {
   readonly tasks: Collection<ScheduledTask>;
   readonly feedback: Collection<FeedbackLoop>;
   readonly workflows: Collection<Workflow>;
+  readonly shares: Collection<Share>;
   /** Pre-memory-bank memories, kept only until they're migrated. */
   readonly legacyMemories: Collection<LegacyMemory>;
   private settingsPath: string;
@@ -105,6 +106,7 @@ export class Store {
     this.tasks = new Collection(join(root, 'tasks'));
     this.feedback = new Collection(join(root, 'feedback'));
     this.workflows = new Collection(join(root, 'workflows'));
+    this.shares = new Collection(join(root, 'shares'));
     this.settingsPath = join(root, 'settings.json');
     try {
       const saved = JSON.parse(readFileSync(this.settingsPath, 'utf8'));

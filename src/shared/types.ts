@@ -40,6 +40,20 @@ export interface UiSettings {
   telegram?: TelegramSettings;
 }
 
+/** A read-only link to a snapshot of a chat or artifact. */
+export interface Share {
+  /** The secret part of the link: /s/<id>. */
+  id: string;
+  kind: 'chat' | 'artifact';
+  targetId: string;
+  title: string;
+  /** The page as it was when shared. */
+  html: string;
+  createdAt: string;
+  expiresAt?: string;
+  views: number;
+}
+
 export interface TelegramSettings {
   enabled: boolean;
   /** The bot's token from @BotFather (masked in public settings). */

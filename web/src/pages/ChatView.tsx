@@ -24,6 +24,7 @@ import {
   X,
   ListPlus,
   Zap,
+  Share2,
 } from 'lucide-react';
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApprovalLevel, Artifact, Attachment, AUTO_MODEL, Chat, ChatMessage, ChatMode, DEFAULT_BOT_ID, FeedbackLoop, Goal, RecalledMemory, RepoStatus, RouteChoice, StreamEvent } from '../api';
@@ -52,6 +53,7 @@ import {
 } from '../components/Work';
 import { Markdown } from '../components/Markdown';
 import { ChatTabs } from '../components/ChatTabs';
+import { ShareDialog } from '../components/Share';
 import { APPROVAL, ApprovalPicker, approvalOf, nextLevel } from '../components/Approval';
 import { AssistantTurn, Avatar, buildTurns, messageText, Reasoning, CompactDivider, MemoryRecall, PermissionCard, PermissionRequest, RouteBadge, ToolBlock, UserTurn } from '../components/Messages';
 import { Menu, useConfirm } from '../components/ui';
@@ -149,6 +151,7 @@ export function ChatView({
   const [loops, setLoops] = useState<FeedbackLoop[]>([]);
   const [draftMode, setDraftMode] = useState<ChatMode>('chat');
   const [draftApproval, setDraftApproval] = useState<ApprovalLevel>();
+  const [sharing, setSharing] = useState(false);
   const onArtifactRef = useRef(onArtifact);
   onArtifactRef.current = onArtifact;
 
@@ -691,6 +694,9 @@ export function ChatView({
               <button onClick={() => (close(), setRenaming(true))}>
                 <Pencil size={15} /> Rename
               </button>
+              <button onClick={() => (close(), setSharing(true))}>
+                <Share2 size={15} /> Share or download…
+              </button>
               {projects.length > 0 && <hr />}
               {projects
                 .filter((p) => p.id !== chat.projectId)
@@ -1054,6 +1060,15 @@ export function ChatView({
 
   return (
     <ChatActionsContext.Provider value={chatActions}>
+    {sharing && chat && (
+      <ShareDialog
+        kind="chat"
+        targetId={chat.id}
+        title={chat.title}
+        onClose={() => setSharing(false)}
+        page={async () => (await import('../exporter')).chatPage(chat, artifacts, { botName: customBot?.name })}
+      />
+    )}
     <div className="chat-layout">
       {live_}
       {!expanded && (

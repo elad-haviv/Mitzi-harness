@@ -1118,6 +1118,33 @@ test('Telegram: pairing, chatting, and strangers kept out', { timeout: 30_000 },
   assert.equal((await call('GET', '/api/telegram')).data.running, false);
 });
 
+test('share links: a sandboxed read-only page, turned off with the link or the chat', async () => {
+  const chat = (await call('POST', '/api/chats', {})).data;
+  const page = '<!doctype html><html><body><h1>Shared chat</h1></body></html>';
+  assert.equal((await call('POST', '/api/shares', { kind: 'chat', targetId: chat.id, title: 'T', html: 'hello' })).status, 400);
+  assert.equal((await call('POST', '/api/shares', { kind: 'chat', targetId: 'nope', title: 'T', html: page })).status, 404);
+  const share = (await call('POST', '/api/shares', { kind: 'chat', targetId: chat.id, title: 'My chat', html: page, expiresInDays: 7 })).data;
+  assert.match(share.url, /^\/s\/[\w-]{20,}$/);
+  assert.ok(Date.parse(share.expiresAt) > Date.now() + 6 * 86_400_000);
+  assert.equal(share.html, undefined, 'the page itself isn’t sent back in lists');
+
+  // No token needed, and the page runs sandboxed in its own origin.
+  let res = await fetch(`${base}${share.url}`);
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-security-policy') ?? '', /^sandbox /);
+  assert.equal(await res.text(), page);
+  await fetch(`${base}${share.url}`);
+  assert.equal((await call('GET', `/api/shares?targetId=${chat.id}`)).data[0].views, 2);
+
+  await call('DELETE', `/api/shares/${share.id}`);
+  assert.equal((await fetch(`${base}${share.url}`)).status, 404);
+  // Deleting the chat turns its links off too.
+  const again = (await call('POST', '/api/shares', { kind: 'chat', targetId: chat.id, title: 'My chat', html: page })).data;
+  assert.equal(again.expiresAt, undefined);
+  await call('DELETE', `/api/chats/${chat.id}`);
+  assert.equal((await fetch(`${base}${again.url}`)).status, 404);
+});
+
 /** Polls until a server reaches a status. */
 async function waitFor(id: string, status: string) {
   for (let i = 0; i < 200; i++) {

@@ -1,5 +1,6 @@
 import hljs from 'highlight.js/lib/common';
-import { ChevronLeft, ChevronRight, Code, Download, ExternalLink, FileCode, FileText, Globe, Image, ImageIcon, Maximize, Maximize2, Minimize2, Music, Network, PanelsTopLeft, Presentation, Shapes, SquareArrowOutUpRight, Video, X } from 'lucide-react';
+import { ShareDialog } from './Share';
+import { ChevronLeft, ChevronRight, Code, Download, Share2, ExternalLink, FileCode, FileText, Globe, Image, ImageIcon, Maximize, Maximize2, Minimize2, Music, Network, PanelsTopLeft, Presentation, Shapes, SquareArrowOutUpRight, Video, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Artifact, ArtifactType } from '../api';
 import { href } from '../router';
@@ -234,6 +235,7 @@ export function ArtifactView({
   const previewable = !!doc || artifact.type === 'markdown' || artifact.type === 'slides';
   const media = isMedia(artifact.type);
   const [tab, setTab] = useState<'preview' | 'code'>(previewable ? 'preview' : 'code');
+  const [sharing, setSharing] = useState(false);
   useEffect(() => setTab(previewable ? 'preview' : 'code'), [artifact.id, previewable]);
 
   return (
@@ -279,6 +281,12 @@ export function ArtifactView({
         <button className="icon-btn sm" title="Download" aria-label="Download" onClick={() => download(artifact, content)}>
           <Download size={14} />
         </button>
+        <button className="icon-btn sm" title="Share or download as a web page" aria-label="Share" onClick={() => setSharing(true)}>
+          <Share2 size={14} />
+        </button>
+        {sharing && (
+          <ShareDialog kind="artifact" targetId={artifact.id} title={artifact.title} onClose={() => setSharing(false)} page={async () => (await import('../exporter')).artifactPage(artifact)} />
+        )}
         {showChatLink && (
           <a className="icon-btn sm" title="Open the chat that made this" aria-label="Open chat" href={href({ page: 'chat', id: artifact.chatId })}>
             <ExternalLink size={14} />

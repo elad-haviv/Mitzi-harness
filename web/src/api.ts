@@ -49,6 +49,7 @@ import type {
   BudgetStatus,
   ApprovalLevel,
   QueuedMessage,
+  Share,
 } from '../../src/shared/types';
 
 export type * from '../../src/shared/types';
@@ -59,6 +60,7 @@ export { AUTO_MODEL, DEFAULT_BOT_ID, TEXT_ARTIFACT_TYPES } from '../../src/share
 /** `knowledge.searched`: too big to send whole, so each message gets the relevant excerpts. */
 export type ProjectView = Project & { chatCount: number; knowledge?: { chars: number; docs: number; searched: boolean } };
 export type WorkflowView = Workflow & { running: boolean };
+export type ShareView = Omit<Share, 'html'> & { url: string };
 export interface TelegramView {
   running: boolean;
   username?: string;
@@ -287,6 +289,9 @@ export const api = {
   deleteWorkflow: (id: string) => request('DELETE', `/api/workflows/${id}`),
   runWorkflow: (id: string, input: string, onEvent: (e: WorkflowEvent) => void) => stream<WorkflowEvent>(`/api/workflows/${id}/run`, { input }, onEvent),
   stopWorkflow: (id: string) => request('POST', `/api/workflows/${id}/stop`, {}),
+  shares: (targetId?: string) => request<ShareView[]>('GET', `/api/shares${targetId ? `?targetId=${targetId}` : ''}`),
+  createShare: (body: { kind: 'chat' | 'artifact'; targetId: string; title: string; html: string; expiresInDays: number }) => request<ShareView>('POST', '/api/shares', body),
+  deleteShare: (id: string) => request('DELETE', `/api/shares/${id}`),
   telegram: () => request<TelegramView>('GET', '/api/telegram'),
   updateTelegram: (body: Partial<{ token: string; enabled: boolean; notify: boolean; newCode: boolean; unlink: number }>) => request<TelegramView>('PUT', '/api/telegram', body),
   /** Approves or rejects a run waiting at an approval step. */

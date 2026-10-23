@@ -6747,3 +6747,20 @@ button.todo-check:not(:disabled):hover {
   background: var(--surface-2);
   letter-spacing: 0.04em;
 }
+
+/* Share links */
+.share-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.share-url {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

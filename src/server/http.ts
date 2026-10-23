@@ -30,6 +30,7 @@ import { newId, now, Store } from './store.js';
 import { INLINE_LIMIT, KnowledgeIndex } from './knowledge.js';
 import { PythonSandbox } from './python.js';
 import { WorkflowTriggers } from './workflow-triggers.js';
+import { registerShareRoutes, serveShare } from './shares.js';
 import { newPairingCode, TelegramBot } from './telegram.js';
 import { budgetMessage, BudgetExceeded, budgetStatus, UsageLog } from './usage.js';
 import { SearchIndex } from './search.js';
@@ -584,7 +585,11 @@ export function createApp(opts: AppOptions) {
     const a = store.artifacts.get(params.id) ?? fail(404, 'Artifact not found');
     return { ...a, chatTitle: store.chats.get(a.chatId)?.title, running: runner.isRunning(a.chatId) };
   });
-  route('DELETE', '/api/artifacts/:id', ({ params }) => ({ ok: store.artifacts.delete(params.id) }));
+  route('DELETE', '/api/artifacts/:id', ({ params }) => {
+    // Its share links go with it.
+    for (const s of store.shares.all()) if (s.targetId === params.id) store.shares.delete(s.id);
+    return { ok: store.artifacts.delete(params.id) };
+  });
 
   // ---- Memory banks ----------------------------------------------------------
 
@@ -665,6 +670,7 @@ export function createApp(opts: AppOptions) {
     const tool = workflowTool(store, workflows);
     return tool ? [tool] : [];
   };
+  registerShareRoutes(route, store);
   const triggers = new WorkflowTriggers(store, workflows);
   triggers.start();
   registerWorkflowRoutes(route, { store, engine: workflows, client, config, triggers, validateFolder });
@@ -722,6 +728,9 @@ export function createApp(opts: AppOptions) {
   // ---- Helpers ---------------------------------------------------------------
 
   function deleteChat(id: string) {
+    // Share links of the chat and its artifacts stop working.
+    const gone = new Set([id, ...store.artifacts.all().filter((a) => a.chatId === id).map((a) => a.id)]);
+    for (const s of store.shares.all()) if (gone.has(s.targetId)) store.shares.delete(s.id);
     for (const a of store.artifacts.all()) if (a.chatId === id) store.artifacts.delete(a.id);
     store.chats.delete(id);
   }
@@ -738,6 +747,8 @@ export function createApp(opts: AppOptions) {
     const url = new URL(req.url ?? '/', 'http://localhost');
     // Webhooks come from other services (through a tunnel or proxy, so any host); the secret in the address authenticates them.
     if (url.pathname.startsWith('/hooks/')) return triggers.webhook(decodeURIComponent(url.pathname.slice(7)), req, res);
+    // Share links are for other people (on your network or through a tunnel); the secret in the address is the key.
+    if (url.pathname.startsWith('/s/') && req.method === 'GET') return serveShare(store, url.pathname.slice(3), res);
     if (!opts.allowedHosts.includes((req.headers.host ?? '').toLowerCase())) {
       return sendJson(res, 403, { error: 'Forbidden host' });
     }
