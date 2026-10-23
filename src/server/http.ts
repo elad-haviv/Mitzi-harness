@@ -19,6 +19,7 @@ import { OAuthFlows } from './mcp/oauth.js';
 import { oauthCallback, registerExtensionRoutes } from './routes-ext.js';
 import { ChatRunner, summarizeChat } from './runner.js';
 import { MediaService } from './media.js';
+import { StarterService } from './starters.js';
 import { mediaUpdate, registerFeatureRoutes } from './routes-features.js';
 import { newId, now, Store } from './store.js';
 import { clamp, fail, Handler, HttpError, Req, STREAMED, str } from './util.js';
@@ -107,6 +108,7 @@ export function createApp(opts: AppOptions) {
   };
   const media = new MediaService(opts.dataDir, router, () => store.settings.media);
   const runner = new ChatRunner({ store, config, client, catalog, memory, mcp, skills, commands, media });
+  const starters = new StarterService({ store, memory, client, config, memoryOn: (bot) => runner.memoryOn(bot) });
   seedBots(store, opts.dataDir);
   ensureDefaultBot(store);
   migrateLegacyMemories(store, memory);
@@ -450,6 +452,7 @@ export function createApp(opts: AppOptions) {
   route('GET', '/api/bots', () => store.bots.all().sort((a, b) => Number(!!b.builtIn) - Number(!!a.builtIn) || a.name.localeCompare(b.name)));
   route('POST', '/api/bots', ({ body }) => store.bots.put(applyBot({ id: newId(), createdAt: now() } as Bot, body, true)));
   route('GET', '/api/bots/:id', ({ params }) => getBot(params.id));
+  route('GET', '/api/bots/:id/starters', ({ params, query }) => starters.get(getBot(params.id), query.get('refresh') === '1'));
   route('PATCH', '/api/bots/:id', ({ params, body }) => store.bots.put(applyBot(getBot(params.id), body, false)));
   route('DELETE', '/api/bots/:id', async ({ params }) => {
     const bot = getBot(params.id);
@@ -774,18 +777,24 @@ const DEFAULT_STARTERS = [
 ];
 
 /** Makes sure the built-in default bot exists, and that older bots have a memory profile. */
+/** Mitzi's logo, also the default bot's icon. */
+const LOGO = '🐱';
+
 function ensureDefaultBot(store: Store): void {
   for (const bot of store.bots.all()) {
     if (!bot.memory || bot.tools.skills === undefined || bot.tools.connectors === undefined) {
       store.bots.put({ ...bot, memory: bot.memory ?? bankProfile(undefined), tools: { ...bot.tools, skills: bot.tools.skills ?? true, connectors: bot.tools.connectors ?? true } });
     }
   }
-  if (store.bots.get(DEFAULT_BOT_ID)) return;
+  const existing = store.bots.get(DEFAULT_BOT_ID);
+  // The default bot's icon used to be ✻.
+  if (existing?.emoji === '✻') store.bots.put({ ...existing, emoji: LOGO });
+  if (existing) return;
   store.bots.put({
     id: DEFAULT_BOT_ID,
     builtIn: true,
     name: 'Mitzi',
-    emoji: '✻',
+    emoji: LOGO,
     description: 'Your everyday assistant. It remembers what matters across conversations.',
     systemPrompt: 'You are helpful, knowledgeable and candid. Think things through, admit uncertainty, and get to the point.',
     tools: { artifacts: true, web: true, memory: true, skills: true, connectors: true },

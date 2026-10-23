@@ -272,14 +272,14 @@ a:hover {
   text-decoration: none;
 }
 .brand-mark {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 8px;
-  background: var(--accent);
-  color: var(--accent-text);
+  background: var(--accent-soft);
+  color: var(--text);
   display: grid;
   place-items: center;
-  font-size: 15px;
+  font-size: 18px;
   line-height: 1;
 }
 .sidebar-section {
@@ -1007,9 +1007,9 @@ a:hover {
   border-radius: 9px;
   display: grid;
   place-items: center;
-  background: var(--accent);
-  color: var(--accent-text);
-  font-size: 15px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 18px;
   flex-shrink: 0;
   margin-top: 1px;
 }
@@ -1737,10 +1737,10 @@ button.memory-chip:hover {
   margin: 0 auto 18px;
   display: grid;
   place-items: center;
-  background: var(--accent);
-  color: var(--accent-text);
-  font-size: 26px;
-  box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 35%, transparent);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 32px;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 .welcome-mark.emoji {
   background: var(--surface);
@@ -1753,7 +1753,7 @@ button.memory-chip:hover {
 }
 .starters {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
   gap: 10px;
   margin-top: 16px;
 }
@@ -2414,10 +2414,9 @@ button.memory-chip:hover {
   flex-shrink: 0;
 }
 .bank-emoji.builtin {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-text);
-  font-size: 16px;
+  background: var(--accent-soft);
+  border-color: var(--accent-soft);
+  font-size: 18px;
 }
 .bank-emoji.lg {
   width: 44px;
@@ -3450,4 +3449,31 @@ mark.doc-mark.hot {
   .rate-pop {
     width: min(320px, calc(100vw - 32px));
   }
+}
+
+/* ---------- Personalized starters ---------- */
+.starter.skeleton {
+  height: 46px;
+  cursor: default;
+  background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2));
+  background-size: 200% 100%;
+  animation: shimmer 1.2s linear infinite;
+}
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+.starters-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.starters-note .link-btn {
+  font-size: 12px;
+  margin-left: 4px;
 }

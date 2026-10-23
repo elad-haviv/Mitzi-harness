@@ -4,7 +4,7 @@ import { api, BankSummary, DEFAULT_BOT_ID, MemoryType, MemoryUnit, RecalledMemor
 import { Markdown } from '../components/Markdown';
 import { Empty, Toggle, useConfirm } from '../components/ui';
 import { href, navigate } from '../router';
-import { relativeTime, useApp } from '../state';
+import { LOGO, relativeTime, useApp } from '../state';
 
 const TYPE_LABEL: Record<MemoryType, string> = { observation: 'Belief', world: 'Fact', experience: 'Experience' };
 const TYPE_HINT: Record<MemoryType, string> = {
@@ -81,7 +81,7 @@ export function MemoryPage({ botId }: { botId?: string }) {
                 className={`bank-item${b.bot.id === selectedId ? ' active' : ''}`}
                 onClick={() => navigate({ page: 'memory', botId: b.bot.id }, true)}
               >
-                <span className={`bank-emoji${b.bot.builtIn ? ' builtin' : ''}`}>{b.bot.builtIn ? '✻' : b.bot.emoji}</span>
+                <span className={`bank-emoji${b.bot.builtIn ? ' builtin' : ''}`}>{b.bot.builtIn ? LOGO : b.bot.emoji}</span>
                 <span className="grow">
                   <span className="t">{b.bot.name}</span>
                   <span className="s">{!b.enabled ? 'Memory off' : b.error ? 'Unavailable' : `${total(b)} memories`}</span>
@@ -114,7 +114,7 @@ function BankDetail({ bank, onChanged }: { bank: BankSummary; onChanged(): void 
     <div className="bank-detail">
       <div className="card bank-head">
         <div className="row" style={{ alignItems: 'flex-start', gap: 14 }}>
-          <span className={`bank-emoji lg${bot.builtIn ? ' builtin' : ''}`}>{bot.builtIn ? '✻' : bot.emoji}</span>
+          <span className={`bank-emoji lg${bot.builtIn ? ' builtin' : ''}`}>{bot.builtIn ? LOGO : bot.emoji}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <h2 className="bank-title">{bot.name}'s memory bank</h2>
             <p className="muted small" style={{ margin: '2px 0 0' }}>

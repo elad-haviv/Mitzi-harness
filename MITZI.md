@@ -40,3 +40,7 @@
   model in the background. Lessons live on `bot.lessons` and are included in the system prompt.
 - Scheduled tasks (`src/server/scheduler.ts`): schedules are computed in local time. Runs go through
   `ChatRunner.run` with `headless`, whose approver never waits for a person.
+- Starters (`src/server/starters.ts`): `GET /api/bots/:id/starters` writes them with the fast model from the bot's
+  memories and recent chats, caching per bot until either changes (and for at least 10 minutes). With no history,
+  or if generation fails, the bot's own `starters` are returned with `personalized: false`.
+- The logo is the 🐱 emoji (`LOGO` in `web/src/state.tsx` and `src/server/http.ts`); the default bot uses it as its icon.

@@ -35,7 +35,7 @@ import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import type { Artifact, Attachment, Bot, ChatMessage, ContentPart, Rating, RecalledMemory, Todo } from '../api';
 import { speaker, useSpeaking } from '../speech';
 import { href } from '../router';
-import { modelLabel, useApp } from '../state';
+import { LOGO, modelLabel, useApp } from '../state';
 import { ArtifactIcon, TYPE_LABEL } from './Artifacts';
 import { CopyButton, Markdown } from './Markdown';
 import { Diff, useAutoResize } from './ui';
@@ -229,7 +229,7 @@ export function UserTurn({
 // ---------- Assistant turn ----------
 
 export function Avatar({ bot }: { bot?: Bot }) {
-  return bot && !bot.builtIn ? <div className="avatar emoji">{bot.emoji}</div> : <div className="avatar">✻</div>;
+  return bot && !bot.builtIn ? <div className="avatar emoji">{bot.emoji}</div> : <div className="avatar">{LOGO}</div>;
 }
 
 const MEMORY_TYPE_LABEL: Record<RecalledMemory['type'], string> = { world: 'Fact', experience: 'Experience', observation: 'Belief' };

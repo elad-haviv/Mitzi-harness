@@ -31,7 +31,7 @@ import { Markdown } from '../components/Markdown';
 import { AssistantTurn, Avatar, buildTurns, messageText, CompactDivider, MemoryRecall, PermissionCard, PermissionRequest, ToolBlock, UserTurn } from '../components/Messages';
 import { Menu, useConfirm } from '../components/ui';
 import { href, navigate } from '../router';
-import { relativeTime, useApp } from '../state';
+import { LOGO, relativeTime, useApp } from '../state';
 
 type LiveBlock =
   | { kind: 'text'; text: string }
@@ -491,11 +491,11 @@ export function ChatView({
   );
 
   // ---------- Welcome ----------
-  const starters = project && !customBot ? [] : bot?.starters ?? [];
+  const showStarters = !(project && !customBot);
   const welcome = (
     <div className="welcome">
       <div className="welcome-inner">
-        {customBot ? <div className="welcome-mark emoji">{customBot.emoji}</div> : <div className="welcome-mark">✻</div>}
+        {customBot ? <div className="welcome-mark emoji">{customBot.emoji}</div> : <div className="welcome-mark">{LOGO}</div>}
         <h1 className="welcome-title">{customBot ? customBot.name : project ? project.name : `${greeting()}`}</h1>
         <p className="welcome-sub">
           {customBot ? customBot.description || 'How can I help?' : project ? project.description || 'Start a new chat in this project.' : 'How can I help you today?'}
@@ -527,16 +527,7 @@ export function ChatView({
           </div>
         )}
         {composerNode}
-        {starters.length > 0 && (
-          <div className="starters">
-            {starters.map((s) => (
-              <button key={s} className="starter" onClick={() => composer.current?.setText(s)}>
-                <Lightbulb size={15} />
-                <span>{s}</span>
-              </button>
-            ))}
-          </div>
-        )}
+        {showStarters && bot && <Starters botId={bot.id} onPick={(s) => composer.current?.setText(s)} />}
       </div>
     </div>
   );
@@ -760,6 +751,52 @@ export function ChatView({
       )}
       {confirmNode}
     </div>
+  );
+}
+
+/** Starters written from the bot's memories and recent chats (or its fixed ones until it knows you). */
+function Starters({ botId, onPick }: { botId: string; onPick(text: string): void }) {
+  const { bots } = useApp();
+  const fixed = bots.find((b) => b.id === botId)?.starters ?? [];
+  const [state, setState] = useState<{ starters: string[]; personalized: boolean } | 'loading'>('loading');
+  const load = useCallback(
+    (refresh = false) => {
+      setState('loading');
+      api.starters(botId, refresh).then(setState, () => setState({ starters: fixed, personalized: false }));
+    },
+    [botId], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  useEffect(() => load(), [load]);
+
+  if (state === 'loading') {
+    return (
+      <div className="starters" aria-busy="true" aria-label="Loading suggestions">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="starter skeleton" />
+        ))}
+      </div>
+    );
+  }
+  if (!state.starters.length) return null;
+  return (
+    <>
+      <div className="starters">
+        {state.starters.map((s) => (
+          <button key={s} className="starter" onClick={() => onPick(s)}>
+            {state.personalized ? <Sparkles size={15} /> : <Lightbulb size={15} />}
+            <span>{s}</span>
+          </button>
+        ))}
+      </div>
+      {state.personalized && (
+        <div className="starters-note">
+          <Brain size={12} /> Suggested from your recent conversations
+          <button className="link-btn" onClick={() => load(true)}>
+            New ideas
+          </button>
+        </div>
+      )}
+    </>
   );
 }
 

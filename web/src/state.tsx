@@ -3,6 +3,9 @@ import { api, ApiError, Bot, ChatListItem, ModelInfo, ProjectView, PublicSetting
 
 export type Theme = 'system' | 'light' | 'dark';
 
+/** Mitzi's logo, also the default bot's icon. */
+export const LOGO = '🐱';
+
 interface Toast {
   id: number;
   message: string;

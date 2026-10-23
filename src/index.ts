@@ -103,7 +103,7 @@ async function main(): Promise<number> {
     const { startServer, openBrowser } = await import('./server/index.js');
     const server = await startServer({ port: values.port ? Number(values.port) : undefined });
     process.stdout.write(
-      `${color.bold(color.magenta('✻ Mitzi'))} ${color.dim(`v${VERSION}`)} is running at\n\n  ${color.cyan(server.url)}\n\n` +
+      `${color.bold(color.magenta('🐱 Mitzi'))} ${color.dim(`v${VERSION}`)} is running at\n\n  ${color.cyan(server.url)}\n\n` +
         `${color.dim('The link includes your private access token. Press Ctrl+C to stop.')}\n`,
     );
     if (!values['no-open']) openBrowser(server.url);
@@ -187,7 +187,7 @@ async function main(): Promise<number> {
   agent.messages = session.messages;
 
   process.stdout.write(
-    `${color.bold(color.magenta('✻ Mitzi'))} ${color.dim(`v${VERSION}`)}\n` +
+    `${color.bold(color.magenta('🐱 Mitzi'))} ${color.dim(`v${VERSION}`)}\n` +
       `${color.dim(`model: ${config.model}  ·  mode: ${config.permissionMode}  ·  cwd: ${cwd}`)}\n` +
       (session.messages.length ? color.dim(`Resumed session ${session.id} (${session.messages.length} messages)\n`) : '') +
       `${color.dim('Type /help for commands, Ctrl+C to interrupt.')}\n`,

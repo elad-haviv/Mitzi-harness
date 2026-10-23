@@ -22,7 +22,7 @@ let close: () => Promise<void>;
 let reply: (body: any) => object[] = () => textChunks('Hello!');
 const requests: any[] = [];
 const isBackground = (body: any) =>
-  body.max_tokens === 60 || /Extract memories worth keeping|You maintain \\?"observations|reflective memory of|rated an AI assistant/.test(JSON.stringify(body.messages?.[0] ?? ''));
+  body.max_tokens === 60 || /Extract memories worth keeping|You maintain \\?"observations|reflective memory of|rated an AI assistant|conversation starters/.test(JSON.stringify(body.messages?.[0] ?? ''));
 const lastMain = (): any => requests.filter((r) => !isBackground(r)).at(-1);
 
 before(async () => {
@@ -51,7 +51,9 @@ before(async () => {
       const chunks =
         body.max_tokens === 60
           ? textChunks('Generated Title')
-          : /rated an AI assistant/.test(text)
+          : /conversation starters/.test(text)
+            ? textChunks(`Sure:\n["Continue my ${/Trip notes|Rome/.test(text) ? 'Rome' : 'other'} plans", "What's new in AI?"]`)
+            : /rated an AI assistant/.test(text)
             ? textChunks(/disliked/.test(text) ? 'Prefer short answers with a concrete example.' : 'NONE')
             : /Extract memories/.test(text)
               ? textChunks('{"facts": []}')
@@ -111,6 +113,25 @@ async function until<T>(fn: () => Promise<T | undefined>, ms = 5000): Promise<T>
 }
 
 // ---- Pure units --------------------------------------------------------------------
+
+test('starters are the bot\'s own until it has history, then personalized', async () => {
+  const bot = (await call('POST', '/api/bots', { name: 'Fresh', starters: ['Hello there'] })).data;
+  assert.deepEqual((await call('GET', `/api/bots/${bot.id}/starters`)).data, { starters: ['Hello there'], personalized: false });
+
+  reply = () => textChunks('Rome in May sounds lovely.');
+  const chat = (await call('POST', '/api/chats', { botId: bot.id })).data;
+  await send(chat.id, 'Help me plan a trip to Rome');
+  const r = (await call('GET', `/api/bots/${bot.id}/starters`)).data;
+  assert.equal(r.personalized, true);
+  assert.deepEqual(r.starters, ['Continue my Rome plans', "What's new in AI?"]);
+  // Reused until something changes; a refresh asks again.
+  const asked = () => requests.filter((q) => /conversation starters/.test(JSON.stringify(q.messages[0]))).length;
+  const before = asked();
+  await call('GET', `/api/bots/${bot.id}/starters`);
+  assert.equal(asked(), before);
+  await call('GET', `/api/bots/${bot.id}/starters?refresh=1`);
+  assert.equal(asked(), before + 1);
+});
 
 test('cron and schedules compute the next run in local time', () => {
   const from = new Date(2026, 0, 5, 10, 7); // Monday 10:07

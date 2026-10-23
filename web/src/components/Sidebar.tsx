@@ -2,7 +2,7 @@ import { Bot, Brain, CalendarClock, FileText, FolderOpen, GitBranch, KeyRound, L
 import { useMemo, useState } from 'react';
 import type { ChatListItem } from '../api';
 import { href, Route } from '../router';
-import { useApp } from '../state';
+import { LOGO, useApp } from '../state';
 
 function groupLabel(iso: string): string {
   const d = new Date(iso);
@@ -57,7 +57,7 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
     <nav className={`sidebar${collapsed ? ' collapsed' : ''}`} aria-label="Main">
       <div className="sidebar-top">
         <a className="brand" href={href({ page: 'new' })}>
-          <span className="brand-mark">✻</span> Mitzi
+          <span className="brand-mark">{LOGO}</span> Mitzi
         </a>
         <button className="icon-btn" onClick={onCollapse} aria-label="Collapse sidebar" title="Collapse sidebar">
           <PanelLeftClose size={18} />
