@@ -464,7 +464,7 @@ export function ChatView({
     const chatIdNow = id;
     const after = await runStream(chatIdNow, (h) => api.send(chatIdNow, { content: text, attachments, editIndex, focus }, h), optimisticUser(text, attachments));
     if (!after) return undefined;
-    const lastUser = after.messages.findLastIndex((m) => m.role === 'user');
+    const lastUser = after.messages.findLastIndex((m) => m.role === 'user' && m.auto !== 'images');
     return after.messages
       .slice(lastUser + 1)
       .filter((m) => m.role === 'assistant')
@@ -507,7 +507,7 @@ export function ChatView({
 
   const regenerate = async () => {
     if (!chat) return;
-    const lastUser = chat.messages.findLastIndex((m) => m.role === 'user');
+    const lastUser = chat.messages.findLastIndex((m) => m.role === 'user' && m.auto !== 'images');
     setChat({ ...chat, messages: chat.messages.slice(0, lastUser + 1) });
     await runStream(chat.id, (h) => api.regenerate(chat.id, h));
   };

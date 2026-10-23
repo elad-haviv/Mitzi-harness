@@ -135,6 +135,8 @@ export function LoopBadge({ loop, index }: { loop: FeedbackLoop; index: number }
 /** User messages Mitzi sent for the user: redo directions, plan approval, goal follow-ups. */
 export function AutoMessage({ message }: { message: ChatMessage }) {
   const text = typeof message.content === 'string' ? message.content : '';
+  // Screenshots for the model; the tool calls already show them.
+  if (message.auto === 'images') return null;
   if (message.auto === 'goal') {
     const check = /Last check: ([\s\S]*)$/.exec(text)?.[1];
     return (

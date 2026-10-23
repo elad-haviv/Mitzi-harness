@@ -117,6 +117,7 @@ export async function chatPage(chat: Chat, artifacts: Artifact[], opts: { botNam
   const made = new Map(artifacts.map((a) => [a.versions[0]?.callId, a]));
   const shown = new Set<string>();
   const turns = chat.messages.map((m, i) => {
+    if (m.role === 'user' && m.auto === 'images') return null;
     if (m.role === 'user') {
       const { text, files } = userText(m);
       if (!text && !files.length && !imagesOf(m).length) return null;

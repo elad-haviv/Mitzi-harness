@@ -123,6 +123,8 @@ export function buildTurns(messages: ChatMessage[], contextStart: number): { tur
       if (m.tool_call_id) results.set(m.tool_call_id, { output, isError: looksLikeError(output) });
       return;
     }
+    // Screenshots sent to the model belong to the answer in progress; its tool calls show them.
+    if (m.role === 'user' && m.auto === 'images') return;
     if (m.role === 'user') return void turns.push({ kind: 'user', index: i, message: m });
     if (m.role === 'assistant') {
       const last = turns.at(-1);

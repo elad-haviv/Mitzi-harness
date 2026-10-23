@@ -14,7 +14,14 @@ export interface AgentDeps {
   cwd: string;
   /** Overrides the default coding-agent system prompt. */
   systemPrompt?: () => string;
+  /** Turns an image URL the provider can't reach (a local /media/ file) into one it can. */
+  inlineImage?: (url: string) => string | undefined;
 }
+
+/** Opens the user message that carries the images tools took (screenshots), so they can be found again. */
+export const TOOL_IMAGES_NOTE = 'Images from the tool calls above:';
+/** Older tool images are left out of requests: they cost many tokens and the latest ones show the current state. */
+const KEEP_TOOL_IMAGES = 3;
 
 export interface UsageTotals {
   promptTokens: number;
@@ -86,6 +93,26 @@ export class Agent {
     return this.model.startsWith('anthropic/');
   }
 
+  /** Keeps only the latest tool images, and makes local image URLs reachable for the provider. */
+  private withToolImages(messages: Message[]): Message[] {
+    const isToolImages = (m: Message) => m.role === 'user' && Array.isArray(m.content) && m.content[0]?.type === 'text' && m.content[0].text === TOOL_IMAGES_NOTE;
+    let kept = 0;
+    const out = messages.slice();
+    for (let i = out.length - 1; i >= 0; i--) {
+      const m = out[i];
+      if (!isToolImages(m)) continue;
+      if (++kept > KEEP_TOOL_IMAGES) {
+        out[i] = { role: 'user', content: '(Earlier screenshots were left out to save space.)' };
+        continue;
+      }
+      const inline = this.deps.inlineImage;
+      if (inline) {
+        out[i] = { ...m, content: (m.content as ContentPart[]).map((p) => (p.type === 'image_url' ? { ...p, image_url: { url: inline(p.image_url.url) ?? p.image_url.url } } : p)) };
+      }
+    }
+    return out;
+  }
+
   /** Adds a cache breakpoint on the latest user message so the growing history is reused across turns. */
   private withCacheBreakpoints(messages: Message[]): Message[] {
     if (!this.isAnthropic()) return messages;
@@ -129,7 +156,7 @@ export class Agent {
         result = await client.chat(
           {
             model: this.model,
-            messages: [this.systemMessage(), ...this.withCacheBreakpoints(this.messages)],
+            messages: [this.systemMessage(), ...this.withCacheBreakpoints(this.withToolImages(this.messages))],
             tools: specs,
             maxTokens: config.maxTokens,
             temperature: config.temperature,
@@ -164,6 +191,11 @@ export class Agent {
         const outcome = await this.executeTool(call.id, call.function.name, call.function.arguments, signal);
         this.messages.push({ role: 'tool', tool_call_id: call.id, content: outcome.content });
         stop = outcome.stop;
+      }
+      // Tool results can only be text, so images for the model follow them as a user message.
+      const images = this.ctx.images?.splice(0) ?? [];
+      if (images.length) {
+        this.messages.push({ role: 'user', content: [{ type: 'text', text: TOOL_IMAGES_NOTE }, ...images.map((url): ContentPart => ({ type: 'image_url', image_url: { url } }))] });
       }
       if (stop || signal?.aborted) {
         ui.endTurn();

@@ -156,6 +156,19 @@ function GeneralSettings() {
       </section>
 
       <section className="settings-section card">
+        <h2>Computer control</h2>
+        <div className="tool-toggle" style={{ padding: 0, border: 0 }}>
+          <div className="grow">
+            <div className="t">Let bots use this computer</div>
+            <div className="s">
+              Bots can take screenshots and use the mouse and keyboard to work in your apps. They ask before every click or keystroke unless the chat is on Alley cat, and screenshots go to the chat’s model, so use a model that can see images. On a Mac, allow the app running Mitzi under Privacy &amp; Security → Screen Recording and Accessibility; on Linux it needs an X11 session with xdotool and ImageMagick.
+            </div>
+          </div>
+          <Toggle label="Let bots use this computer" on={!!settings.computerUse} onChange={(v) => void save({ computerUse: v })} />
+        </div>
+      </section>
+
+      <section className="settings-section card">
         <h2>Long conversations</h2>
         <div className="field">
           <span className="field-label">Auto-compact when the context window is</span>

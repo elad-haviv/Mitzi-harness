@@ -100,9 +100,9 @@ export function registerFeatureRoutes(route: Route, deps: FeatureDeps): { schedu
     const rating = message?.rating;
     const bot = runner.botFor(chat);
     if (!rating) return;
-    const question = messageText(chat.messages.slice(0, index).findLast((m) => m.role === 'user')).slice(0, 4000);
+    const question = messageText(chat.messages.slice(0, index).findLast((m) => m.role === 'user' && m.auto !== 'images')).slice(0, 4000);
     const answer = chat.messages
-      .slice(chat.messages.slice(0, index).findLastIndex((m) => m.role === 'user') + 1, index + 1)
+      .slice(chat.messages.slice(0, index).findLastIndex((m) => m.role === 'user' && m.auto !== 'images') + 1, index + 1)
       .filter((m) => m.role === 'assistant')
       .map(messageText)
       .join('\n')

@@ -34,6 +34,7 @@ import { registerShareRoutes, serveShare } from './shares.js';
 import { newPairingCode, TelegramBot } from './telegram.js';
 import { budgetMessage, BudgetExceeded, budgetStatus, UsageLog } from './usage.js';
 import { SearchIndex } from './search.js';
+import { ComputerService, systemBackend } from './computer.js';
 import { BrowserService } from './browser.js';
 import { registerWorkRoutes } from './routes-work.js';
 import { registerWorkflowRoutes } from './routes-workflows.js';
@@ -138,7 +139,8 @@ export function createApp(opts: AppOptions) {
   const compareInsights = new CompareInsightsStore(opts.dataDir);
   const knowledge = new KnowledgeIndex();
   const python = new PythonSandbox(opts.dataDir);
-  const runner = new ChatRunner({ store, config, client, catalog, memory, mcp, skills, commands, media, usage, browser, compareInsights, knowledge, python });
+  const computer = new ComputerService(systemBackend(), (bytes, mime) => media.save(bytes, mime));
+  const runner = new ChatRunner({ store, config, client, catalog, memory, mcp, skills, commands, media, usage, browser, compareInsights, knowledge, python, computer });
   const starters = new StarterService({ store, memory, client, config, memoryOn: (bot) => runner.memoryOn(bot) });
   seedBots(store, opts.dataDir);
   ensureDefaultBot(store);
@@ -197,6 +199,7 @@ export function createApp(opts: AppOptions) {
     if (typeof update.embeddingModel === 'string') ui.embeddingModel = update.embeddingModel.trim();
     if (typeof update.autoCheckUpdates === 'boolean') ui.autoCheckUpdates = update.autoCheckUpdates;
     if (typeof update.browserHeaded === 'boolean') ui.browserHeaded = update.browserHeaded;
+    if (typeof update.computerUse === 'boolean') ui.computerUse = update.computerUse;
     if (typeof update.recallTokens === 'number') ui.recallTokens = clamp(Math.round(update.recallTokens), 200, 8000);
     if (update.media) ui.media = mediaUpdate(update.media, store.settings.media);
     if (update.budget && typeof update.budget === 'object') {
@@ -975,6 +978,7 @@ function applyBot(bot: Bot, body: any, creating: boolean): Bot {
     subagents: tools.subagents ?? bot.tools?.subagents ?? true,
     code: tools.code ?? bot.tools?.code ?? true,
     browser: tools.browser ?? bot.tools?.browser ?? true,
+    computer: tools.computer ?? bot.tools?.computer ?? true,
   };
   if (creating || Array.isArray(body?.starters)) {
     bot.starters = (Array.isArray(body?.starters) ? body.starters : []).filter((s: unknown) => typeof s === 'string' && s.trim()).slice(0, 6);

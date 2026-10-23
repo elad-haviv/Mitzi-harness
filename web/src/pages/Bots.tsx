@@ -1,4 +1,4 @@
-import { Brain, Globe, ImageIcon, Layers, MessageSquare, Pencil, Plug, Plus, ThumbsDown, ThumbsUp, Trash2, Users, WandSparkles, X, Split, Code2 } from 'lucide-react';
+import { Brain, Globe, ImageIcon, Layers, MessageSquare, Pencil, Plug, Plus, ThumbsDown, ThumbsUp, Trash2, Users, WandSparkles, X, Split, Code2, MousePointerClick } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, BankProfile, Bot, BotTools, Lesson } from '../api';
 import { ModelPicker } from '../components/ModelPicker';
@@ -211,6 +211,7 @@ function BotEditor({ bot, onClose, onSaved }: { bot?: Bot; onClose(): void; onSa
               ['code', <Code2 size={18} key="py" />, 'Python', 'Run Python for calculations, data analysis and charts (in a sandbox, or in the project’s folder)'],
               ['subagents', <Split size={18} key="sa" />, 'Subagents', 'Split focused parts of a task off to copies of itself that work in parallel, each with a clean context'],
               ['browser', <Globe size={18} key="b" />, 'Browser', 'Use a real web browser to read and act on websites (asks before each step)'],
+              ['computer', <MousePointerClick size={18} key="pc" />, 'Computer', 'See the screen and use the mouse and keyboard, when computer control is on in Settings (asks before each step)'],
             ] as const
           ).map(([k, icon, t, s]) => (
             <div key={k} className="tool-toggle">

@@ -30,6 +30,8 @@ export interface UiSettings {
   autoCheckUpdates: boolean;
   /** Show the browser window while bots use it (otherwise it runs out of sight). */
   browserHeaded?: boolean;
+  /** Bots may see the screen and use the mouse and keyboard (off unless turned on). */
+  computerUse?: boolean;
   /** Spending limits, in US dollars. */
   budget?: BudgetSettings;
   /** The models the "Auto" model chooses between. */
@@ -156,6 +158,8 @@ export interface BotTools {
   code?: boolean;
   /** Use a real web browser (asks before each action unless allowed for the chat). */
   browser?: boolean;
+  /** See the screen and use the mouse and keyboard, when computer control is on in Settings. */
+  computer?: boolean;
 }
 
 /** Hindsight-style traits shaping how a bank forms and interprets memories, each 1–5. */
@@ -225,8 +229,8 @@ export type ChatMessage = Message & {
   feedbackLoopId?: string;
   /** Said aloud in a realtime voice conversation (the text is its transcript). */
   spoken?: boolean;
-  /** Set on user messages Mitzi sent for the user: redo directions, plan approval, goal follow-ups. */
-  auto?: 'redo' | 'plan' | 'goal';
+  /** Set on user messages Mitzi sent for the user: redo directions, plan approval, goal follow-ups, screenshots for the model. */
+  auto?: 'redo' | 'plan' | 'goal' | 'images';
 };
 
 /** Time, tokens and cost of one response, including any teammates' work. */

@@ -17,6 +17,8 @@ export interface ToolContext {
   /** Id of the tool call currently running. */
   callId?: string;
   onTodos?(todos: Todo[]): void;
+  /** Images (URLs) a tool wants the model to see, such as screenshots; sent after the tool results. */
+  images?: string[];
 }
 
 export interface Tool<A = any> {

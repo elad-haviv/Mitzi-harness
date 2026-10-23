@@ -1,5 +1,7 @@
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { Agent } from '../agent.js';
+import { join } from 'node:path';
+import { Agent, TOOL_IMAGES_NOTE } from '../agent.js';
 import type { Config, PermissionMode } from '../config.js';
 import type { ContentPart, LlmClient, Message } from '../openrouter.js';
 import type { RoutingClient } from '../providers.js';
@@ -28,6 +30,7 @@ import { todoTool } from '../tools/todo.js';
 import { currentUsageTag, UsageLog, withUsage } from './usage.js';
 import { concreteModel, route, RouteInput, RouteModels, routeModels } from './routing.js';
 import { BrowserService, browserTool } from './browser.js';
+import { ComputerService, computerTool } from './computer.js';
 
 const MAX_EVENT_OUTPUT = 20_000;
 
@@ -58,6 +61,7 @@ export interface RunnerDeps {
   compareInsights: CompareInsightsStore;
   knowledge: KnowledgeIndex;
   python?: PythonSandbox;
+  computer?: ComputerService;
 }
 
 export type RunInput =
@@ -299,7 +303,7 @@ export class ChatRunner {
       settings: store.settings,
       toolNames: tools,
       // Memories recalled for the latest user message.
-      recalled: chat.messages.findLast((m) => m.role === 'user')?.memories ?? [],
+      recalled: chat.messages.findLast((m) => m.role === 'user' && m.auto !== 'images')?.memories ?? [],
       skills: this.deps.skills.enabled(),
       knowledge: project ? this.knowledgeFor(project, chat) : undefined,
       artifacts: store.artifacts.all().filter((a) => a.chatId === chat.id),
@@ -318,6 +322,15 @@ export class ChatRunner {
     const query = asked.map((m) => (typeof m.content === 'string' ? m.content : (m.content ?? []).map((p) => (p.type === 'text' ? p.text : '')).join(' ')).replace(/<attachment[\s\S]*?<\/attachment>/g, ' ')).join('\n');
     return { mode: 'search', names: docs.map((d) => d.name), excerpts: knowledge.search(project, query) };
   }
+
+  /** Screenshots and other generated images are local files; requests carry them as data URLs. */
+  private inlineImage = (url: string): string | undefined => {
+    const name = /^\/media\/([a-f0-9]{32}\.(jpg|jpeg|png|webp|gif))$/.exec(url);
+    const path = name && join(this.deps.media.dir, name[1]);
+    if (!path || !existsSync(path)) return undefined;
+    const mime = name[2] === 'jpg' ? 'jpeg' : name[2];
+    return `data:image/${mime};base64,${readFileSync(path).toString('base64')}`;
+  };
 
   /** The chat's artifact open in the workspace, if any. */
   focusOf(chat: Chat): Artifact | undefined {
@@ -360,6 +373,7 @@ export class ChatRunner {
     if (bot.tools.skills && this.deps.skills.enabled().length) tools.push(skillTool(this.deps.skills));
     tools.push(...this.extraTools());
     if (bot.tools.browser !== false && !this.deps.browser.unavailable()) tools.push(browserTool(this.deps.browser, onBrowser));
+    if (store.settings.computerUse && bot.tools.computer !== false && this.deps.computer) tools.push(computerTool(this.deps.computer));
     if (bot.tools.media !== false) {
       // Generated media are kept as artifacts of the chat, so they show up in the gallery.
       tools.push(
@@ -419,6 +433,7 @@ export class ChatRunner {
       permissions,
       ui: new TeammateUI(() => {}),
       cwd: project?.folder ?? homedir(),
+      inlineImage: this.inlineImage,
       systemPrompt: () => `${systemPrompt({ ...this.setup(chat), toolNames: tools.map((t) => t.name), team: [] })}${opts.note ? `\n\n${opts.note}` : ''}`,
     });
     agent.messages = [{ role: 'user', content: opts.prompt }];
@@ -479,6 +494,7 @@ export class ChatRunner {
       permissions: run.permissions,
       ui: new TeammateUI(send),
       cwd: project?.folder ?? homedir(),
+      inlineImage: this.inlineImage,
       systemPrompt: () =>
         `${systemPrompt({ ...this.setup(virtual), recalled, team: [] })}\n\n` +
         (run.subagent
@@ -625,7 +641,7 @@ export class ChatRunner {
     let content: string | ContentPart[];
     let command: string | undefined;
     if (input.kind === 'regenerate') {
-      const last = chat.messages.findLastIndex((m) => m.role === 'user');
+      const last = chat.messages.findLastIndex((m) => m.role === 'user' && m.auto !== 'images');
       if (last < 0) throw new Error('Nothing to regenerate');
       content = chat.messages[last].content ?? '';
       chat.messages = chat.messages.slice(0, last);
@@ -779,6 +795,7 @@ export class ChatRunner {
       permissions,
       ui,
       cwd: project?.folder ?? homedir(),
+      inlineImage: this.inlineImage,
       systemPrompt: () => systemPrompt({ ...this.setup(chat), model, planning: !!planRequest }),
     });
     const firstText = typeof content === 'string' ? content : content.map((p) => (p.type === 'text' ? p.text : '')).join(' ');
@@ -823,7 +840,7 @@ export class ChatRunner {
         const goal = chat.goal;
         goal.turns++;
         emit({ type: 'status', message: 'Checking the goal…' });
-        const lastUser = agent.messages.findLastIndex((m) => m.role === 'user');
+        const lastUser = agent.messages.findLastIndex((m) => m.role === 'user' && !(Array.isArray(m.content) && m.content[0]?.type === 'text' && m.content[0].text === TOOL_IMAGES_NOTE));
         const work = agent.messages
           .slice(lastUser + 1)
           .map((m) => (m.role === 'assistant' ? (typeof m.content === 'string' ? m.content : '') : m.role === 'tool' ? `[tool result] ${String(m.content).slice(0, 600)}` : ''))
@@ -863,7 +880,8 @@ export class ChatRunner {
         added.push({ role: 'assistant', content: ui.partialText, ...(ui.partialReasoning.trim() ? { reasoning: ui.partialReasoning } : {}) });
       }
       const ts = Date.now();
-      const saved: ChatMessage[] = added.map((m) => ({ ...m, ts, ...(m.role === 'assistant' ? { model } : {}) }));
+      const toolImages = (m: Message) => m.role === 'user' && Array.isArray(m.content) && m.content[0]?.type === 'text' && m.content[0].text === TOOL_IMAGES_NOTE;
+      const saved: ChatMessage[] = added.map((m) => ({ ...m, ts, ...(m.role === 'assistant' ? { model } : {}), ...(toolImages(m) ? { auto: 'images' as const } : {}) }));
       // The whole response's time, tokens and cost (teammates and goal checks included) go on its last answer.
       const stats = { durationMs: ts - started, promptTokens: totals.prompt, completionTokens: totals.completion, cost: totals.cost, requests: totals.requests };
       const last = saved.findLast((m) => m.role === 'assistant');
