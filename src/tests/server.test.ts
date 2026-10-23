@@ -381,7 +381,7 @@ test('auto-compaction triggers when the last request was near the limit', async 
 
 test('bots shape new chats; deleting a project keeps or deletes its chats', async () => {
   const bot = (await call('POST', '/api/bots', { name: 'Pirate', emoji: '🏴‍☠️', systemPrompt: 'Talk like a pirate.', model: 'test/model', tools: { web: false } })).data;
-  assert.deepEqual(bot.tools, { artifacts: true, web: false, memory: true, skills: true, connectors: true, media: true, team: true });
+  assert.deepEqual(bot.tools, { artifacts: true, web: false, memory: true, skills: true, connectors: true, media: true, team: true, browser: true });
   reply = () => textChunks('Arr');
   const chat = (await call('POST', '/api/chats', { botId: bot.id })).data;
   await stream(`/api/chats/${chat.id}/messages`, { content: 'Ahoy' });
@@ -442,6 +442,227 @@ test('a bot hands tasks to teammates and uses their answers', async () => {
   assert.doesNotMatch(JSON.stringify(lastMain().messages[0]), /# Your team/);
   await call('PATCH', '/api/bots/mitzi', { tools: { team: true } });
   await call('DELETE', `/api/bots/${mate.id}`);
+});
+
+test('each response records its time, tokens and cost; usage adds up per chat and project', async () => {
+  const project = (await call('POST', '/api/projects', { name: 'Costs' })).data;
+  reply = () => textChunks('Counted.');
+  const chat = (await call('POST', '/api/chats', { projectId: project.id })).data;
+  const events = await stream(`/api/chats/${chat.id}/messages`, { content: 'Count me' });
+  const stats = events.find((e) => e.type === 'stats').stats;
+  assert.equal(stats.promptTokens, 10);
+  assert.equal(stats.completionTokens, 5);
+  assert.equal(stats.requests, 1);
+  assert.ok(stats.durationMs >= 0);
+  const saved = (await call('GET', `/api/chats/${chat.id}`)).data;
+  assert.deepEqual(saved.messages.at(-1).stats, stats);
+  const usage = (await call('GET', `/api/usage?days=7&projectId=${project.id}`)).data;
+  // The project's usage includes everything done for it: the answer, its title and memory.
+  const answers = usage.byKind.find((k: any) => k.key === 'chat').totals;
+  assert.equal(answers.requests, 1);
+  assert.equal(answers.prompt, 10);
+  assert.equal(usage.totals.requests, usage.byKind.reduce((n: number, k: any) => n + k.totals.requests, 0));
+  assert.equal(usage.byProject[0].name, 'Costs');
+  assert.equal(usage.daily.length, 7);
+  assert.equal(usage.daily.at(-1).requests, usage.totals.requests);
+  // Titles are counted separately from the response.
+  assert.ok((await call('GET', '/api/usage')).data.byKind.some((k: any) => k.key === 'title'));
+});
+
+test('/plan proposes a plan with read-only tools; approving it switches to work mode with a task list', async () => {
+  let turn = 0;
+  reply = (body) => {
+    const names = (body.tools ?? []).map((t: any) => t.function.name);
+    if (turn++ === 0) {
+      assert.ok(names.includes('SubmitPlan'));
+      assert.ok(!names.includes('Artifact') && !names.includes('Delegate'));
+      assert.match(JSON.stringify(body.messages[0]), /# Plan mode/);
+      return toolCallChunks('call_plan', 'SubmitPlan', { plan: '1. Outline the post\n2. Write it', steps: ['Outline the post', 'Write it'] });
+    }
+    return textChunks('Plan ready.');
+  };
+  const chat = (await call('POST', '/api/chats', {})).data;
+  const events = await stream(`/api/chats/${chat.id}/messages`, { content: '/plan a blog post about tea' });
+  assert.deepEqual(events.find((e) => e.type === 'plan').plan.steps, ['Outline the post', 'Write it']);
+  const approved = (await call('POST', `/api/chats/${chat.id}/plan`, { action: 'approve' })).data;
+  assert.equal(approved.mode, 'work');
+  assert.deepEqual(approved.todos.map((t: any) => t.content), ['Outline the post', 'Write it']);
+  reply = (body) => {
+    const system = JSON.stringify(body.messages[0]);
+    assert.match(system, /# Work mode[\s\S]*# Approved plan[\s\S]*# Task list/);
+    assert.ok(body.tools.some((t: any) => t.function.name === 'TodoWrite'));
+    return turn++ === 2 ? toolCallChunks('call_todo', 'TodoWrite', { todos: [{ content: 'Outline the post', status: 'completed' }, { content: 'Write it', status: 'in_progress' }] }) : textChunks('Done.');
+  };
+  await stream(`/api/chats/${chat.id}/messages`, { content: 'Go ahead with the plan.', auto: 'plan' });
+  const saved = (await call('GET', `/api/chats/${chat.id}`)).data;
+  assert.equal(saved.todos[0].status, 'completed');
+  assert.equal(saved.messages.findLast((m: any) => m.role === 'user').auto, 'plan');
+});
+
+test('/goal keeps working until a check says the goal is met; /subgoal adds milestones', async () => {
+  let checks = 0;
+  let work = 0;
+  reply = (body) => {
+    const prompt = JSON.stringify(body.messages);
+    if (/fully achieved a goal/.test(prompt)) {
+      return textChunks(++checks === 1 ? '{"met": false, "done_milestones": ["1"], "reason": "Only the outline exists."}' : '{"met": true, "done_milestones": ["2"], "reason": "The poem is written."}');
+    }
+    assert.ok(body.tools.some((t: any) => t.function.name === 'Goal'));
+    return textChunks(++work === 1 ? 'Outline done.' : 'Poem written.');
+  };
+  const chat = (await call('POST', '/api/chats', {})).data;
+  // Milestones can be set up before the goal starts.
+  const sub = (await call('POST', `/api/chats/${chat.id}/command`, { text: '/subgoal Outline' })).data;
+  assert.equal(sub.goal.status, 'paused');
+  await call('POST', `/api/chats/${chat.id}/command`, { text: '/subgoal Write the poem' });
+  await call('POST', `/api/chats/${chat.id}/command`, { text: '/goal clear' });
+  const events = await stream(`/api/chats/${chat.id}/messages`, { content: '/goal write a poem about rain' });
+  const goals = events.filter((e) => e.type === 'goal').map((e) => e.goal);
+  assert.equal(goals.at(-1).status, 'complete');
+  assert.equal(goals.at(-1).turns, 2);
+  const saved = (await call('GET', `/api/chats/${chat.id}`)).data;
+  assert.deepEqual(
+    saved.messages.map((m: any) => m.auto ?? m.role),
+    ['user', 'assistant', 'goal', 'assistant'],
+  );
+  assert.equal(saved.messages[0].command, '/goal write a poem about rain');
+  assert.equal(saved.goal.lastCheck, 'The poem is written.');
+  // Controls.
+  assert.match((await call('POST', `/api/chats/${chat.id}/command`, { text: '/goal' })).data.message, /complete/);
+  assert.equal((await call('POST', `/api/chats/${chat.id}/command`, { text: '/goal resume' })).status, 400);
+  await call('POST', `/api/chats/${chat.id}/command`, { text: '/goal clear' });
+  assert.equal((await call('GET', `/api/chats/${chat.id}`)).data.goal, undefined);
+});
+
+test('/btw answers a side question without saving it', async () => {
+  reply = () => textChunks('Hello again!');
+  const chat = (await call('POST', '/api/chats', {})).data;
+  await stream(`/api/chats/${chat.id}/messages`, { content: 'Hi' });
+  reply = (body) => {
+    assert.ok(!body.tools);
+    assert.match(JSON.stringify(body.messages.at(-1)), /what did I say/);
+    return textChunks('You said hi.');
+  };
+  const res = await fetch(`${base}/api/chats/${chat.id}/btw`, { method: 'POST', headers: { 'x-mitzi-token': TOKEN, 'content-type': 'application/json' }, body: JSON.stringify({ question: 'what did I say?' }) });
+  const body = await res.text();
+  const answer = body.split('\n\n').filter(Boolean).map((f) => JSON.parse(f.slice(6))).filter((e) => e.type === 'text').map((e) => e.text).join('');
+  assert.equal(answer, 'You said hi.');
+  assert.equal((await call('GET', `/api/chats/${chat.id}`)).data.messages.length, 2);
+});
+
+test('feedback loop: rate, redo with directions until happy, and learn from it', async () => {
+  reply = () => textChunks('A formal letter.');
+  const chat = (await call('POST', '/api/chats', {})).data;
+  await stream(`/api/chats/${chat.id}/messages`, { content: 'Write a note to my neighbor' });
+  const review = (await call('POST', `/api/chats/${chat.id}/messages/1/review`, { rating: 2, meant: 'A friendly short note', did: 'A stiff formal letter', directions: 'Keep it casual and under 50 words', redo: true })).data;
+  assert.equal(review.loop.iterations.length, 1);
+  assert.match(review.redo, /rated it 2\/5[\s\S]*What I meant: A friendly short note[\s\S]*Directions for the redo: Keep it casual/);
+  reply = () => textChunks('Hey! Thanks for the cookies 🙂');
+  await stream(`/api/chats/${chat.id}/messages`, { content: review.redo, auto: 'redo', feedbackLoopId: review.loop.id });
+  let saved = (await call('GET', `/api/chats/${chat.id}`)).data;
+  assert.equal(saved.messages[3].feedbackLoopId, review.loop.id);
+  reply = (body) => {
+    assert.match(JSON.stringify(body.messages), /several attempts[\s\S]*Attempt 1 \(rated 2\/5\)[\s\S]*Attempt 2 \(rated 5\/5\)/);
+    return textChunks('When asked for a note to a neighbor, write it casually and briefly.');
+  };
+  const accepted = (await call('POST', `/api/chats/${chat.id}/messages/3/review`, { rating: 5, wait: true })).data;
+  assert.equal(accepted.loop.status, 'accepted');
+  const loop = (await call('GET', '/api/feedback')).data.find((l: any) => l.id === review.loop.id);
+  assert.equal(loop.lesson, 'When asked for a note to a neighbor, write it casually and briefly.');
+  assert.equal(loop.task, 'Write a note to my neighbor');
+  const bot = (await call('GET', '/api/bots')).data.find((b: any) => b.id === 'mitzi');
+  assert.ok(bot.lessons.some((l: any) => l.text === loop.lesson));
+  const curve = (await call('GET', '/api/insights/learning')).data;
+  assert.equal(curve.points.at(-1).attempts, 2);
+  assert.equal(curve.points.at(-1).firstRating, 2);
+  assert.equal(curve.summary.accepted >= 1, true);
+  saved = (await call('GET', `/api/chats/${chat.id}`)).data;
+  // The redo directions aren't the task.
+  assert.equal(saved.messages[2].auto, 'redo');
+});
+
+test('workflows: run step by step, branch, run from chats and on a schedule', async () => {
+  const pages = createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end('<html><body><h1>Tea news</h1><script>x()</script><p>Green tea is up 5%.</p></body></html>');
+  });
+  await new Promise<void>((r) => pages.listen(0, '127.0.0.1', r));
+  const pageUrl = `http://127.0.0.1:${(pages.address() as AddressInfo).port}/news`;
+  try {
+    const wf = (await call('POST', '/api/workflows', { template: 'digest' })).data;
+    assert.deepEqual(wf.nodes.map((n: any) => n.type), ['trigger', 'browse', 'ai', 'artifact', 'output']);
+    reply = (body) => {
+      const prompt = JSON.stringify(body.messages);
+      assert.match(prompt, /Summarize this page[\s\S]*Green tea is up 5%/);
+      assert.doesNotMatch(prompt, /x\(\)/);
+      assert.match(prompt, /step \\"Summarize\\" of the workflow/);
+      return textChunks('- Green tea prices rose 5%.');
+    };
+    const res = await fetch(`${base}/api/workflows/${wf.id}/run`, { method: 'POST', headers: { 'x-mitzi-token': TOKEN, 'content-type': 'application/json' }, body: JSON.stringify({ input: pageUrl }) });
+    const events = (await res.text()).split('\n\n').filter(Boolean).map((f) => JSON.parse(f.slice(6)));
+    const finished = events.filter((e) => e.type === 'step' && e.step.status === 'done').map((e) => e.step.nodeId);
+    assert.deepEqual(finished, ['start', 'read', 'sum', 'save', 'out']);
+    const run = events.at(-1).run;
+    assert.equal(run.status, 'done');
+    assert.equal(run.output, '- Green tea prices rose 5%.');
+    const saved = (await call('GET', '/api/artifacts')).data.find((a: any) => a.title === `Digest: ${pageUrl}`);
+    assert.ok(saved, 'the artifact step saved a document');
+    assert.equal((await call('GET', `/api/chats/${saved.chatId}`)).status, 200);
+    assert.equal((await call('GET', `/api/workflows/${wf.id}`)).data.runs[0].id, run.id);
+    assert.ok((await call('GET', '/api/usage')).data.byKind.some((k: any) => k.key === 'workflow'));
+
+    // Conditions pick a branch.
+    const triage = (await call('POST', '/api/workflows', { template: 'triage' })).data;
+    reply = (body) => textChunks(/URGENT or ROUTINE/.test(JSON.stringify(body.messages)) ? 'ROUTINE' : 'Thanks for your note!');
+    const runTriage = async () => {
+      const r = await fetch(`${base}/api/workflows/${triage.id}/run`, { method: 'POST', headers: { 'x-mitzi-token': TOKEN, 'content-type': 'application/json' }, body: JSON.stringify({ input: 'Lunch next week?' }) });
+      return (await r.text()).split('\n\n').filter(Boolean).map((f) => JSON.parse(f.slice(6))).at(-1).run;
+    };
+    const t = await runTriage();
+    assert.deepEqual(t.steps.map((s: any) => s.nodeId), ['start', 'classify', 'if', 'routine', 'out']);
+    assert.equal(t.output, 'Thanks for your note!');
+
+    // Loops are refused.
+    const loop = await call('PATCH', `/api/workflows/${triage.id}`, { nodes: triage.nodes, edges: [...triage.edges, { from: 'out', to: 'start' }] });
+    assert.equal(loop.status, 400);
+
+    // Exposed workflows become a tool bots can call.
+    await call('PATCH', `/api/workflows/${triage.id}`, { exposeToChat: true });
+    let turn = 0;
+    reply = (body) => {
+      if (/URGENT or ROUTINE/.test(JSON.stringify(body.messages))) return textChunks('ROUTINE');
+      if (/Draft a friendly reply/.test(JSON.stringify(body.messages))) return textChunks('Sure, Tuesday works!');
+      const tool = body.tools?.find((x: any) => x.function.name === 'Workflow');
+      if (turn++ === 0) {
+        assert.ok(tool);
+        assert.deepEqual(tool.function.parameters.properties.workflow.enum, ['Message triage']);
+        return toolCallChunks('call_wf', 'Workflow', { workflow: 'Message triage', input: 'Lunch next week?' });
+      }
+      return textChunks('Done.');
+    };
+    const chat = (await call('POST', '/api/chats', {})).data;
+    const chatEvents = await stream(`/api/chats/${chat.id}/messages`, { content: 'Triage this: Lunch next week?' }, (e) => {
+      if (e.type === 'permission') void call('POST', `/api/chats/${chat.id}/permission`, { requestId: e.requestId, answer: 'yes' });
+    });
+    assert.equal(chatEvents.find((e) => e.type === 'tool_result' && e.id === 'call_wf').output, 'Sure, Tuesday works!');
+
+    // A scheduled task can run a workflow.
+    const task = (await call('POST', '/api/tasks', { name: 'Daily triage', prompt: 'Lunch next week?', workflowId: triage.id, schedule: { kind: 'daily', time: '09:00' } })).data;
+    await call('POST', `/api/tasks/${task.id}/run`);
+    let runs: any[] = [];
+    for (let i = 0; i < 100 && !runs.some((r) => r.status !== 'running'); i++) {
+      await new Promise((r) => setTimeout(r, 30));
+      runs = (await call('GET', '/api/tasks')).data.find((x: any) => x.id === task.id).runs;
+    }
+    assert.equal(runs[0].status, 'ok');
+    assert.equal(runs[0].preview, 'Sure, Tuesday works!');
+    assert.ok(runs[0].workflowRunId);
+    await call('DELETE', `/api/tasks/${task.id}`);
+    await call('DELETE', `/api/workflows/${triage.id}`);
+    await call('DELETE', `/api/workflows/${wf.id}`);
+  } finally {
+    pages.close();
+  }
 });
 
 /** Polls until a server reaches a status. */

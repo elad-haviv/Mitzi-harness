@@ -19,6 +19,10 @@ import { artifactTool } from './tools.js';
 import { commentTool } from './workspace.js';
 import { MediaService, mediaTools } from './media.js';
 import { delegateTool } from './team.js';
+import { checkGoal, goalTool, newGoal, parseBuiltin, submitPlanTool } from './agentic.js';
+import { todoTool } from '../tools/todo.js';
+import { UsageLog, withUsage } from './usage.js';
+import { BrowserService, browserTool } from './browser.js';
 
 const MAX_EVENT_OUTPUT = 20_000;
 
@@ -37,16 +41,40 @@ export interface RunnerDeps {
   skills: Skills;
   commands: () => CommandDef[];
   media: MediaService;
+  usage: UsageLog;
+  browser: BrowserService;
 }
 
 export type RunInput =
   /** `focus`: the artifact open in the workspace beside the chat. */
-  | { kind: 'message'; content: string; attachments: Attachment[]; editIndex?: number; focus?: string }
+  | {
+      kind: 'message';
+      content: string;
+      attachments: Attachment[];
+      editIndex?: number;
+      focus?: string;
+      /** Sent by Mitzi for the user (redo directions, plan approval). */
+      auto?: ChatMessage['auto'];
+      /** The answer belongs to this feedback loop. */
+      feedbackLoopId?: string;
+    }
   | { kind: 'regenerate' };
 
 export interface RunOptions {
   /** Nobody is watching (scheduled tasks): tools that would ask are allowed or declined automatically. */
   headless?: { autoApprove: boolean };
+  /** The scheduled task this run belongs to, for usage accounting. */
+  taskId?: string;
+}
+
+/** Goal controls typed as "/goal pause" etc.; anything else after /goal is a new goal. */
+export const GOAL_CONTROLS = new Set(['', 'pause', 'resume', 'clear', 'status', 'stop']);
+
+interface RunTotals {
+  prompt: number;
+  completion: number;
+  cost: number;
+  requests: number;
 }
 
 interface ActiveRun {
@@ -121,12 +149,6 @@ class TeammateUI implements UI {
   endTurn(): void {}
 }
 
-interface UsageTotalsLike {
-  promptTokens: number;
-  completionTokens: number;
-  cost: number;
-  requests: number;
-}
 
 export function buildUserContent(text: string, attachments: Attachment[]): string | ContentPart[] {
   const files = attachments
@@ -140,6 +162,8 @@ export function buildUserContent(text: string, attachments: Attachment[]): strin
 
 export class ChatRunner {
   private readonly active = new Map<string, ActiveRun>();
+  /** Tools added from outside (the Workflow tool, set once workflows exist). */
+  extraTools: () => Tool[] = () => [];
 
   constructor(private readonly deps: RunnerDeps) {}
 
@@ -201,7 +225,7 @@ export class ChatRunner {
     return a?.chatId === chat.id ? a : undefined;
   }
 
-  tools(chat: Chat, onArtifact: (a: Artifact) => void): Tool[] {
+  tools(chat: Chat, onArtifact: (a: Artifact) => void, onBrowser: (v: { url: string; title: string; screenshot?: string }) => void = () => {}): Tool[] {
     const { store, memory } = this.deps;
     const project = chat.projectId ? store.projects.get(chat.projectId) : undefined;
     const bot = this.botFor(chat);
@@ -212,6 +236,8 @@ export class ChatRunner {
     if (focus || store.artifacts.all().some((a) => a.chatId === chat.id && a.comments?.length)) tools.push(commentTool(store, chat.id, onArtifact));
     if (this.memoryOn(bot)) tools.push(memoryTool(memory, memory.bankFor(bot)));
     if (bot.tools.skills && this.deps.skills.enabled().length) tools.push(skillTool(this.deps.skills));
+    tools.push(...this.extraTools());
+    if (bot.tools.browser !== false && !this.deps.browser.unavailable()) tools.push(browserTool(this.deps.browser, onBrowser));
     if (bot.tools.media !== false) {
       // Generated media are kept as artifacts of the chat, so they show up in the gallery.
       tools.push(
@@ -234,9 +260,59 @@ export class ChatRunner {
     return tools;
   }
 
+  /**
+   * Runs a bot on one prompt outside any chat (a workflow step). Tools that would ask for permission are declined
+   * unless `autoApprove`. Resolves to the final answer.
+   */
+  async runOnce(opts: { botId?: string; model?: string; prompt: string; projectId?: string; tools: boolean; autoApprove: boolean; note?: string; signal?: AbortSignal }): Promise<string> {
+    const { store, catalog } = this.deps;
+    const bot = store.bots.get(opts.botId ?? DEFAULT_BOT_ID) ?? store.bots.get(DEFAULT_BOT_ID)!;
+    const model = opts.model || bot.model || this.deps.config().model;
+    const project = opts.projectId ? store.projects.get(opts.projectId) : undefined;
+    const chat: Chat = {
+      id: `once-${newId()}`,
+      title: 'Workflow step',
+      botId: bot.id,
+      projectId: project?.id,
+      model,
+      webSearch: false,
+      pinned: false,
+      messages: [],
+      contextStart: 0,
+      allowedRules: [],
+      usage: { promptTokens: 0, completionTokens: 0, cost: 0, requests: 0 },
+      lastPromptTokens: 0,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    const tools = opts.tools ? (await this.allTools(chat, () => {})).tools.filter((t) => !/^(Artifact|ArtifactComment|Workflow|Delegate)$/.test(t.name)) : [];
+    const supportsTools = (await catalog.list().catch(() => [])).find((m) => m.id === model)?.tools ?? true;
+    const permissions = new Permissions(project?.permissionMode ?? 'default', [], async () =>
+      opts.autoApprove ? { kind: 'yes' } : { kind: 'feedback', text: 'This step runs unattended, so tools that need approval are unavailable. Do what you can without them.' },
+    );
+    const agent = new Agent({
+      client: this.deps.client(),
+      config: { ...this.deps.config(), model, temperature: bot.temperature, autoCompactTokens: 0, maxTurns: 25 },
+      tools: supportsTools ? tools : [],
+      permissions,
+      ui: new TeammateUI(() => {}),
+      cwd: project?.folder ?? homedir(),
+      systemPrompt: () => `${systemPrompt({ ...this.setup(chat), toolNames: tools.map((t) => t.name), team: [] })}${opts.note ? `\n\n${opts.note}` : ''}`,
+    });
+    agent.messages = [{ role: 'user', content: opts.prompt }];
+    await agent.run(null, opts.signal);
+    const last = agent.messages.findLast((m) => m.role === 'assistant' && typeof m.content === 'string' && m.content.trim());
+    return typeof last?.content === 'string' ? last.content : '';
+  }
+
   /** All tools for a turn, including connector (MCP) tools, which may need a moment to start. */
-  async allTools(chat: Chat, onArtifact: (a: Artifact) => void, waitMs = 20_000): Promise<{ tools: Tool[]; warnings: string[] }> {
-    const tools = this.tools(chat, onArtifact);
+  async allTools(
+    chat: Chat,
+    onArtifact: (a: Artifact) => void,
+    waitMs = 20_000,
+    onBrowser?: (v: { url: string; title: string; screenshot?: string }) => void,
+  ): Promise<{ tools: Tool[]; warnings: string[] }> {
+    const tools = this.tools(chat, onArtifact, onBrowser);
     if (!this.botFor(chat).tools.connectors) return { tools, warnings: [] };
     const mcp = await this.deps.mcp.tools(waitMs);
     return { tools: [...tools, ...mcp.tools], warnings: mcp.warnings };
@@ -246,7 +322,7 @@ export class ChatRunner {
   private async recall(bot: Bot, query: string, emit: (e: StreamEvent) => void): Promise<RecalledMemory[]> {
     const { memory, store } = this.deps;
     try {
-      return await memory.backend().recall(memory.bankFor(bot), query, { maxTokens: store.settings.recallTokens });
+      return await withUsage({ kind: 'memory', sink: undefined }, () => memory.backend().recall(memory.bankFor(bot), query, { maxTokens: store.settings.recallTokens }));
     } catch (err: any) {
       emit({ type: 'warn', message: `Couldn't recall memories: ${err.message}` });
       return [];
@@ -262,7 +338,7 @@ export class ChatRunner {
     lead: Bot,
     mate: Bot,
     task: string,
-    run: { callId: string; permissions: Permissions; emit: (e: StreamEvent) => void; usage: UsageTotalsLike; signal?: AbortSignal },
+    run: { callId: string; permissions: Permissions; emit: (e: StreamEvent) => void; signal?: AbortSignal },
   ): Promise<string> {
     const { store, catalog } = this.deps;
     const project = chat.projectId ? store.projects.get(chat.projectId) : undefined;
@@ -290,11 +366,6 @@ export class ChatRunner {
     } catch (err: any) {
       send('error', err?.message ?? String(err));
       throw err;
-    } finally {
-      run.usage.promptTokens += agent.usage.promptTokens;
-      run.usage.completionTokens += agent.usage.completionTokens;
-      run.usage.cost += agent.usage.cost;
-      run.usage.requests += agent.usage.requests;
     }
     const last = agent.messages.findLast((m) => m.role === 'assistant' && typeof m.content === 'string' && m.content.trim());
     const answer = typeof last?.content === 'string' ? last.content : '';
@@ -316,15 +387,13 @@ export class ChatRunner {
       .join('\n\n');
     if (!userText.trim() || !assistant.trim()) return;
     const project = chat.projectId ? this.deps.store.projects.get(chat.projectId) : undefined;
-    memory
-      .backend()
-      .retain(memory.bankFor(bot), {
+    withUsage({ kind: 'memory', sink: undefined }, () => memory.backend().retain(memory.bankFor(bot), {
         content: `User: ${userText.slice(0, 8000)}\n\nAssistant: ${assistant.slice(0, 8000)}`,
         context: `Conversation "${chat.title}"${project ? ` in project "${project.name}"` : ''}`,
         timestamp: new Date().toISOString(),
         chatId: chat.id,
       })
-      .catch((err) => console.warn(`Memory: retain failed for bank ${bot.id}: ${err.message}`));
+    ).catch((err) => console.warn(`Memory: retain failed for bank ${bot.id}: ${err.message}`));
   }
 
   async run(chatId: string, input: RunInput, emit: (e: StreamEvent) => void, disconnect: AbortSignal, options: RunOptions = {}): Promise<void> {
@@ -336,8 +405,24 @@ export class ChatRunner {
     const run: ActiveRun = { controller: new AbortController(), pending: new Map() };
     const signal = AbortSignal.any([run.controller.signal, disconnect]);
     this.active.set(chatId, run);
+    const totals: RunTotals = { prompt: 0, completion: 0, cost: 0, requests: 0 };
     try {
-      await this.execute(chat, run, input, emit, signal, options);
+      await withUsage(
+        {
+          kind: options.headless ? 'task' : 'chat',
+          chatId,
+          projectId: chat.projectId,
+          botId: this.botFor(chat).id,
+          taskId: options.taskId,
+          sink: (e) => {
+            totals.prompt += e.prompt;
+            totals.completion += e.completion;
+            totals.cost += e.cost;
+            totals.requests++;
+          },
+        },
+        () => this.execute(chat, run, input, emit, signal, options, totals),
+      );
     } finally {
       this.active.delete(chatId);
     }
@@ -345,8 +430,18 @@ export class ChatRunner {
     emit({ type: 'done' });
   }
 
-  private async execute(chat: Chat, run: ActiveRun, input: RunInput, emit: (e: StreamEvent) => void, signal: AbortSignal, options: RunOptions): Promise<void> {
+  private async execute(
+    chat: Chat,
+    run: ActiveRun,
+    input: RunInput,
+    emit: (e: StreamEvent) => void,
+    signal: AbortSignal,
+    options: RunOptions,
+    totals: RunTotals,
+  ): Promise<void> {
     const { store, catalog } = this.deps;
+    const started = Date.now();
+    let planRequest: string | undefined;
     const client = this.deps.client();
     const project = chat.projectId ? store.projects.get(chat.projectId) : undefined;
     const bot = this.botFor(chat);
@@ -365,9 +460,23 @@ export class ChatRunner {
         chat.messages = chat.messages.slice(0, input.editIndex);
       }
       // "/name args" runs a slash command: its template becomes the message.
-      const slash = input.content.startsWith('/') ? parseSlash(input.content) : undefined;
+      const builtin = parseBuiltin(input.content);
+      const slash = input.content.startsWith('/') && !builtin ? parseSlash(input.content) : undefined;
       const def = slash && this.deps.commands().find((c) => c.name === slash.name);
-      if (def) {
+      if (builtin?.name === 'plan') {
+        if (!builtin.args) throw new Error('Say what to plan: /plan <what you want done>');
+        command = input.content.trim();
+        planRequest = builtin.args;
+        content = buildUserContent(`Make a plan for this (don't carry it out yet):\n\n${builtin.args}`, input.attachments);
+      } else if (builtin?.name === 'goal' && !GOAL_CONTROLS.has(builtin.args.toLowerCase())) {
+        command = input.content.trim();
+        chat.goal = newGoal(builtin.args);
+        chat.mode = 'work';
+        emit({ type: 'goal', goal: chat.goal });
+        content = buildUserContent(`Work on this goal until it's met:\n\n${builtin.args}`, input.attachments);
+      } else if (builtin) {
+        throw new Error(`/${builtin.name}${builtin.args ? ` ${builtin.args}` : ''} isn't a message; send it with the command endpoint`);
+      } else if (def) {
         command = input.content.trim();
         emit({ type: 'status', message: `Running /${def.name}…` });
         content = buildUserContent(await expandCommand(def, slash!.args, project?.folder), input.attachments);
@@ -434,24 +543,37 @@ export class ChatRunner {
         });
       });
 
-    const toolset = await this.allTools(chat, (artifact) => emit({ type: 'artifact', artifact }));
+    const toolset = await this.allTools(chat, (artifact) => emit({ type: 'artifact', artifact }), undefined, (v) => emit({ type: 'browser', ...v }));
     for (const w of toolset.warnings) emit({ type: 'warn', message: w });
-    const tools = toolset.tools;
-    const teamUsage: UsageTotalsLike = { promptTokens: 0, completionTokens: 0, cost: 0, requests: 0 };
+    let tools = toolset.tools;
     const team = this.teamFor(bot);
     const permissions = new Permissions(project?.permissionMode ?? 'default', chat.allowedRules, approver);
-    if (team.length) {
-      tools.push(delegateTool(team, (mate, task, callId, toolSignal) => this.runTeammate(chat, bot, mate, task, { callId, permissions, emit, usage: teamUsage, signal: toolSignal ?? signal })));
+    if (team.length && !planRequest) {
+      tools.push(delegateTool(team, (mate, task, callId, toolSignal) => this.runTeammate(chat, bot, mate, task, { callId, permissions, emit, signal: toolSignal ?? signal })));
+    }
+    const working = chat.mode === 'work' || chat.goal?.status === 'active';
+    if (working && !tools.some((t) => t.name === 'TodoWrite')) tools.push(todoTool);
+    if (chat.goal?.status === 'active') {
+      const goal = chat.goal;
+      tools.push(goalTool(goal, () => emit({ type: 'goal', goal: { ...goal, subgoals: goal.subgoals.map((x) => ({ ...x })) } })));
+    }
+    if (planRequest) {
+      // Planning looks around but changes nothing.
+      tools = [...tools.filter((t) => t.kind === 'read' && !/^(TodoWrite|Artifact|ArtifactComment|Generate\w+)$/.test(t.name)), submitPlanTool(chat, planRequest, (plan) => emit({ type: 'plan', plan }))];
     }
     const supportsTools = (await catalog.list().catch(() => [])).find((m) => m.id === chat.model)?.tools ?? true;
-    const ui = new WebUI(emit);
+    // The task list is kept with the chat, so it survives reloads and shows in the side panel.
+    const ui = new WebUI((e) => {
+      if (e.type === 'todos') chat.todos = e.todos;
+      emit(e);
+    });
     const config: Config = {
       ...this.deps.config(),
       // Web search is OpenRouter's :online feature.
       model: chat.webSearch && client.isOpenRouter(chat.model) ? `${chat.model}:online` : chat.model,
       temperature: bot.temperature,
       autoCompactTokens: 0, // the runner compacts per chat instead
-      maxTurns: 50,
+      maxTurns: working ? 100 : 50,
     };
     const agent = new Agent({
       client,
@@ -460,11 +582,17 @@ export class ChatRunner {
       permissions,
       ui,
       cwd: project?.folder ?? homedir(),
-      systemPrompt: () => systemPrompt(this.setup(chat)),
+      systemPrompt: () => systemPrompt({ ...this.setup(chat), planning: !!planRequest }),
     });
     const firstText = typeof content === 'string' ? content : content.map((p) => (p.type === 'text' ? p.text : '')).join(' ');
     // Save the user's message right away so a reload mid-turn still shows it.
-    const userMessage: ChatMessage = { role: 'user', content, ts: Date.now(), ...(command ? { command } : {}) };
+    const userMessage: ChatMessage = {
+      role: 'user',
+      content,
+      ts: Date.now(),
+      ...(command ? { command } : {}),
+      ...(input.kind === 'message' && input.auto ? { auto: input.auto } : {}),
+    };
     chat.messages.push(userMessage);
     chat.updatedAt = now();
     store.chats.put(chat);
@@ -485,7 +613,7 @@ export class ChatRunner {
     // Name the chat in parallel with the answer, and show the title as soon as it's ready.
     const title =
       isFirstTurn && chat.title === 'New chat'
-        ? generateTitle(client, titleModel, firstText).then((generated) => {
+        ? withUsage({ kind: 'title', sink: undefined }, () => generateTitle(client, titleModel, firstText)).then((generated) => {
             chat.title = generated || firstText.slice(0, 60).replace(/\s+/g, ' ').trim() || 'New chat';
             emit({ type: 'chat', chat: summarizeChat(chat) });
           })
@@ -493,6 +621,42 @@ export class ChatRunner {
 
     try {
       await agent.run(null, signal);
+      // A goal keeps the bot working: check after each turn, and continue until it's met or out of turns.
+      while (!signal.aborted && chat.goal?.status === 'active' && agent.messages.at(-1)?.role === 'assistant') {
+        const goal = chat.goal;
+        goal.turns++;
+        emit({ type: 'status', message: 'Checking the goal…' });
+        const lastUser = agent.messages.findLastIndex((m) => m.role === 'user');
+        const work = agent.messages
+          .slice(lastUser + 1)
+          .map((m) => (m.role === 'assistant' ? (typeof m.content === 'string' ? m.content : '') : m.role === 'tool' ? `[tool result] ${String(m.content).slice(0, 600)}` : ''))
+          .filter(Boolean)
+          .join('\n\n');
+        const verdict = await withUsage({ kind: 'goal' }, () => checkGoal(client, this.deps.config().smallModel ?? chat.model, goal, work, signal));
+        for (const id of verdict.done) {
+          const sub = goal.subgoals.find((x) => x.id === id);
+          if (sub) sub.done = true;
+        }
+        goal.lastCheck = verdict.reason;
+        if (verdict.met) {
+          goal.status = 'complete';
+          goal.completedAt = now();
+        } else if (goal.turns >= goal.maxTurns) goal.status = 'budget';
+        emit({ type: 'goal', goal: { ...goal, subgoals: goal.subgoals.map((x) => ({ ...x })) } });
+        if (goal.status !== 'active') break;
+        const open = goal.subgoals.filter((x) => !x.done).map((x) => `${x.id}. ${x.text}`);
+        const follow: ChatMessage = {
+          role: 'user',
+          content: `Keep working toward the goal.${open.length ? `\n\nMilestones still open:\n${open.join('\n')}` : ''}\n\nLast check: ${verdict.reason}`,
+          auto: 'goal',
+        };
+        agent.messages.push(follow as Message);
+        await agent.run(null, signal);
+      }
+      if (signal.aborted && chat.goal?.status === 'active') {
+        chat.goal.status = 'paused';
+        emit({ type: 'goal', goal: chat.goal });
+      }
     } catch (err: any) {
       if (!signal.aborted) emit({ type: 'error', message: err?.message ?? String(err) });
     } finally {
@@ -502,11 +666,20 @@ export class ChatRunner {
         added.push({ role: 'assistant', content: ui.partialText, ...(ui.partialReasoning.trim() ? { reasoning: ui.partialReasoning } : {}) });
       }
       const ts = Date.now();
-      chat.messages.push(...added.map((m) => ({ ...m, ts, ...(m.role === 'assistant' ? { model: chat.model } : {}) })));
-      chat.usage.promptTokens += agent.usage.promptTokens + teamUsage.promptTokens;
-      chat.usage.completionTokens += agent.usage.completionTokens + teamUsage.completionTokens;
-      chat.usage.cost += agent.usage.cost + teamUsage.cost;
-      chat.usage.requests += agent.usage.requests + teamUsage.requests;
+      const saved: ChatMessage[] = added.map((m) => ({ ...m, ts, ...(m.role === 'assistant' ? { model: chat.model } : {}) }));
+      // The whole response's time, tokens and cost (teammates and goal checks included) go on its last answer.
+      const stats = { durationMs: ts - started, promptTokens: totals.prompt, completionTokens: totals.completion, cost: totals.cost, requests: totals.requests };
+      const last = saved.findLast((m) => m.role === 'assistant');
+      if (last) {
+        last.stats = stats;
+        if (input.kind === 'message' && input.feedbackLoopId) last.feedbackLoopId = input.feedbackLoopId;
+      }
+      emit({ type: 'stats', stats });
+      chat.messages.push(...saved);
+      chat.usage.promptTokens += totals.prompt;
+      chat.usage.completionTokens += totals.completion;
+      chat.usage.cost += totals.cost;
+      chat.usage.requests += totals.requests;
       if (agent.lastPromptTokens) chat.lastPromptTokens = agent.lastPromptTokens;
       chat.allowedRules = [...new Set([...chat.allowedRules, ...permissions.sessionRules])];
       chat.updatedAt = now();

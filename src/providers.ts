@@ -98,6 +98,8 @@ export class RoutingClient implements LlmClient {
   /** Errors from the last listModels(), by provider id. */
   readonly errors = new Map<string, string>();
   readonly counts = new Map<string, number>();
+  /** Told about every chat call's token usage (for the usage log). */
+  onUsage?: (model: string, usage: ChatResult['usage']) => void;
 
   constructor(readonly providers: ResolvedProvider[]) {}
 
@@ -145,9 +147,11 @@ export class RoutingClient implements LlmClient {
     }
   }
 
-  chat(req: ChatRequest, handlers?: StreamHandlers): Promise<ChatResult> {
+  async chat(req: ChatRequest, handlers?: StreamHandlers): Promise<ChatResult> {
     const { provider, model } = this.route(req.model);
-    return this.client(provider).chat({ ...req, model }, handlers);
+    const result = await this.client(provider).chat({ ...req, model }, handlers);
+    this.onUsage?.(req.model, result.usage);
+    return result;
   }
 
   embed(model: string, input: string[]): Promise<number[][]> {

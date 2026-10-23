@@ -14,6 +14,7 @@ import {
   ImageIcon,
   Music,
   Square,
+  Star,
   ThumbsDown,
   ThumbsUp,
   Video,
@@ -42,6 +43,8 @@ import { ArtifactIcon, TYPE_LABEL } from './Artifacts';
 import { CopyButton, Markdown } from './Markdown';
 import { Diff, useAutoResize } from './ui';
 import { TeamCard, TeamProgress } from './Team';
+import { AutoMessage, LoopBadge, ReviewBox } from './Feedback';
+import { clock, PlanCard, StatsLine, useChatActions, useElapsed } from './Work';
 
 // ---------- Content helpers ----------
 
@@ -147,6 +150,11 @@ export function UserTurn({
   onEdit?(text: string, attachments: Attachment[]): void;
   disabled?: boolean;
 }) {
+  if (message.auto) return <AutoMessage message={message} />;
+  return <UserBubble message={message} onEdit={onEdit} disabled={disabled} />;
+}
+
+function UserBubble({ message, onEdit, disabled }: { message: ChatMessage; onEdit?(text: string, attachments: Attachment[]): void; disabled?: boolean }) {
   const { text, attachments } = useMemo(() => splitUserContent(message.content), [message.content]);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(text);
@@ -281,7 +289,10 @@ export function AssistantTurn({
   onRegenerate,
   onBranch,
   onRate,
+  reviewIndex,
 }: {
+  /** Index of the turn's last message, when it can be reviewed in a feedback loop. */
+  reviewIndex?: number;
   /** Stable id for read-aloud. */
   id: string;
   messages: ChatMessage[];
@@ -299,6 +310,11 @@ export function AssistantTurn({
   const text = messages.map(messageText).filter(Boolean).join('\n\n');
   const model = messages.find((m) => m.model)?.model;
   const rating = messages.at(-1)?.rating;
+  const stats = messages.at(-1)?.stats;
+  const actions = useChatActions();
+  const loopId = messages.at(-1)?.feedbackLoopId;
+  const loop = loopId ? actions?.loops.find((l) => l.id === loopId) : undefined;
+  const [reviewing, setReviewing] = useState(false);
   return (
     <div className="turn turn-assistant">
       <Avatar bot={bot} />
@@ -321,8 +337,21 @@ export function AssistantTurn({
               <RefreshCw size={14} />
             </button>
           )}
+          {reviewIndex !== undefined && actions && (
+            <button
+              className={`icon-btn sm review-btn${reviewing ? ' on' : ''}`}
+              title="Rate this result and, if it isn’t right, have it redone with your directions"
+              aria-label="Review this result"
+              onClick={() => setReviewing((r) => !r)}
+            >
+              <Star size={14} /> <span>Review</span>
+            </button>
+          )}
           {model && <span className="meta">{modelLabel(model, models)}</span>}
+          {stats && <StatsLine stats={stats} />}
         </div>
+        {loop && reviewIndex !== undefined && <LoopBadge loop={loop} index={reviewIndex} />}
+        {reviewing && reviewIndex !== undefined && <ReviewBox index={reviewIndex} loop={loop} onDone={() => setReviewing(false)} />}
         {rating?.lesson && (
           <div className="lesson-note" title="Saved to this bot's lessons; you can remove it on the Bots page">
             <Brain size={13} /> Learned: {rating.lesson}
@@ -482,12 +511,14 @@ function AssistantMessageBody({
 /** The model's thinking, collapsed by default. While it streams, the latest line shows as a preview. */
 export function Reasoning({ text, active }: { text: string; active?: boolean }) {
   const [open, setOpen] = useState(false);
+  const started = useRef(Date.now());
+  const seconds = useElapsed(started.current, !!active);
   const preview = active ? (text.trim().split('\n').filter(Boolean).at(-1) ?? '').replace(/[*_#`>]/g, '').slice(0, 120) : '';
   return (
     <div className="tool reasoning">
       <button className="tool-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <span className="tool-icon">{active ? <Loader2 size={13} className="spin" /> : <Sparkles size={13} />}</span>
-        <span className="tool-name">{active ? 'Thinking…' : 'Thought process'}</span>
+        <span className="tool-name">{active ? <>Thinking… <span className="muted">{clock(seconds)}</span></> : 'Thought process'}</span>
         <span className="tool-summary">{!open && preview}</span>
         {open ? <ChevronDown size={14} className="muted" /> : <ChevronRight size={14} className="muted" />}
       </button>
@@ -517,7 +548,10 @@ function toolIcon(name: string): ReactNode {
     case 'LS':
       return <FolderOpen size={13} />;
     case 'WebFetch':
+    case 'Browser':
       return <Globe size={13} />;
+    case 'Workflow':
+      return <Sparkles size={13} />;
     case 'Memory':
       return <Brain size={13} />;
     case 'Skill':
@@ -546,6 +580,8 @@ function displayName(name: string): string {
 function toolSummary(name: string, args: any, fallback?: string): string {
   if (fallback) return fallback;
   if (name === 'ArtifactComment') return `${args.action ?? ''}${args.text ? `: ${args.text}` : ''}`;
+  if (name === 'Browser') return args.action === 'open' ? `open ${args.url ?? ''}` : args.ref !== undefined ? `${args.action} element ${args.ref}${args.text ? `: “${args.text}”` : ''}` : String(args.action ?? '');
+  if (name === 'Workflow') return `${args.workflow ?? ''}${args.input ? `: ${args.input}` : ''}`;
   return args.file_path ?? args.command ?? args.pattern ?? args.url ?? args.path ?? args.prompt ?? args.text ?? '';
 }
 
@@ -621,7 +657,8 @@ export function ToolBlock({
     }
   }
 
-  if (name === 'TodoWrite' && Array.isArray(args.todos)) return <TodoCard todos={args.todos} />;
+  if (name === 'TodoWrite' && Array.isArray(args.todos)) return <TodoChip todos={args.todos} />;
+  if (name === 'SubmitPlan' && typeof args?.plan === 'string') return <PlanCard args={args} result={result} running={running} />;
 
   if (name === 'Skill' && !result?.isError) {
     return (
@@ -693,6 +730,25 @@ export function ToolBlock({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** A task-list update in the conversation: one line, expandable to the list (the side panel keeps the live list). */
+function TodoChip({ todos }: { todos: Todo[] }) {
+  const [open, setOpen] = useState(false);
+  const done = todos.filter((t) => t.status === 'completed').length;
+  const current = todos.find((t) => t.status === 'in_progress');
+  return (
+    <div className="todo-chip-wrap">
+      <button className="todo-chip" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <CircleCheck size={14} />
+        <span>
+          Task list · {done} of {todos.length} done{current ? <> · now: <strong>{current.content}</strong></> : done === todos.length ? ' · all done' : ''}
+        </span>
+        {open ? <ChevronDown size={14} className="muted" /> : <ChevronRight size={14} className="muted" />}
+      </button>
+      {open && <TodoCard todos={todos} />}
     </div>
   );
 }

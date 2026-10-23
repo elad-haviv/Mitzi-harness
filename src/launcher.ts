@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { chromiumBinary } from './browsers.js';
 import { MITZI_HOME } from './config.js';
 import { openBrowser } from './server/index.js';
 import { color } from './ui.js';
@@ -62,22 +63,6 @@ function electronBinary(): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-/** Chrome, Edge or Chromium, for an app-style window when Electron isn't available. */
-function chromiumBinary(): string | undefined {
-  const candidates =
-    process.platform === 'win32'
-      ? [
-          `${process.env['PROGRAMFILES(X86)']}\\Microsoft\\Edge\\Application\\msedge.exe`,
-          `${process.env.PROGRAMFILES}\\Microsoft\\Edge\\Application\\msedge.exe`,
-          `${process.env.PROGRAMFILES}\\Google\\Chrome\\Application\\chrome.exe`,
-          `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe`,
-        ]
-      : process.platform === 'darwin'
-        ? ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge', '/Applications/Chromium.app/Contents/MacOS/Chromium']
-        : ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/microsoft-edge', '/snap/bin/chromium'];
-  return candidates.find((p) => p && !p.includes('undefined') && existsSync(p));
 }
 
 /** Opens the app window; resolves when the user closes it. Undefined when no window could be opened. */

@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Artifact, Bot, Chat, Doc, LegacyMemory, MarketplaceInfo, McpServerConfig, PluginInfo, Project, ScheduledTask, UiSettings } from '../shared/types.js';
+import type { Artifact, Bot, Chat, Doc, FeedbackLoop, LegacyMemory, MarketplaceInfo, McpServerConfig, PluginInfo, Project, ScheduledTask, UiSettings, Workflow } from '../shared/types.js';
 
 export function newId(): string {
   return `${Date.now().toString(36)}${randomBytes(4).toString('hex')}`;
@@ -85,6 +85,8 @@ export class Store {
   /** Documents from before they became artifacts, kept only until they're migrated. */
   readonly legacyDocs: Collection<Doc>;
   readonly tasks: Collection<ScheduledTask>;
+  readonly feedback: Collection<FeedbackLoop>;
+  readonly workflows: Collection<Workflow>;
   /** Pre-memory-bank memories, kept only until they're migrated. */
   readonly legacyMemories: Collection<LegacyMemory>;
   private settingsPath: string;
@@ -101,6 +103,8 @@ export class Store {
     this.marketplaces = new Collection(join(root, 'marketplaces'));
     this.legacyDocs = new Collection(join(root, 'docs'));
     this.tasks = new Collection(join(root, 'tasks'));
+    this.feedback = new Collection(join(root, 'feedback'));
+    this.workflows = new Collection(join(root, 'workflows'));
     this.settingsPath = join(root, 'settings.json');
     try {
       const saved = JSON.parse(readFileSync(this.settingsPath, 'utf8'));

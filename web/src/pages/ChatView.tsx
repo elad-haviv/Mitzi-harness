@@ -13,6 +13,7 @@ import {
   Lightbulb,
   Loader2,
   MoreHorizontal,
+  PanelRight,
   Pencil,
   Pin,
   PinOff,
@@ -22,14 +23,30 @@ import {
   X,
 } from 'lucide-react';
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, Artifact, Attachment, Chat, ChatMessage, DEFAULT_BOT_ID, RecalledMemory, RepoStatus, StreamEvent } from '../api';
+import { api, Artifact, Attachment, Chat, ChatMessage, ChatMode, DEFAULT_BOT_ID, FeedbackLoop, Goal, RecalledMemory, RepoStatus, StreamEvent } from '../api';
 import { ImportModal } from '../components/Import';
 import { LiveMode } from '../components/LiveMode';
 import { ProjectChip } from '../components/ProjectChip';
 import { speaker } from '../speech';
 import { ArtifactIcon, ArtifactView, TYPE_LABEL } from '../components/Artifacts';
 import { Composer, ComposerHandle, ContextRing } from '../components/Composer';
-import { ContextPanel } from '../components/ContextPanel';
+import { ContextButton, ContextPanel } from '../components/ContextPanel';
+import {
+  BrowserPanel,
+  BrowserView,
+  BtwCard,
+  BtwState,
+  ChatActions,
+  ChatActionsContext,
+  GoalBar,
+  ModeSwitch,
+  SideTab,
+  SideTabs,
+  Stopwatch,
+  TasksPanel,
+  TodoItems,
+  UsagePanel,
+} from '../components/Work';
 import { Markdown } from '../components/Markdown';
 import { AssistantTurn, Avatar, buildTurns, messageText, Reasoning, CompactDivider, MemoryRecall, PermissionCard, PermissionRequest, ToolBlock, UserTurn } from '../components/Messages';
 import { Menu, useConfirm } from '../components/ui';
@@ -41,16 +58,20 @@ type LiveBlock =
   | { kind: 'text'; text: string }
   | { kind: 'reasoning'; text: string }
   | { kind: 'tool'; id: string; name: string; summary: string; args: any; result?: { output: string; isError: boolean }; team?: TeamProgress }
-  | { kind: 'permission'; req: PermissionRequest };
+  | { kind: 'permission'; req: PermissionRequest }
+  | { kind: 'goal'; goal: Goal };
 
 interface Live {
   user?: ChatMessage;
   memories?: RecalledMemory[];
   blocks: LiveBlock[];
   status?: string;
+  /** When the response started, for the stopwatch. */
+  startedAt: number;
 }
 
-type Panel = { kind: 'artifact'; id: string; version?: number } | { kind: 'context' } | { kind: 'artifacts' } | null;
+/** The side panel: a tab, and in the artifacts tab optionally one open artifact. */
+type Panel = { tab: SideTab; artifactId?: string; version?: number } | null;
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -107,6 +128,10 @@ export function ChatView({
   const [confirmNode, confirm] = useConfirm();
   const [liveMode, setLiveMode] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [browserViews, setBrowserViews] = useState<BrowserView[]>([]);
+  const [btw, setBtw] = useState<BtwState>();
+  const [loops, setLoops] = useState<FeedbackLoop[]>([]);
+  const [draftMode, setDraftMode] = useState<ChatMode>('chat');
   const onArtifactRef = useRef(onArtifact);
   onArtifactRef.current = onArtifact;
 
@@ -141,6 +166,9 @@ export function ChatView({
     setLastError(undefined);
     setPanel(null);
     setExpanded(false);
+    setBrowserViews([]);
+    setBtw(undefined);
+    setLoops([]);
     setLoading(!!routeId);
   }, [routeId, chatId]);
 
@@ -151,10 +179,11 @@ export function ChatView({
   const reload = useCallback(
     async (id: string) => {
       try {
-        const [c, a] = await Promise.all([api.chat(id), api.artifacts({ chatId: id })]);
+        const [c, a, l] = await Promise.all([api.chat(id), api.artifacts({ chatId: id }), api.feedbackLoops().catch(() => [])]);
         if (currentId.current !== id) return;
         setChat(c);
         setArtifacts(a);
+        setLoops(l.filter((x) => x.chatId === id));
         return c;
       } catch (err) {
         toast((err as Error).message);
@@ -253,7 +282,7 @@ export function ChatView({
         setArtifacts((list) => [e.artifact, ...list.filter((a) => a.id !== e.artifact.id)]);
         onArtifactRef.current?.(e.artifact);
         // Beside a workspace, the artifact is already on screen.
-        if (!embedded) setPanel({ kind: 'artifact', id: e.artifact.id });
+        if (!embedded) setPanel({ tab: 'artifacts', artifactId: e.artifact.id });
         break;
       case 'status':
         setLive((l) => l && { ...l, status: e.message });
@@ -271,6 +300,21 @@ export function ChatView({
         setChat((c) => (c && c.id === e.chat.id ? { ...c, title: e.chat.title } : c));
         void refreshChats();
         break;
+      case 'todos':
+        setChat((c) => c && { ...c, todos: e.todos });
+        break;
+      case 'goal':
+        setChat((c) => c && { ...c, goal: e.goal ?? undefined });
+        // A check that didn't finish the goal shows where the next round starts.
+        if (e.goal && e.goal.turns > 0) setLive((l) => l && { ...l, blocks: [...l.blocks, { kind: 'goal', goal: e.goal! }] });
+        break;
+      case 'plan':
+        setChat((c) => c && { ...c, plan: e.plan });
+        break;
+      case 'browser':
+        setBrowserViews((v) => [...v, { url: e.url, title: e.title, screenshot: e.screenshot }].slice(-30));
+        setPanel((p) => (p && p.tab !== 'browser' && p.artifactId ? p : { tab: 'browser' }));
+        break;
     }
   }, [toast, refreshChats]);
 
@@ -279,7 +323,7 @@ export function ChatView({
     let result: Chat | undefined;
     setLastError(undefined);
     stick.current = true;
-    setLive({ user, blocks: [] });
+    setLive({ user, blocks: [], startedAt: Date.now() });
     // Events keep arriving if the user switches chats mid-stream; only the open chat should see them.
     const handler = (e: StreamEvent) => currentId.current === id && onEvent(e);
     try {
@@ -308,12 +352,51 @@ export function ChatView({
     };
   };
 
+  /** /goal pause|resume|clear|status and /subgoal: change the goal without a model turn. */
+  const runCommand = async (text: string) => {
+    if (!chat) return toast('Start the conversation first, then set a goal with /goal.', 'info');
+    try {
+      const res = await api.command(chat.id, text);
+      setChat((c) => c && { ...c, goal: res.goal ?? undefined });
+      toast(res.message, 'info');
+      if (res.resume) void sendAuto('Continue working toward the goal.', 'goal');
+    } catch (err) {
+      toast((err as Error).message);
+    }
+  };
+
+  /** /btw: a side question, answered beside the chat and not saved. */
+  const askBtw = async (question: string) => {
+    if (!chat) return toast('Ask a side question once the conversation has started.', 'info');
+    setBtw({ question, answer: '', status: 'asking' });
+    try {
+      await api.btw(chat.id, question, (e) => {
+        if (e.type === 'text') setBtw((b) => (b && b.question === question ? { ...b, answer: b.answer + (e.text ?? '') } : b));
+        if (e.type === 'error') setBtw((b) => b && { ...b, answer: e.text ?? 'Something went wrong', status: 'error' });
+        if (e.type === 'done') setBtw((b) => (b && b.question === question ? { ...b, status: 'done' } : b));
+      });
+    } catch (err) {
+      setBtw({ question, answer: (err as Error).message, status: 'error' });
+    }
+  };
+
+  /** Sends a message on the user's behalf (redo directions, plan approval, goal follow-ups). */
+  const sendAuto = async (text: string, auto: 'redo' | 'plan' | 'goal', feedbackLoopId?: string) => {
+    if (!chat || running) return;
+    const id = chat.id;
+    await runStream(id, (h) => api.send(id, { content: text, attachments: [], auto, feedbackLoopId }, h), { role: 'user', content: text, auto });
+  };
+
   /** Sends a message; resolves to the answer's text. */
   const send = async (text: string, attachments: Attachment[], editIndex?: number): Promise<string | undefined> => {
+    const side = /^\/(btw|goal|subgoal)\b\s*([\s\S]*)$/i.exec(text.trim());
+    if (side?.[1].toLowerCase() === 'btw') return void askBtw(side[2].trim());
+    if (side && (side[1].toLowerCase() === 'subgoal' || /^(|pause|resume|clear|status|stop)$/i.test(side[2].trim()))) return void runCommand(text.trim());
+    if (running) return undefined;
     let id = chatId;
     if (!id) {
       try {
-        const created = await api.createChat({ projectId, botId, model: draftModel || undefined });
+        const created = await api.createChat({ projectId, botId, model: draftModel || undefined, mode: draftMode === 'work' ? 'work' : undefined });
         if (draftWeb) await api.updateChat(created.id, { webSearch: true });
         const fresh = { ...created, webSearch: draftWeb };
         setChat(fresh);
@@ -380,6 +463,32 @@ export function ChatView({
 
   const stop = () => chatId && void api.stop(chatId).then(() => background && setBackground(false));
 
+  const approvePlan = async () => {
+    if (!chat) return;
+    try {
+      const res = await api.planAction(chat.id, 'approve');
+      setChat((c) => c && { ...c, plan: res.plan, todos: res.todos, mode: res.mode });
+      if (!embedded) setPanel({ tab: 'tasks' });
+      await sendAuto('Go ahead with the plan.', 'plan');
+    } catch (err) {
+      toast((err as Error).message);
+    }
+  };
+  const revisePlan = () => {
+    if (!chat?.plan) return;
+    composer.current?.setText(`/plan ${chat.plan.request}\n\nChanges to the last plan: `);
+  };
+  const setMode = (mode: ChatMode) => (chat ? void updateChat({ mode }) : setDraftMode(mode));
+  const chatActions: ChatActions = {
+    chat,
+    running,
+    loops,
+    approvePlan: () => void approvePlan(),
+    revisePlan,
+    sendAuto: (text, auto, loopId) => void sendAuto(text, auto, loopId),
+    reload: () => chat && void reload(chat.id),
+  };
+
   const answerPermission = (requestId: string, answer: 'yes' | 'always' | 'no' | 'feedback', feedback?: string) => {
     if (chatId) api.answerPermission(chatId, requestId, answer, feedback).catch((err) => toast(err.message));
   };
@@ -402,10 +511,12 @@ export function ChatView({
     navigate(chat.projectId ? { page: 'project', id: chat.projectId } : { page: 'new' });
   };
 
-  const openArtifact = (a: Artifact, version?: number) => (embedded ? navigate({ page: 'artifact', id: a.id }) : setPanel({ kind: 'artifact', id: a.id, version }));
+  const openArtifact = (a: Artifact, version?: number) => (embedded ? navigate({ page: 'artifact', id: a.id }) : setPanel({ tab: 'artifacts', artifactId: a.id, version }));
   const { turns, results } = useMemo(() => buildTurns(chat?.messages ?? [], chat?.contextStart ?? 0), [chat?.messages, chat?.contextStart]);
   const lastAssistant = turns.findLastIndex((t) => t.kind === 'assistant');
-  const activeArtifact = panel?.kind === 'artifact' ? artifacts.find((a) => a.id === panel.id) : undefined;
+  const activeArtifact = panel?.tab === 'artifacts' && panel.artifactId ? artifacts.find((a) => a.id === panel.artifactId) : undefined;
+  const mode: ChatMode = chat?.mode ?? draftMode;
+  const togglePanel = (tab: SideTab) => setPanel((p) => (p?.tab === tab && !p.artifactId ? null : { tab }));
   const isEmpty = !loading && !running && !(chat?.messages.length);
 
   const composerNode = (
@@ -433,7 +544,7 @@ export function ChatView({
       extra={
         <>
           {chat && chat.messages.length > 0 && !embedded && (
-            <ContextRing used={chat.lastPromptTokens} total={contextLength} active={panel?.kind === 'context'} onClick={() => setPanel(panel?.kind === 'context' ? null : { kind: 'context' })} />
+            <ContextButton chatId={chat.id} used={chat.lastPromptTokens} total={contextLength} refreshKey={contextVersion} onDetails={() => setPanel({ tab: 'context' })} />
           )}
           <button className="icon-btn" title="Live conversation: talk and listen hands-free" aria-label="Start live conversation" onClick={() => setLiveMode(true)} disabled={running}>
             <AudioLines size={18} />
@@ -480,12 +591,18 @@ export function ChatView({
         </span>
       )}
       <div className="header-spacer" />
+      {chat && !isEmpty && <ModeSwitch mode={mode} onChange={setMode} compact />}
       {artifacts.length > 0 && (
-        <button className={`pill-btn${panel?.kind === 'artifacts' ? ' on' : ''}`} onClick={() => setPanel(panel?.kind === 'artifacts' ? null : { kind: 'artifacts' })}>
+        <button className={`pill-btn${panel?.tab === 'artifacts' ? ' on' : ''}`} onClick={() => togglePanel('artifacts')}>
           <Layers size={15} />
           <span>
             {artifacts.length} artifact{artifacts.length === 1 ? '' : 's'}
           </span>
+        </button>
+      )}
+      {chat && !isEmpty && (
+        <button className={`icon-btn${panel ? ' on' : ''}`} onClick={() => setPanel((p) => (p ? null : { tab: chat.mode === 'work' || chat.goal || chat.plan ? 'tasks' : 'usage' }))} title="Side panel: tasks, browser, context and usage" aria-label="Toggle side panel">
+          <PanelRight size={18} />
         </button>
       )}
       {chat && !isEmpty && (
@@ -566,7 +683,14 @@ export function ChatView({
             </span>
           </div>
         )}
+        <ModeSwitch mode={mode} onChange={setMode} />
         {composerNode}
+        {mode === 'work' && (
+          <p className="muted small mode-hint">
+            Work mode: describe a task and Mitzi plans it, keeps a task list and keeps going until it’s done. Try <code>/plan</code> to approve a plan first, or <code>/goal</code> to
+            keep it working until something is achieved.
+          </p>
+        )}
         {showStarters && bot && <Starters botId={bot.id} onPick={(s) => composer.current?.setText(s)} />}
         {!app.chats.length && !project && (
           <button className="link-btn small import-nudge" onClick={() => setImporting(true)}>
@@ -590,6 +714,13 @@ export function ChatView({
             if (b.kind === 'text') return <Markdown key={i} text={b.text} streaming={i === live.blocks.length - 1} />;
             if (b.kind === 'reasoning') return <Reasoning key={i} text={b.text} active={i === live.blocks.length - 1} />;
             if (b.kind === 'permission') return <PermissionCard key={b.req.requestId} req={b.req} onAnswer={(a, fb) => answerPermission(b.req.requestId, a, fb)} />;
+            if (b.kind === 'goal') {
+              return (
+                <div key={`g${i}`} className="auto-divider">
+                  {b.goal.status === 'complete' ? <>🎯 Goal achieved: {b.goal.lastCheck}</> : b.goal.status === 'active' ? <>Goal not met yet: {b.goal.lastCheck} · continuing</> : <>Goal {b.goal.status === 'budget' ? 'out of turns' : b.goal.status}</>}
+                </div>
+              );
+            }
             return (
               <ToolBlock
                 key={b.id}
@@ -606,16 +737,17 @@ export function ChatView({
               />
             );
           })}
-          {(live.blocks.length === 0 || live.status || live.blocks.at(-1)?.kind === 'tool') && !live.blocks.some((b) => b.kind === 'permission') && (
+          {(live.blocks.length === 0 || live.status || live.blocks.at(-1)?.kind === 'tool' || live.blocks.at(-1)?.kind === 'goal') && !live.blocks.some((b) => b.kind === 'permission') && (
             <div className="status-line">
               <span className="thinking-dots" aria-label="Thinking">
                 <span />
                 <span />
                 <span />
               </span>
-              {live.status}
+              {live.status ?? (live.blocks.length === 0 ? 'Thinking…' : 'Working…')}
             </div>
           )}
+          <Stopwatch since={live.startedAt} />
         </div>
       </div>
     </>
@@ -678,6 +810,7 @@ export function ChatView({
                 onRegenerate={!running && i === lastAssistant ? () => void regenerate() : undefined}
                 onBranch={!running && !embedded ? () => void branch(t.lastIndex) : undefined}
                 onRate={chat ? (v, c) => void rate(t.lastIndex, v, c) : undefined}
+                reviewIndex={chat && !running ? t.lastIndex : undefined}
               />
             );
           })}
@@ -710,19 +843,24 @@ export function ChatView({
           )}
         </div>
       </div>
+      <div className="composer-stack">
+        {btw && <BtwCard state={btw} onClose={() => setBtw(undefined)} />}
+        {chat?.goal && <GoalBar goal={chat.goal} onCommand={(t) => void runCommand(t)} onOpen={() => setPanel({ tab: 'tasks' })} />}
+      </div>
       {composerNode}
     </>
   );
 
   // ---------- Side panel ----------
   let panelNode: ReactNode = null;
-  if (panel?.kind === 'artifact' && activeArtifact) {
-    panelNode = (
+  let panelBody: ReactNode = null;
+  if (panel?.tab === 'artifacts' && activeArtifact) {
+    panelBody = (
       <ArtifactView
         artifact={activeArtifact}
         version={panel.version}
         onClose={() => {
-          setPanel(null);
+          setPanel({ tab: 'artifacts' });
           setExpanded(false);
         }}
         expanded={expanded}
@@ -730,33 +868,53 @@ export function ChatView({
         onOpenWorkspace={() => navigate({ page: 'artifact', id: activeArtifact.id })}
       />
     );
-  } else if (panel?.kind === 'context' && chat) {
-    panelNode = <ContextPanel chatId={chat.id} refreshKey={contextVersion} onClose={() => setPanel(null)} onChanged={() => void reload(chat.id)} />;
-  } else if (panel?.kind === 'artifacts') {
+  } else if (panel?.tab === 'artifacts') {
+    panelBody = (
+      <div className="panel-body artifact-list-panel">
+        {!artifacts.length && <p className="muted small">Documents, code, pages and media Mitzi makes in this chat appear here.</p>}
+        {artifacts.map((a) => (
+          <button key={a.id} className="artifact-card" style={{ maxWidth: 'none' }} onClick={() => openArtifact(a)}>
+            <span className="artifact-icon">
+              <ArtifactIcon type={a.type} />
+            </span>
+            <span style={{ minWidth: 0, flex: 1 }}>
+              <div className="t">{a.title}</div>
+              <div className="s">
+                {TYPE_LABEL[a.type]} · v{a.versions.length} · {relativeTime(a.updatedAt)}
+              </div>
+            </span>
+          </button>
+        ))}
+      </div>
+    );
+  } else if (panel?.tab === 'context') {
+    panelBody = chat ? (
+      <ContextPanel bare chatId={chat.id} refreshKey={contextVersion} onClose={() => setPanel(null)} onChanged={() => void reload(chat.id)} />
+    ) : (
+      <div className="panel-body muted small">Send a message to see the context window.</div>
+    );
+  } else if (panel?.tab === 'tasks') {
+    panelBody = <TasksPanel chat={chat} running={running} onCommand={(t) => void runCommand(t)} onApprove={() => void approvePlan()} onRevise={revisePlan} />;
+  } else if (panel?.tab === 'browser') {
+    panelBody = <BrowserPanel view={browserViews.at(-1)} history={browserViews} />;
+  } else if (panel?.tab === 'usage') {
+    panelBody = <UsagePanel chat={chat} />;
+  }
+  if (panel) {
     panelNode = (
       <>
-        <div className="panel-head">
-          <Layers size={18} className="muted" />
-          <div className="panel-title">Artifacts in this chat</div>
-          <button className="icon-btn sm" onClick={() => setPanel(null)} aria-label="Close">
-            <X size={15} />
-          </button>
-        </div>
-        <div className="panel-body artifact-list-panel">
-          {artifacts.map((a) => (
-            <button key={a.id} className="artifact-card" style={{ maxWidth: 'none' }} onClick={() => openArtifact(a)}>
-              <span className="artifact-icon">
-                <ArtifactIcon type={a.type} />
-              </span>
-              <span style={{ minWidth: 0, flex: 1 }}>
-                <div className="t">{a.title}</div>
-                <div className="s">
-                  {TYPE_LABEL[a.type]} · v{a.versions.length} · {relativeTime(a.updatedAt)}
-                </div>
-              </span>
-            </button>
-          ))}
-        </div>
+        {!expanded && (
+          <SideTabs
+            tab={panel.tab}
+            onTab={(tab) => setPanel({ tab })}
+            onClose={() => {
+              setPanel(null);
+              setExpanded(false);
+            }}
+            counts={{ artifacts: artifacts.length, tasks: (chat?.todos ?? []).filter((t) => t.status !== 'completed').length }}
+          />
+        )}
+        {panelBody}
       </>
     );
   }
@@ -773,6 +931,7 @@ export function ChatView({
 
   if (embedded) {
     return (
+      <ChatActionsContext.Provider value={chatActions}>
       <div className="chat-col embedded">
         {isEmpty ? (
           <div className="embedded-empty">
@@ -785,10 +944,12 @@ export function ChatView({
         {live_}
         {confirmNode}
       </div>
+      </ChatActionsContext.Provider>
     );
   }
 
   return (
+    <ChatActionsContext.Provider value={chatActions}>
     <div className="chat-layout">
       {live_}
       {!expanded && (
@@ -805,6 +966,7 @@ export function ChatView({
       )}
       {confirmNode}
     </div>
+    </ChatActionsContext.Provider>
   );
 }
 

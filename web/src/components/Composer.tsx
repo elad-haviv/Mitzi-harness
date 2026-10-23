@@ -88,7 +88,9 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
     }
   };
 
-  const canSend = !props.running && (text.trim() || attachments.length > 0);
+  // Side questions and goal controls can be sent while Mitzi is working.
+  const sideCommand = /^\/(btw|subgoal)\s+\S|^\/goal(\s+(pause|resume|clear|status|stop))?\s*$/i.test(text.trim());
+  const canSend = (!props.running || sideCommand) && (text.trim() || attachments.length > 0);
   const send = () => {
     if (!canSend) return;
     props.onSend(text.trim(), attachments);
@@ -207,7 +209,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
           {props.leading}
           <div style={{ flex: 1 }} />
           {props.extra}
-          {props.running ? (
+          {props.running && !sideCommand ? (
             <button className="send-btn stop" onClick={props.onStop} title="Stop" aria-label="Stop generating">
               <Square size={13} fill="currentColor" />
             </button>

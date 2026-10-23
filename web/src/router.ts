@@ -13,6 +13,9 @@ export type Route =
   | { page: 'skills' }
   | { page: 'plugins' }
   | { page: 'tasks' }
+  | { page: 'workflows' }
+  | { page: 'workflow'; id: string }
+  | { page: 'insights'; tab?: string }
   | { page: 'settings'; section?: string };
 
 export function parseRoute(hash: string): Route {
@@ -37,6 +40,10 @@ export function parseRoute(hash: string): Route {
       return { page: 'settings', section: parts[1] };
     case 'tasks':
       return { page: 'tasks' };
+    case 'workflows':
+      return parts[1] ? { page: 'workflow', id: parts[1] } : { page: 'workflows' };
+    case 'insights':
+      return { page: 'insights', tab: parts[1] };
     case 'connectors':
     case 'skills':
     case 'plugins':
@@ -64,6 +71,10 @@ export function href(route: Route): string {
       return `#/settings${route.section ? `/${route.section}` : ''}`;
     case 'memory':
       return `#/memory${route.botId ? `/${route.botId}` : ''}`;
+    case 'workflow':
+      return `#/workflows/${route.id}`;
+    case 'insights':
+      return `#/insights${route.tab ? `/${route.tab}` : ''}`;
     default:
       return `#/${route.page}`;
   }

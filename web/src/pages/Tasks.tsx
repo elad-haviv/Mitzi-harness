@@ -1,6 +1,6 @@
 import { AlertTriangle, CalendarClock, CheckCircle2, Loader2, Pause, Pencil, Play, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { api, DEFAULT_BOT_ID, ScheduledTask, TaskSchedule, TaskView } from '../api';
+import { api, DEFAULT_BOT_ID, ScheduledTask, TaskSchedule, TaskView, WorkflowView } from '../api';
 import { ModelPicker } from '../components/ModelPicker';
 import { Empty, Modal, Toggle, useConfirm } from '../components/ui';
 import { href } from '../router';
@@ -99,7 +99,13 @@ export function TasksPage() {
                   <div className="task-main">
                     <div className="row" style={{ gap: 8 }}>
                       <span className="tile-title">{t.name}</span>
-                      {bot && !bot.builtIn && <span className="badge">{bot.emoji} {bot.name}</span>}
+                      {t.workflowId ? (
+                        <a className="badge" href={href({ page: 'workflow', id: t.workflowId })}>
+                          ⚡ Workflow
+                        </a>
+                      ) : (
+                        bot && !bot.builtIn && <span className="badge">{bot.emoji} {bot.name}</span>
+                      )}
                       {t.autoApprove && <span className="badge warn">Auto-approves tools</span>}
                     </div>
                     <div className="muted small">
@@ -113,6 +119,11 @@ export function TasksPage() {
                         <span className="grow">
                           {last.status === 'running' ? 'Running now…' : last.status === 'ok' ? stripMarkdown(last.preview ?? '') || 'Finished' : last.error}
                         </span>
+                        {last.workflowRunId && t.workflowId && last.status !== 'running' && (
+                          <a href={href({ page: 'workflow', id: t.workflowId })} className="small">
+                            Open · {relativeTime(last.finishedAt ?? last.startedAt)}
+                          </a>
+                        )}
                         {last.chatId && last.status !== 'running' && (
                           <a href={href({ page: 'chat', id: last.chatId })} className="small">
                             Open · {relativeTime(last.finishedAt ?? last.startedAt)}
@@ -203,12 +214,18 @@ function TaskEditor({
   const [model, setModel] = useState(task.model ?? '');
   const [autoApprove, setAutoApprove] = useState(task.autoApprove ?? false);
   const [reuseChat, setReuseChat] = useState(task.reuseChat ?? false);
+  const [workflowId, setWorkflowId] = useState(task.workflowId ?? '');
+  const [runsWorkflow, setRunsWorkflow] = useState(!!task.workflowId);
+  const [workflows, setWorkflows] = useState<WorkflowView[]>([]);
+  useEffect(() => {
+    api.workflows().then(setWorkflows, () => {});
+  }, []);
   const [busy, setBusy] = useState(false);
   const set = (patch: Partial<TaskSchedule>) => setSchedule((s) => ({ ...s, ...patch }));
 
   const save = async () => {
     setBusy(true);
-    const body = { name, prompt, schedule, botId, projectId, model, autoApprove, reuseChat };
+    const body = { name, prompt, schedule, botId, projectId, model, autoApprove, reuseChat, workflowId: runsWorkflow ? workflowId : '' };
     try {
       onSaved(task.id ? await api.updateTask(task.id, body) : await api.createTask(body));
     } catch (err) {
@@ -226,7 +243,7 @@ function TaskEditor({
           <button className="btn btn-ghost" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn btn-primary" disabled={busy || !name.trim() || !prompt.trim()} onClick={() => void save()}>
+          <button className="btn btn-primary" disabled={busy || !name.trim() || (runsWorkflow ? !workflowId : !prompt.trim())} onClick={() => void save()}>
             {task.id ? 'Save' : 'Schedule'}
           </button>
         </>
@@ -236,9 +253,38 @@ function TaskEditor({
         <span className="field-label">Name</span>
         <input className="input" autoFocus value={name} placeholder="Morning briefing" onChange={(e) => setName(e.target.value)} />
       </label>
+      <div className="field">
+        <span className="field-label">What runs</span>
+        <div className="segmented" style={{ alignSelf: 'flex-start' }}>
+          <button type="button" className={!runsWorkflow ? 'active' : ''} onClick={() => setRunsWorkflow(false)}>
+            A prompt for a bot
+          </button>
+          <button type="button" className={runsWorkflow ? 'active' : ''} onClick={() => setRunsWorkflow(true)}>
+            A workflow
+          </button>
+        </div>
+      </div>
+      {runsWorkflow && (
+        <label className="field">
+          <span className="field-label">Workflow</span>
+          <select className="select" value={workflowId} onChange={(e) => setWorkflowId(e.target.value)}>
+            <option value="">Choose a workflow…</option>
+            {workflows.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.emoji} {w.name}
+              </option>
+            ))}
+          </select>
+          {!workflows.length && (
+            <span className="field-hint">
+              No workflows yet. <a href={href({ page: 'workflows' })}>Make one</a>.
+            </span>
+          )}
+        </label>
+      )}
       <label className="field">
-        <span className="field-label">Prompt</span>
-        <textarea className="textarea" rows={4} value={prompt} placeholder="What should the bot do each time?" onChange={(e) => setPrompt(e.target.value)} />
+        <span className="field-label">{runsWorkflow ? 'Input for each run (optional)' : 'Prompt'}</span>
+        <textarea className="textarea" rows={runsWorkflow ? 2 : 4} value={prompt} placeholder={runsWorkflow ? 'Passed to the workflow as its input' : 'What should the bot do each time?'} onChange={(e) => setPrompt(e.target.value)} />
       </label>
       <div className="field">
         <span className="field-label">Schedule</span>
@@ -295,6 +341,8 @@ function TaskEditor({
           )}
         </div>
       </div>
+      {!runsWorkflow && (
+      <>
       <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
         <label className="field" style={{ flex: 1, minWidth: 160 }}>
           <span className="field-label">Bot</span>
@@ -336,6 +384,8 @@ function TaskEditor({
         </div>
         <Toggle on={autoApprove} onChange={setAutoApprove} label="Auto-approve tools" />
       </div>
+      </>
+      )}
     </Modal>
   );
 }

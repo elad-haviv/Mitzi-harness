@@ -69,3 +69,19 @@
   `delegate` events keyed by the Delegate call id; teammates' usage is added to the chat.
 - Streaming text (`web/src/components/Markdown.tsx`): `useSmoothText` reveals text at the stream's average rate, and
   streaming Markdown renders per top-level block so only the last block re-parses each frame.
+- Usage (`src/server/usage.ts`): every `RoutingClient.chat` call is recorded in `<data>/usage/*.jsonl`, tagged through
+  `AsyncLocalStorage` (`withUsage`) with what it was for (chat, title, memory, workflow, goal…). A run's `sink` adds up
+  its own calls into the response's `stats`, saved on its last assistant message. Background jobs pass `sink: undefined`
+  so they don't count toward the answer.
+- Work mode, plans and goals (`src/server/agentic.ts`, routes in `routes-work.ts`): `/plan` runs with read-only tools
+  plus SubmitPlan; approving sets `chat.mode = 'work'` and the plan's steps as `chat.todos`. `/goal` loops inside one run:
+  after each turn `checkGoal` asks the fast model, and an `auto: 'goal'` user message continues it. Messages Mitzi sends
+  for the user carry `auto`; `contextMessages` strips it with the other UI-only fields.
+- Feedback loops (`store.feedback`): reviews create or extend a loop per task; `redoMessage` builds the next attempt's
+  message, and accepting a loop with more than one attempt distills a lesson into `bot.lessons` and memory.
+- Workflows (`src/server/workflows.ts`): steps run in dependency order (`order` refuses loops); a step runs when an
+  incoming edge's source finished on the matching port. AI steps go through `ChatRunner.runOnce`, which declines tools
+  that would ask unless the step allows them. Exposed workflows become the Workflow tool via `runner.extraTools`.
+- Browser (`src/server/browser.ts`): playwright-core (optional dependency) drives `browserExecutable()`, with a persistent
+  profile in `MITZI_HOME/browser-profile`. Each action returns a text view with numbered elements (`data-mitzi-ref`), and
+  a screenshot is emitted to the chat as a `browser` event.

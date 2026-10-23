@@ -26,6 +26,11 @@ import { registerUpdateRoutes } from './routes-update.js';
 import { registerImportRoutes } from './importer.js';
 import { mediaUpdate, registerFeatureRoutes } from './routes-features.js';
 import { newId, now, Store } from './store.js';
+import { UsageLog } from './usage.js';
+import { BrowserService } from './browser.js';
+import { registerWorkRoutes } from './routes-work.js';
+import { registerWorkflowRoutes } from './routes-workflows.js';
+import { WorkflowEngine, workflowTool } from './workflows.js';
 import { clamp, fail, Handler, HttpError, Req, STREAMED, str } from './util.js';
 
 export { HttpError } from './util.js';
@@ -59,6 +64,7 @@ export interface AppOptions {
 
 export function createApp(opts: AppOptions) {
   const store = new Store(opts.dataDir);
+  const usage = new UsageLog(join(opts.dataDir, 'usage'), () => catalog.peek());
   const config = (): Config => loadConfig(process.cwd());
   // One router per provider configuration; rebuilt (and the model list refreshed) when it changes.
   let routing: { key: string; client: RoutingClient } | undefined;
@@ -67,6 +73,7 @@ export function createApp(opts: AppOptions) {
     const key = JSON.stringify(providers);
     if (routing?.key !== key) {
       routing = { key, client: new RoutingClient(providers) };
+      routing.client.onUsage = (model, u) => usage.record(model, u);
       catalog?.invalidate();
     }
     return routing.client;
@@ -112,7 +119,8 @@ export function createApp(opts: AppOptions) {
     redirectUri: () => `${opts.origin()}/api/oauth/callback`,
   };
   const media = new MediaService(opts.dataDir, router, () => store.settings.media);
-  const runner = new ChatRunner({ store, config, client, catalog, memory, mcp, skills, commands, media });
+  const browser = new BrowserService(join(MITZI_HOME, 'browser-profile'), media, () => !!store.settings.browserHeaded);
+  const runner = new ChatRunner({ store, config, client, catalog, memory, mcp, skills, commands, media, usage, browser });
   const starters = new StarterService({ store, memory, client, config, memoryOn: (bot) => runner.memoryOn(bot) });
   seedBots(store, opts.dataDir);
   ensureDefaultBot(store);
@@ -169,6 +177,7 @@ export function createApp(opts: AppOptions) {
     }
     if (typeof update.embeddingModel === 'string') ui.embeddingModel = update.embeddingModel.trim();
     if (typeof update.autoCheckUpdates === 'boolean') ui.autoCheckUpdates = update.autoCheckUpdates;
+    if (typeof update.browserHeaded === 'boolean') ui.browserHeaded = update.browserHeaded;
     if (typeof update.recallTokens === 'number') ui.recallTokens = clamp(Math.round(update.recallTokens), 200, 8000);
     if (update.media) ui.media = mediaUpdate(update.media, store.settings.media);
     store.updateSettings(ui);
@@ -307,7 +316,7 @@ export function createApp(opts: AppOptions) {
   route('POST', '/api/chats', ({ body }) => {
     const project = body?.projectId ? getProject(body.projectId) : undefined;
     const bot = getBot(str(body?.botId) || DEFAULT_BOT_ID);
-    return store.chats.put(newChat({ projectId: project?.id, botId: bot.id, model: str(body?.model) || undefined }));
+    return store.chats.put(newChat({ projectId: project?.id, botId: bot.id, model: str(body?.model) || undefined, ...(body?.mode === 'work' ? { mode: 'work' as const } : {}) }));
   });
   route('GET', '/api/chats/:id', ({ params }) => ({ ...getChat(params.id), running: runner.isRunning(params.id) }));
   route('PATCH', '/api/chats/:id', ({ params, body }) => {
@@ -316,6 +325,7 @@ export function createApp(opts: AppOptions) {
     if (typeof body.model === 'string' && body.model.trim()) chat.model = body.model.trim();
     if (typeof body.pinned === 'boolean') chat.pinned = body.pinned;
     if (typeof body.webSearch === 'boolean') chat.webSearch = body.webSearch;
+    if (body.mode === 'chat' || body.mode === 'work') chat.mode = body.mode;
     if (body.projectId === null) chat.projectId = undefined;
     else if (typeof body.projectId === 'string') chat.projectId = getProject(body.projectId).id;
     chat.updatedAt = now();
@@ -359,7 +369,9 @@ export function createApp(opts: AppOptions) {
       : [];
     if (!content.trim() && !attachments.length) throw new HttpError(400, 'Message is empty');
     const editIndex = typeof r.body?.editIndex === 'number' ? r.body.editIndex : undefined;
-    return stream(r.params.id, { kind: 'message', content, attachments, editIndex, focus: str(r.body?.focus) || undefined })(r);
+    const auto = ['redo', 'plan', 'goal'].includes(str(r.body?.auto)) ? (str(r.body.auto) as 'redo' | 'plan' | 'goal') : undefined;
+    const feedbackLoopId = str(r.body?.feedbackLoopId) || undefined;
+    return stream(r.params.id, { kind: 'message', content, attachments, editIndex, focus: str(r.body?.focus) || undefined, auto, feedbackLoopId })(r);
   });
   route('POST', '/api/chats/:id/regenerate', (r) => stream(r.params.id, { kind: 'regenerate' })(r));
   route('POST', '/api/chats/:id/stop', ({ params }) => ({ stopped: runner.stop(params.id) }));
@@ -571,7 +583,14 @@ export function createApp(opts: AppOptions) {
   registerFolderRoutes(route, store, projectView);
   const updates = registerUpdateRoutes(route, store);
   registerImportRoutes(route, { store, memory, client, config, newChat, memoryOn: (bot) => runner.memoryOn(bot) });
-  const { scheduler } = registerFeatureRoutes(route, { store, runner, client, config, memory, media, newChat });
+  const workflows = new WorkflowEngine({ store, runner, media, memory, newChat });
+  runner.extraTools = () => {
+    const tool = workflowTool(store, workflows);
+    return tool ? [tool] : [];
+  };
+  registerWorkflowRoutes(route, { store, engine: workflows });
+  const { scheduler } = registerFeatureRoutes(route, { store, runner, client, config, memory, media, newChat, workflows });
+  registerWorkRoutes(route, { store, runner, client, config, memory, usage });
   scheduler.start();
 
   // ---- Helpers ---------------------------------------------------------------
@@ -626,6 +645,7 @@ export function createApp(opts: AppOptions) {
   return Object.assign(handle, {
     dispose: () => {
       scheduler.stop();
+      void browser.close();
       updates.dispose();
       return mcp.dispose();
     },
@@ -768,6 +788,7 @@ function applyBot(bot: Bot, body: any, creating: boolean): Bot {
     connectors: tools.connectors ?? bot.tools?.connectors ?? true,
     media: tools.media ?? bot.tools?.media ?? true,
     team: tools.team ?? bot.tools?.team ?? true,
+    browser: tools.browser ?? bot.tools?.browser ?? true,
   };
   if (creating || Array.isArray(body?.starters)) {
     bot.starters = (Array.isArray(body?.starters) ? body.starters : []).filter((s: unknown) => typeof s === 'string' && s.trim()).slice(0, 6);

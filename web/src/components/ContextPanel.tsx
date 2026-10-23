@@ -1,8 +1,9 @@
-import { Gauge, History, Loader2, Scissors, Undo2, X } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { Gauge, History, Loader2, Maximize2, Scissors, Undo2, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ContextBreakdown, ContextSection } from '../api';
 import { href } from '../router';
 import { formatTokens, useApp } from '../state';
+import { ContextRing } from './Composer';
 
 const KIND_COLOR: Record<ContextSection['kind'], string> = {
   system: 'var(--c-system)',
@@ -13,7 +14,7 @@ const KIND_COLOR: Record<ContextSection['kind'], string> = {
   tools: 'var(--c-tools)',
 };
 
-export function ContextPanel({ chatId, refreshKey, onClose, onChanged }: { chatId: string; refreshKey: unknown; onClose(): void; onChanged(): void }) {
+export function ContextPanel({ chatId, refreshKey, onClose, onChanged, bare }: { chatId: string; refreshKey: unknown; onClose(): void; onChanged(): void; bare?: boolean }) {
   const { toast } = useApp();
   const [data, setData] = useState<ContextBreakdown>();
   const [busy, setBusy] = useState<'compact' | 'restore'>();
@@ -55,13 +56,15 @@ export function ContextPanel({ chatId, refreshKey, onClose, onChanged }: { chatI
 
   return (
     <>
-      <div className="panel-head">
-        <Gauge size={18} className="muted" />
-        <div className="panel-title">Context window</div>
-        <button className="icon-btn sm" onClick={onClose} aria-label="Close">
-          <X size={15} />
-        </button>
-      </div>
+      {!bare && (
+        <div className="panel-head">
+          <Gauge size={18} className="muted" />
+          <div className="panel-title">Context window</div>
+          <button className="icon-btn sm" onClick={onClose} aria-label="Close">
+            <X size={15} />
+          </button>
+        </div>
+      )}
       <div className="panel-body">
         {!data ? (
           <div className="context-panel muted">
@@ -137,5 +140,78 @@ export function ContextPanel({ chatId, refreshKey, onClose, onChanged }: { chatI
         )}
       </div>
     </>
+  );
+}
+
+/**
+ * The context meter in the message box. Clicking it opens a summary; "Show details" opens the full
+ * breakdown in the side panel.
+ */
+export function ContextButton({ chatId, used, total, refreshKey, onDetails }: { chatId: string; used: number; total?: number; refreshKey: unknown; onDetails(): void }) {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState<ContextBreakdown>();
+  const wrap = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    api.context(chatId).then(setData, () => {});
+    const onDown = (e: MouseEvent) => !wrap.current?.contains(e.target as Node) && setOpen(false);
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open, chatId, refreshKey]);
+  const window = data?.contextLength ?? total ?? 128_000;
+  // The same number as the meter: what the provider reported, or an estimate before the first request.
+  const now = used || data?.estimatedTokens || 0;
+  const pct = Math.min(100, Math.round((now / window) * 100));
+  // The biggest parts, merged by kind.
+  const byKind = new Map<ContextSection['kind'], number>();
+  for (const s of data?.sections ?? []) byKind.set(s.kind, (byKind.get(s.kind) ?? 0) + s.tokens);
+  const KIND_LABEL: Record<ContextSection['kind'], string> = { system: 'Instructions', project: 'Project & tasks', memory: 'Memory', summary: 'Summary', history: 'Conversation', tools: 'Tools' };
+  return (
+    <div className="ctx-pop-wrap" ref={wrap}>
+      <ContextRing used={used} total={total} active={open} onClick={() => setOpen((o) => !o)} />
+      {open && (
+        <div className="ctx-pop" role="dialog" aria-label="Context window">
+          <div className="ctx-pop-title">
+            <strong>{pct}%</strong> of the context window
+          </div>
+          <div className="muted small">
+            {formatTokens(now)} of {formatTokens(window)} tokens{data?.autoCompactAt ? ` · compacts at ${formatTokens(data.autoCompactAt)}` : ''}
+          </div>
+          <div className="ctx-bar" aria-hidden style={{ margin: '10px 0 8px' }}>
+            {[...byKind].map(([k, n]) => (
+              <div key={k} style={{ width: `${(n / window) * 100}%`, background: KIND_COLOR[k] }} />
+            ))}
+          </div>
+          {!data && <Loader2 size={14} className="spin muted" />}
+          <div className="ctx-pop-rows">
+            {[...byKind]
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 4)
+              .map(([k, n]) => (
+                <div key={k} className="ctx-row">
+                  <span className="dot" style={{ background: KIND_COLOR[k] }} />
+                  <span>{KIND_LABEL[k]}</span>
+                  <span className="n">~{formatTokens(n)}</span>
+                </div>
+              ))}
+          </div>
+          {!!data?.compactedMessages && <div className="muted small">{data.compactedMessages} earlier messages are summarized.</div>}
+          <button
+            className="btn btn-sm ctx-pop-more"
+            onClick={() => {
+              setOpen(false);
+              onDetails();
+            }}
+          >
+            <Maximize2 size={13} /> Show details
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

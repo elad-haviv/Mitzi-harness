@@ -1,3 +1,4 @@
+import { ProjectUsage } from './Insights';
 import { BookOpen, FileText, FolderGit2, FolderOpen, FolderSearch, GitBranch, Loader2, RefreshCw, Layers, MessageSquare, MoreHorizontal, Pencil, Plus, ShieldCheck, SquarePen, Terminal, Trash2, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { api, ArtifactListItem, ChatListItem, PermissionMode, ProjectView, RepoStatus } from '../api';
@@ -317,6 +318,7 @@ export function ProjectPage({ id }: { id: string }) {
           </div>
 
           <div className="side-cards">
+            <ProjectUsage projectId={project.id} />
             <div className="card">
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <div className="card-title">

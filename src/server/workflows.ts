@@ -1,0 +1,354 @@
+// Workflows: small graphs of steps (ask a bot, fetch a page, call an API, branch, save an artifact…)
+// that run from the editor, on a schedule, or when a bot calls them from a chat.
+import { htmlToText } from '../tools/web.js';
+import { Tool, ToolError } from '../tools/types.js';
+import { Artifact, Chat, DEFAULT_BOT_ID, Workflow, WorkflowEdge, WorkflowEvent, WorkflowNode, WorkflowNodeType, WorkflowRun, WorkflowStep } from '../shared/types.js';
+import type { MediaService } from './media.js';
+import type { MemoryService } from './memory/index.js';
+import type { ChatRunner } from './runner.js';
+import { newId, now, Store } from './store.js';
+import { withUsage } from './usage.js';
+
+const MAX_RUNS = 20;
+const MAX_OUTPUT = 40_000;
+
+export interface NodeSpec {
+  label: string;
+  description: string;
+  /** Condition nodes have two outputs; the rest have one (output nodes none). */
+  outputs: string[];
+  defaults: Record<string, unknown>;
+}
+
+export const NODE_SPECS: Record<WorkflowNodeType, NodeSpec> = {
+  trigger: { label: 'Start', description: 'Where the workflow starts. Its output is the input you run it with.', outputs: ['out'], defaults: { inputHint: '' } },
+  ai: { label: 'Ask a bot', description: 'A bot (or model) works on a prompt, optionally with its tools.', outputs: ['out'], defaults: { botId: DEFAULT_BOT_ID, model: '', prompt: '{{input}}', tools: false } },
+  browse: { label: 'Read a web page', description: 'Fetches a page and returns its text.', outputs: ['out'], defaults: { url: '{{input}}' } },
+  http: { label: 'HTTP request', description: 'Calls an API and returns the response body.', outputs: ['out'], defaults: { method: 'GET', url: '', headers: '', body: '' } },
+  condition: { label: 'If', description: 'Continues on "yes" or "no" depending on the input.', outputs: ['true', 'false'], defaults: { test: 'contains', value: '', text: '{{input}}' } },
+  transform: { label: 'Text', description: 'Builds text from earlier steps with {{placeholders}}.', outputs: ['out'], defaults: { template: '{{input}}' } },
+  image: { label: 'Generate image', description: 'Creates an image from a prompt (needs an image model).', outputs: ['out'], defaults: { prompt: '{{input}}' } },
+  artifact: { label: 'Save artifact', description: 'Saves the text as an artifact you can open later.', outputs: ['out'], defaults: { title: 'Workflow result', type: 'markdown', content: '{{input}}' } },
+  memory: { label: 'Remember', description: 'Saves a memory to a bot’s memory bank.', outputs: ['out'], defaults: { botId: DEFAULT_BOT_ID, content: '{{input}}' } },
+  output: { label: 'Result', description: 'The workflow’s result.', outputs: [], defaults: { template: '{{input}}' } },
+};
+
+/** Fills {{input}}, {{trigger}}, {{date}} and {{Step label}} placeholders. */
+export function render(template: string, vars: { input: string; trigger: string; outputs: Map<string, string> }): string {
+  return String(template ?? '').replace(/\{\{\s*([^}]+?)\s*\}\}/g, (whole, key: string) => {
+    const k = key.toLowerCase();
+    if (k === 'input') return vars.input;
+    if (k === 'trigger') return vars.trigger;
+    if (k === 'date') return new Date().toDateString();
+    return vars.outputs.get(k) ?? whole;
+  });
+}
+
+/** Steps in dependency order; throws on loops. */
+export function order(nodes: WorkflowNode[], edges: WorkflowEdge[]): WorkflowNode[] {
+  const indegree = new Map(nodes.map((n) => [n.id, 0]));
+  for (const e of edges) if (indegree.has(e.to) && indegree.has(e.from)) indegree.set(e.to, indegree.get(e.to)! + 1);
+  const queue = nodes.filter((n) => indegree.get(n.id) === 0);
+  const out: WorkflowNode[] = [];
+  while (queue.length) {
+    const n = queue.shift()!;
+    out.push(n);
+    for (const e of edges.filter((x) => x.from === n.id)) {
+      const d = indegree.get(e.to);
+      if (d === undefined) continue;
+      indegree.set(e.to, d - 1);
+      if (d - 1 === 0) queue.push(nodes.find((x) => x.id === e.to)!);
+    }
+  }
+  if (out.length !== nodes.length) throw new Error('The workflow has a loop; steps can only lead forward');
+  return out;
+}
+
+export function testCondition(test: string, text: string, value: string): boolean {
+  const t = text.trim();
+  switch (test) {
+    case 'equals':
+      return t.toLowerCase() === value.trim().toLowerCase();
+    case 'regex':
+      try {
+        return new RegExp(value, 'i').test(t);
+      } catch {
+        throw new Error(`"${value}" isn't a valid pattern`);
+      }
+    case 'empty':
+      return !t;
+    case 'number':
+      // "> 10", "<= 3"…
+      {
+        const m = /^(<=|>=|<|>|=)\s*(-?[\d.]+)$/.exec(value.trim());
+        const n = Number(/-?[\d.]+/.exec(t)?.[0]);
+        if (!m || Number.isNaN(n)) return false;
+        const v = Number(m[2]);
+        return m[1] === '<' ? n < v : m[1] === '>' ? n > v : m[1] === '<=' ? n <= v : m[1] === '>=' ? n >= v : n === v;
+      }
+    default:
+      return t.toLowerCase().includes(value.trim().toLowerCase());
+  }
+}
+
+export interface WorkflowDeps {
+  store: Store;
+  runner: ChatRunner;
+  media: MediaService;
+  memory: MemoryService;
+  /** Creates an empty chat (the same as POST /api/chats). */
+  newChat: (fields: Partial<Chat>) => Chat;
+}
+
+export class WorkflowEngine {
+  private readonly active = new Map<string, AbortController>();
+
+  constructor(private readonly deps: WorkflowDeps) {}
+
+  isRunning(workflowId: string): boolean {
+    return this.active.has(workflowId);
+  }
+
+  stop(workflowId: string): boolean {
+    const c = this.active.get(workflowId);
+    c?.abort();
+    return !!c;
+  }
+
+  /** Runs a workflow to the end; `onEvent` hears about each step. */
+  async run(workflow: Workflow, input: string, trigger: WorkflowRun['trigger'], onEvent: (e: WorkflowEvent) => void = () => {}, outer?: AbortSignal): Promise<WorkflowRun> {
+    const { store } = this.deps;
+    if (this.active.has(workflow.id)) throw new Error(`"${workflow.name}" is already running`);
+    const controller = new AbortController();
+    const signal = outer ? AbortSignal.any([outer, controller.signal]) : controller.signal;
+    this.active.set(workflow.id, controller);
+    const run: WorkflowRun = { id: newId(), trigger, input, status: 'running', steps: [], startedAt: now() };
+    const save = () => {
+      const fresh = store.workflows.get(workflow.id);
+      if (!fresh) return;
+      fresh.runs = [run, ...fresh.runs.filter((r) => r.id !== run.id)].slice(0, MAX_RUNS);
+      store.workflows.put(fresh);
+    };
+    save();
+    onEvent({ type: 'run', run });
+    let cost = 0;
+    try {
+      await withUsage({ kind: 'workflow', workflowId: workflow.id, chatId: undefined, sink: (e) => (cost += e.cost) }, async () => {
+        const steps = order(workflow.nodes, workflow.edges);
+        const outputs = new Map<string, string>(); // node id → output
+        const byLabel = new Map<string, string>();
+        // Which outgoing port each finished node took ('out', or 'true'/'false' for conditions).
+        const taken = new Map<string, string>();
+        let last = '';
+        for (const node of steps) {
+          if (signal.aborted) throw new Error('Stopped');
+          const incoming = workflow.edges.filter((e) => e.to === node.id);
+          const live = incoming.filter((e) => taken.has(e.from) && (taken.get(e.from) === 'out' || taken.get(e.from) === (e.port ?? 'true')));
+          // Start nodes always run; others only when a finished step leads to them.
+          if (incoming.length ? !live.length : node.type !== 'trigger' && steps.some((s) => s.type === 'trigger')) continue;
+          const nodeInput = incoming.length ? live.map((e) => outputs.get(e.from) ?? '').join('\n\n') : input;
+          const step: WorkflowStep = { nodeId: node.id, status: 'running', startedAt: now() };
+          run.steps.push(step);
+          onEvent({ type: 'step', runId: run.id, step: { ...step } });
+          const t0 = Date.now();
+          try {
+            const vars = { input: nodeInput, trigger: input, outputs: byLabel };
+            const result = await this.step(workflow, node, vars, signal);
+            const output = result.output.slice(0, MAX_OUTPUT);
+            outputs.set(node.id, output);
+            byLabel.set(node.label.trim().toLowerCase(), output);
+            taken.set(node.id, result.port ?? 'out');
+            if (node.type === 'output' || !steps.some((s) => s.type === 'output')) last = output;
+            Object.assign(step, { status: 'done', output, ms: Date.now() - t0 });
+          } catch (err) {
+            Object.assign(step, { status: 'error', error: (err as Error).message, ms: Date.now() - t0 });
+            onEvent({ type: 'step', runId: run.id, step: { ...step } });
+            throw new Error(`${node.label}: ${(err as Error).message}`);
+          }
+          onEvent({ type: 'step', runId: run.id, step: { ...step } });
+          save();
+        }
+        run.output = last;
+      });
+      run.status = 'done';
+    } catch (err) {
+      run.status = 'error';
+      run.error = (err as Error).message;
+    } finally {
+      this.active.delete(workflow.id);
+      run.finishedAt = now();
+      run.cost = cost;
+      save();
+      onEvent({ type: 'run', run });
+    }
+    return run;
+  }
+
+  private async step(workflow: Workflow, node: WorkflowNode, vars: { input: string; trigger: string; outputs: Map<string, string> }, signal: AbortSignal): Promise<{ output: string; port?: string }> {
+    const c = { ...NODE_SPECS[node.type]?.defaults, ...node.config } as Record<string, any>;
+    const r = (t: unknown) => render(String(t ?? ''), vars);
+    switch (node.type) {
+      case 'trigger':
+        return { output: vars.input };
+      case 'transform':
+      case 'output':
+        return { output: r(c.template) };
+      case 'condition': {
+        const ok = testCondition(String(c.test), r(c.text), String(c.value ?? ''));
+        // A condition passes its input through unchanged.
+        return { output: vars.input, port: ok ? 'true' : 'false' };
+      }
+      case 'ai': {
+        const prompt = r(c.prompt);
+        if (!prompt.trim()) throw new Error('The prompt is empty');
+        return {
+          output: await this.deps.runner.runOnce({
+            botId: c.botId || DEFAULT_BOT_ID,
+            model: c.model || undefined,
+            prompt,
+            tools: !!c.tools,
+            autoApprove: !!c.autoApprove,
+            note: `This is the step "${node.label}" of the workflow "${workflow.name}". Reply with the result only; it is passed on to the next step.`,
+            signal,
+          }),
+        };
+      }
+      case 'browse':
+      case 'http': {
+        const url = r(c.url).trim();
+        if (!/^https?:\/\//i.test(url)) throw new Error(`"${url.slice(0, 80)}" isn't a web address`);
+        const headers: Record<string, string> = {};
+        for (const line of r(c.headers).split('\n')) {
+          const i = line.indexOf(':');
+          if (i > 0) headers[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+        }
+        const method = node.type === 'browse' ? 'GET' : String(c.method || 'GET').toUpperCase();
+        const body = method === 'GET' || method === 'HEAD' ? undefined : r(c.body);
+        const res = await fetch(url, { method, headers: { 'user-agent': 'Mitzi', ...headers }, body, signal: AbortSignal.any([signal, AbortSignal.timeout(60_000)]) });
+        const text = await res.text();
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 300)}`);
+        return { output: node.type === 'browse' || /html/i.test(res.headers.get('content-type') ?? '') ? htmlToText(text) : text };
+      }
+      case 'image': {
+        const file = await this.deps.media.image(r(c.prompt), {}, signal);
+        return { output: file.url };
+      }
+      case 'artifact': {
+        const type = ['markdown', 'html', 'code', 'svg', 'mermaid'].includes(c.type) ? c.type : 'markdown';
+        const title = r(c.title).trim().slice(0, 200) || 'Workflow result';
+        // Every artifact lives in a chat, where you can keep working on it with a bot.
+        const chat = this.deps.store.chats.put(
+          this.deps.newChat({
+            title,
+            messages: [
+              { role: 'user', content: `Workflow "${workflow.name}" saved this result.`, ts: Date.now() },
+              { role: 'assistant', content: `Here's the result of the workflow "${workflow.name}". Open the artifact to read or edit it, or ask me to change it.`, ts: Date.now() },
+            ],
+          }),
+        );
+        const artifact: Artifact = {
+          id: newId(),
+          chatId: chat.id,
+          title,
+          type,
+          versions: [{ content: r(c.content), title, author: 'assistant', note: `From the workflow "${workflow.name}"`, createdAt: now() }],
+          comments: [],
+          createdAt: now(),
+          updatedAt: now(),
+        };
+        this.deps.store.artifacts.put(artifact);
+        return { output: r(c.content) };
+      }
+      case 'memory': {
+        const bot = this.deps.store.bots.get(c.botId || DEFAULT_BOT_ID);
+        if (!bot) throw new Error('That bot no longer exists');
+        const content = r(c.content).trim();
+        if (content) await this.deps.memory.backend().remember(this.deps.memory.bankFor(bot), content.slice(0, 2000), 'user');
+        return { output: vars.input };
+      }
+    }
+  }
+}
+
+/** Starter workflows offered when creating one. */
+export function workflowTemplate(kind: string): Pick<Workflow, 'name' | 'description' | 'emoji' | 'nodes' | 'edges'> {
+  const node = (id: string, type: WorkflowNodeType, x: number, y: number, label?: string, config: Record<string, unknown> = {}): WorkflowNode => ({
+    id,
+    type,
+    label: label ?? NODE_SPECS[type].label,
+    x,
+    y,
+    config: { ...NODE_SPECS[type].defaults, ...config },
+  });
+  const edge = (from: string, to: string, port?: string): WorkflowEdge => ({ id: `${from}-${to}${port ? `-${port}` : ''}`, from, to, ...(port ? { port } : {}) });
+  if (kind === 'digest') {
+    return {
+      name: 'Web page digest',
+      description: 'Reads a page and summarizes it into a saved document.',
+      emoji: '📰',
+      nodes: [
+        node('start', 'trigger', 60, 60, 'Start', { inputHint: 'A web address' }),
+        node('read', 'browse', 330, 60, 'Read page'),
+        node('sum', 'ai', 600, 60, 'Summarize', { prompt: 'Summarize this page in 5 bullet points, then one line on why it matters:\n\n{{input}}' }),
+        node('save', 'artifact', 330, 200, 'Save digest', { title: 'Digest: {{trigger}}' }),
+        node('out', 'output', 600, 200, 'Result'),
+      ],
+      edges: [edge('start', 'read'), edge('read', 'sum'), edge('sum', 'save'), edge('save', 'out')],
+    };
+  }
+  if (kind === 'triage') {
+    return {
+      name: 'Message triage',
+      description: 'Decides whether a message is urgent and drafts the right reply.',
+      emoji: '📬',
+      nodes: [
+        node('start', 'trigger', 60, 200, 'Start', { inputHint: 'A message to triage' }),
+        node('classify', 'ai', 300, 200, 'Classify', { prompt: 'Is this message urgent? Answer with one word, URGENT or ROUTINE.\n\n{{input}}' }),
+        node('if', 'condition', 540, 200, 'Urgent?', { test: 'contains', value: 'urgent' }),
+        node('urgent', 'ai', 780, 110, 'Urgent reply', { prompt: 'Draft a short reply that acknowledges this urgent message and gives a time for a full answer:\n\n{{trigger}}' }),
+        node('routine', 'ai', 780, 290, 'Routine reply', { prompt: 'Draft a friendly reply to this message:\n\n{{trigger}}' }),
+        node('out', 'output', 1020, 200, 'Result'),
+      ],
+      edges: [edge('start', 'classify'), edge('classify', 'if'), edge('if', 'urgent', 'true'), edge('if', 'routine', 'false'), edge('urgent', 'out'), edge('routine', 'out')],
+    };
+  }
+  return {
+    name: 'New workflow',
+    description: '',
+    emoji: '⚡',
+    nodes: [node('start', 'trigger', 80, 180, 'Start'), node('ask', 'ai', 360, 180, 'Ask Mitzi'), node('out', 'output', 640, 180, 'Result')],
+    edges: [edge('start', 'ask'), edge('ask', 'out')],
+  };
+}
+
+/** The Workflow tool: lets a bot run the workflows the user made available to chats. */
+export function workflowTool(store: Store, engine: WorkflowEngine): Tool<{ workflow: string; input?: string }> | undefined {
+  const list = store.workflows.all().filter((w) => w.exposeToChat);
+  if (!list.length) return undefined;
+  return {
+    name: 'Workflow',
+    // Workflows can call APIs and change things, so they ask first.
+    kind: 'network',
+    description:
+      'Run one of the user’s workflows and get its result. Available workflows:\n' +
+      list.map((w) => `- ${w.name}${w.description ? `: ${w.description}` : ''}${inputHint(w) ? ` (input: ${inputHint(w)})` : ''}`).join('\n'),
+    parameters: {
+      type: 'object',
+      properties: { workflow: { type: 'string', enum: list.map((w) => w.name) }, input: { type: 'string', description: 'What to run it with' } },
+      required: ['workflow'],
+    },
+    summarize: (a) => a.workflow,
+    async run(a, ctx) {
+      const w = list.find((x) => x.name.toLowerCase() === String(a.workflow).toLowerCase());
+      const fresh = w && store.workflows.get(w.id);
+      if (!fresh) throw new ToolError(`No workflow called "${a.workflow}"`);
+      const run = await engine.run(fresh, String(a.input ?? ''), 'chat', () => {}, ctx.signal);
+      if (run.status === 'error') throw new ToolError(`The workflow failed: ${run.error}`);
+      return run.output || '(The workflow finished without a result.)';
+    },
+  };
+}
+
+function inputHint(w: Workflow): string {
+  return String(w.nodes.find((n) => n.type === 'trigger')?.config.inputHint ?? '');
+}

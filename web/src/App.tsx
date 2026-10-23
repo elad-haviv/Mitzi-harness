@@ -1,3 +1,5 @@
+import { InsightsPage } from './pages/Insights';
+import { WorkflowEditor, WorkflowsPage } from './pages/Workflows';
 import { KeyRound, PanelLeft } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Sidebar } from './components/Sidebar';
@@ -102,6 +104,15 @@ export function App() {
       break;
     case 'tasks':
       page = <TasksPage />;
+      break;
+    case 'workflows':
+      page = <WorkflowsPage />;
+      break;
+    case 'workflow':
+      page = <WorkflowEditor key={route.id} id={route.id} />;
+      break;
+    case 'insights':
+      page = <InsightsPage tab={route.tab} />;
       break;
   }
 

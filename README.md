@@ -62,6 +62,26 @@ Every job can use a different provider: for example chat with a model on OpenRou
 
 ![Coding agent asking for permission](docs/screenshots/coding-permission.png)
 
+**Modes.** The new-chat screen (and every chat's header) switches between **Chat**, for talking things through; **Work**, for handing over a task, where Mitzi plans, keeps a task list in the side panel and keeps going until it's done; and **Workflow**, which opens your workflows.
+
+**Plans, goals and side questions** (slash commands, like in Claude Code and Codex):
+- `/plan <task>`: Mitzi looks around with tools that can't change anything and proposes a plan. **Approve and start** switches to Work mode with the plan's steps as the task list; **Change it** re-plans with your notes.
+- `/goal <goal>`: Mitzi keeps working, turn after turn, until a check (by the fast model) says the goal is met, or it runs out of turns (20; `/goal resume` grants more). `/goal pause`, `/goal resume`, `/goal clear` and `/goal` control it; a bar above the message box shows its progress.
+- `/subgoal <milestone>` adds milestones to the goal (`/subgoal done 2` checks one off); Mitzi checks them off as it works.
+- `/btw <question>` asks a quick side question about the conversation, even while Mitzi is working. It answers beside the chat without tools, and nothing is added to the conversation.
+
+**Stopwatch and usage.** While Mitzi responds, a stopwatch shows how long it has been working (and how long it has been thinking). Every answer then shows its time, tokens and cost. The context meter in the message box opens a summary of the context window; **Show details** opens the full breakdown.
+
+**Side panel.** The panel button in a chat's header opens tabs for the **task list** (with the plan and goal), the chat's **artifacts**, the **browser**, the **context** window and the chat's **usage**, response by response.
+
+**Insights.** Usage and costs over 7, 30 or 90 days, by day, model, project, bot, activity and chat (prices come from your providers, or from the model list when a provider doesn't report them). Project pages show their own usage. The **Learning** tab charts how your bots learn from feedback.
+
+**Feedback loops.** Under any answer, **Review** rates how well it did the task, from 1 to 5. If it missed, say what you meant, what it did instead, and how to redo it; Mitzi redoes the task with your directions, as many times as it takes. When you accept a result, the bot turns your directions into a lesson for similar tasks (and saves it to its memory). Insights → Learning shows the attempts each task needed and first-try ratings over time, so you can see whether it's getting things right sooner.
+
+**Workflows.** Automations built on a canvas, in the style of n8n: steps that ask a bot (optionally with its tools), read a web page, call an API, branch on a condition, build text, generate an image, save an artifact or remember something, connected by dragging from one step to the next. Run one with live step-by-step status and a log of each step's output, put it on a schedule, or turn on **Use in chats** so bots can run it when you ask (they ask first).
+
+**Browser use.** Bots can drive a real browser (your Chrome or Edge, through Playwright): open pages, read them, click, fill in forms. You see each page in the chat's side panel as it works, and it asks before each step unless you allow it for the chat. The browser keeps its own profile, so sites you sign in to stay signed in; Settings → General can show its window so you can watch or take over. It never types passwords or payment details.
+
 **Bot teams.** A bot can hand parts of a task to your other bots. Ask Mitzi to research something and write it up, and it can give the research to your Researcher bot and the draft to your Writer bot. They work at the same time, each with its own instructions, model, tools and memory, and Mitzi combines their results. The chat shows each teammate's task and progress, and you can open each one's answer. Turn this off per bot with its **Team** capability.
 
 **Bots** are reusable assistants with their own icon, instructions, model, temperature, capabilities and conversation starters. Once a bot knows you, the starters on the new-chat screen are written from its memories and your recent conversations ("Make a study plan for my biology exam on Nov 12"), and refresh as you keep talking. **Mitzi** 🐱, the default bot, is always there and handles every chat that doesn't pick another bot. You can customize it but not delete it. Three example bots are included.

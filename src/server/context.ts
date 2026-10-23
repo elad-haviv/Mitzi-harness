@@ -5,6 +5,7 @@ import type { Artifact, Bot, Chat, ContextBreakdown, ContextSection, ModelInfo, 
 import { focusPrompt } from './workspace.js';
 import { skillsPrompt } from './extensions/skills.js';
 import { teamPrompt } from './team.js';
+import { goalPrompt, PLAN_PROMPT, planPrompt, todosPrompt, WORK_PROMPT } from './agentic.js';
 
 const DEFAULT_CONTEXT_LENGTH = 128_000;
 
@@ -28,6 +29,8 @@ export interface ChatSetup {
   focus?: Artifact;
   /** Bots this bot can hand tasks to with the Delegate tool. */
   team?: Bot[];
+  /** Planning with /plan: look, don't change. */
+  planning?: boolean;
 }
 
 interface PromptSection {
@@ -131,6 +134,15 @@ export function promptSections(setup: ChatSetup): PromptSection[] {
     sections.push({ label: `Open artifact: ${setup.focus.title}`, kind: 'project', text: focusPrompt(setup.focus) });
   }
 
+  if (setup.planning) sections.push({ label: 'Plan mode', kind: 'system', text: PLAN_PROMPT });
+  else if (chat.mode === 'work' || chat.goal?.status === 'active') {
+    sections.push({ label: 'Work mode', kind: 'system', text: WORK_PROMPT });
+    if (chat.plan?.status === 'approved') sections.push({ label: 'Approved plan', kind: 'project', text: planPrompt(chat.plan) });
+    const todos = todosPrompt(chat);
+    if (todos) sections.push({ label: `Task list (${chat.todos!.length})`, kind: 'project', text: todos });
+  }
+  if (chat.goal?.status === 'active') sections.push({ label: 'Goal', kind: 'project', text: goalPrompt(chat.goal) });
+
   if (setup.team?.length) {
     sections.push({ label: `Team (${setup.team.length} bot${setup.team.length === 1 ? '' : 's'})`, kind: 'tools', text: teamPrompt(setup.team) });
   }
@@ -156,7 +168,9 @@ export function systemPrompt(setup: ChatSetup): string {
 
 /** The messages actually sent to the model: the summary (if any) plus the uncompacted tail. */
 export function contextMessages(chat: Chat): Message[] {
-  const tail = chat.messages.slice(chat.contextStart).map(({ ts: _ts, model: _model, memories: _memories, command: _command, rating: _rating, reasoning: _reasoning, ...m }) => m as Message);
+  const tail = chat.messages
+    .slice(chat.contextStart)
+    .map(({ ts: _ts, model: _model, memories: _memories, command: _command, rating: _rating, reasoning: _reasoning, stats: _stats, feedbackLoopId: _loop, auto: _auto, ...m }) => m as Message);
   if (!chat.summary) return tail;
   return [
     { role: 'user', content: `Earlier parts of this conversation were summarized to save context:\n\n${chat.summary}` },
@@ -260,6 +274,11 @@ export class ModelCatalog {
 
   invalidate(): void {
     this.cache = undefined;
+  }
+
+  /** The models listed so far, without fetching. */
+  peek(): ModelInfo[] {
+    return this.cache?.models ?? [];
   }
 
   async list(): Promise<ModelInfo[]> {

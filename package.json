@@ -42,6 +42,7 @@
     "vite": "^6.4.5"
   },
   "optionalDependencies": {
-    "electron": "44.5.1"
+    "electron": "44.5.1",
+    "playwright-core": "1.56.1"
   }
 }

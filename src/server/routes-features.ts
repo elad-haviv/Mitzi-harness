@@ -9,6 +9,7 @@ import { ChatRunner, summarizeChat } from './runner.js';
 import { describeSchedule, Scheduler, validateSchedule } from './scheduler.js';
 import { newId, now, Store } from './store.js';
 import { fail, HttpError, Route, STREAMED, str } from './util.js';
+import type { WorkflowEngine } from './workflows.js';
 
 export interface FeatureDeps {
   store: Store;
@@ -19,6 +20,7 @@ export interface FeatureDeps {
   media: MediaService;
   /** Creates an empty chat (the same as POST /api/chats). */
   newChat: (fields: Partial<Chat>) => Chat;
+  workflows: WorkflowEngine;
 }
 
 const MAX_LESSONS = 30;
@@ -240,6 +242,17 @@ export function registerFeatureRoutes(route: Route, deps: FeatureDeps): { schedu
     const run: TaskRun = { id: newId(), startedAt: now(), status: 'running', seen: false };
     task.runs.push(run);
     store.tasks.put(task);
+    const workflow = task.workflowId ? store.workflows.get(task.workflowId) : undefined;
+    if (workflow) {
+      const result = await deps.workflows.run(workflow, task.prompt, 'schedule').catch((err: Error) => ({ status: 'error' as const, error: err.message, output: '', id: undefined }));
+      const fresh = store.tasks.get(task.id);
+      const r = fresh?.runs.find((x) => x.id === run.id);
+      if (fresh && r) {
+        Object.assign(r, { finishedAt: now(), status: result.status === 'error' ? 'error' : 'ok', error: result.error, preview: (result.output ?? '').slice(0, 300), workflowRunId: result.id });
+        store.tasks.put(fresh);
+      }
+      return;
+    }
     let chat = task.reuseChat && task.chatId ? store.chats.get(task.chatId) : undefined;
     if (!chat) {
       const stamp = new Date().toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
@@ -269,6 +282,7 @@ export function registerFeatureRoutes(route: Route, deps: FeatureDeps): { schedu
       const prompt = `${task.prompt}\n\n(This is the scheduled task "${task.name}", running automatically on ${new Date().toString()}.)`;
       await runner.run(chat.id, { kind: 'message', content: prompt, attachments: [] }, emit, new AbortController().signal, {
         headless: { autoApprove: task.autoApprove },
+        taskId: task.id,
       });
       const answer = messageText(store.chats.get(chat.id)?.messages.findLast((m) => m.role === 'assistant' && messageText(m).trim()));
       finish(errors.length ? { status: 'error', error: errors.join('\n'), preview: answer.slice(0, 300) } : { status: 'ok', preview: answer.slice(0, 300) });
@@ -281,7 +295,7 @@ export function registerFeatureRoutes(route: Route, deps: FeatureDeps): { schedu
   const taskView = (t: ScheduledTask) => ({ ...t, running: scheduler.isRunning(t.id), description: safeDescribe(t.schedule) });
   const applyTask = (task: ScheduledTask, body: any) => {
     if (typeof body?.name === 'string' && body.name.trim()) task.name = body.name.trim().slice(0, 120);
-    if (typeof body?.prompt === 'string' && body.prompt.trim()) task.prompt = body.prompt;
+    if (typeof body?.prompt === 'string') task.prompt = body.prompt;
     if (body?.schedule) {
       const s = body.schedule as TaskSchedule;
       const schedule: TaskSchedule = {
@@ -305,7 +319,13 @@ export function registerFeatureRoutes(route: Route, deps: FeatureDeps): { schedu
     if (typeof body?.enabled === 'boolean') task.enabled = body.enabled;
     if (typeof body?.autoApprove === 'boolean') task.autoApprove = body.autoApprove;
     if (typeof body?.reuseChat === 'boolean') task.reuseChat = body.reuseChat;
-    if (!task.name || !task.prompt?.trim()) throw new HttpError(400, 'A task needs a name and a prompt');
+    if (body?.workflowId !== undefined) {
+      const id = str(body.workflowId);
+      if (id && !store.workflows.get(id)) throw new HttpError(400, 'That workflow no longer exists');
+      task.workflowId = id || undefined;
+    }
+    // A workflow's input may be empty; a prompt for a bot may not.
+    if (!task.name || (!task.workflowId && !task.prompt?.trim())) throw new HttpError(400, 'A task needs a name and a prompt');
     if (!task.schedule) throw new HttpError(400, 'A task needs a schedule');
     task.updatedAt = now();
     return taskView(store.tasks.put(scheduler.plan(task)));

@@ -118,6 +118,17 @@ function GeneralSettings() {
       </section>
 
       <section className="settings-section card">
+        <h2>Browser</h2>
+        <div className="tool-toggle" style={{ padding: 0, border: 0 }}>
+          <div className="grow">
+            <div className="t">Show the browser window</div>
+            <div className="s">When bots use the browser, open its window on your screen so you can watch, sign in to sites or take over. Otherwise it works out of sight and you see its pages in the chat’s side panel.</div>
+          </div>
+          <Toggle label="Show the browser window" on={!!settings.browserHeaded} onChange={(v) => void save({ browserHeaded: v })} />
+        </div>
+      </section>
+
+      <section className="settings-section card">
         <h2>Long conversations</h2>
         <div className="field">
           <span className="field-label">Auto-compact when the context window is</span>

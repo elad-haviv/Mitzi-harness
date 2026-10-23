@@ -28,6 +28,8 @@ export interface UiSettings {
   keepRecentTurns: number;
   /** Look for new versions in the background. */
   autoCheckUpdates: boolean;
+  /** Show the browser window while bots use it (otherwise it runs out of sight). */
+  browserHeaded?: boolean;
 }
 
 export interface PublicSettings extends UiSettings {
@@ -86,6 +88,8 @@ export interface BotTools {
   connectors: boolean;
   /** Hand parts of a task to other bots and combine their results. */
   team?: boolean;
+  /** Use a real web browser (asks before each action unless allowed for the chat). */
+  browser?: boolean;
 }
 
 /** Hindsight-style traits shaping how a bank forms and interprets memories, each 1–5. */
@@ -147,7 +151,22 @@ export type ChatMessage = Message & {
   command?: string;
   /** The user's rating of an assistant answer. */
   rating?: Rating;
+  /** Time, tokens and cost of the whole response; set on a turn's last assistant message. */
+  stats?: ResponseStats;
+  /** The feedback loop this answer belongs to (an attempt the user reviewed or asked to redo). */
+  feedbackLoopId?: string;
+  /** Set on user messages Mitzi sent for the user: redo directions, plan approval, goal follow-ups. */
+  auto?: 'redo' | 'plan' | 'goal';
 };
+
+/** Time, tokens and cost of one response, including any teammates' work. */
+export interface ResponseStats {
+  durationMs: number;
+  promptTokens: number;
+  completionTokens: number;
+  cost: number;
+  requests: number;
+}
 
 export type MemoryType = 'world' | 'experience' | 'observation';
 
@@ -229,9 +248,158 @@ export interface Chat {
   taskId?: string;
   /** Set on chats imported from another assistant. */
   imported?: { source: ImportSource; id: string };
+  /** Chat answers conversationally; Work takes on tasks: it plans, keeps a task list and works until done. */
+  mode?: ChatMode;
+  /** The task list the bot keeps while working. */
+  todos?: Todo[];
+  /** A goal set with /goal: the bot keeps working, turn after turn, until it's met. */
+  goal?: Goal;
+  /** The latest plan made with /plan. */
+  plan?: Plan;
   createdAt: string;
   updatedAt: string;
 }
+
+export type ChatMode = 'chat' | 'work';
+
+export interface Subgoal {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+export interface Goal {
+  text: string;
+  status: 'active' | 'paused' | 'complete' | 'budget';
+  subgoals: Subgoal[];
+  /** Turns spent on the goal so far, and the most it may take before pausing. */
+  turns: number;
+  maxTurns: number;
+  /** Why the last check decided the goal was or wasn't met. */
+  lastCheck?: string;
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface Plan {
+  /** What the user asked to plan. */
+  request: string;
+  /** The plan, in Markdown. */
+  text: string;
+  steps: string[];
+  status: 'proposed' | 'approved' | 'revised';
+  createdAt: string;
+}
+
+// ---------- Usage ----------
+
+export type UsageKind = 'chat' | 'title' | 'memory' | 'workflow' | 'task' | 'btw' | 'goal' | 'learning' | 'other';
+
+/** One model call. */
+export interface UsageEvent {
+  ts: number;
+  model: string;
+  prompt: number;
+  completion: number;
+  cost: number;
+  kind: UsageKind;
+  chatId?: string;
+  projectId?: string;
+  botId?: string;
+  workflowId?: string;
+  taskId?: string;
+}
+
+// ---------- Feedback loops ----------
+
+/** One reviewed attempt at a task. */
+export interface FeedbackIteration {
+  /** Index of the reviewed answer in the chat. */
+  messageIndex: number;
+  /** 1 (not at all) to 5 (exactly right). */
+  rating: number;
+  meant?: string;
+  did?: string;
+  directions?: string;
+  at: string;
+}
+
+/** A task the user reviewed, redid with directions until happy, and what the bot learned from it. */
+export interface FeedbackLoop {
+  id: string;
+  chatId: string;
+  botId: string;
+  projectId?: string;
+  /** The user's request. */
+  task: string;
+  status: 'open' | 'accepted' | 'abandoned';
+  iterations: FeedbackIteration[];
+  lesson?: string;
+  lessonId?: string;
+  createdAt: string;
+  updatedAt: string;
+  acceptedAt?: string;
+}
+
+// ---------- Workflows ----------
+
+export type WorkflowNodeType = 'trigger' | 'ai' | 'http' | 'condition' | 'transform' | 'image' | 'artifact' | 'memory' | 'browse' | 'output';
+
+export interface WorkflowNode {
+  id: string;
+  type: WorkflowNodeType;
+  label: string;
+  x: number;
+  y: number;
+  config: Record<string, any>;
+}
+
+export interface WorkflowEdge {
+  id: string;
+  from: string;
+  to: string;
+  /** Which output of a condition: 'true' or 'false'. */
+  port?: string;
+}
+
+export interface WorkflowStep {
+  nodeId: string;
+  status: 'running' | 'done' | 'error' | 'skipped';
+  output?: string;
+  error?: string;
+  startedAt: string;
+  ms?: number;
+}
+
+export interface WorkflowRun {
+  id: string;
+  trigger: 'manual' | 'schedule' | 'chat';
+  input: string;
+  status: 'running' | 'done' | 'error';
+  steps: WorkflowStep[];
+  output?: string;
+  error?: string;
+  cost?: number;
+  startedAt: string;
+  finishedAt?: string;
+}
+
+export interface Workflow {
+  id: string;
+  name: string;
+  description: string;
+  emoji: string;
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  /** Bots can run it from chat (as the Workflow tool, or with /workflow). */
+  exposeToChat: boolean;
+  /** Most recent runs, newest first. */
+  runs: WorkflowRun[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type WorkflowEvent = { type: 'step'; runId: string; step: WorkflowStep } | { type: 'run'; run: WorkflowRun };
 
 export interface Rating {
   value: 1 | -1;
@@ -370,6 +538,10 @@ export type StreamEvent =
   | { type: 'permission_resolved'; requestId: string }
   | { type: 'artifact'; artifact: Artifact }
   | { type: 'todos'; todos: Todo[] }
+  | { type: 'goal'; goal: Goal | null }
+  | { type: 'plan'; plan: Plan }
+  | { type: 'stats'; stats: ResponseStats }
+  | { type: 'browser'; url: string; title: string; screenshot?: string }
   | { type: 'status'; message: string }
   | { type: 'recall'; memories: RecalledMemory[] }
   | { type: 'warn'; message: string }
@@ -626,6 +798,8 @@ export interface TaskRun {
   error?: string;
   /** First lines of the answer. */
   preview?: string;
+  /** Set when the task ran a workflow. */
+  workflowRunId?: string;
   seen: boolean;
 }
 
@@ -642,6 +816,8 @@ export interface ScheduledTask {
   autoApprove: boolean;
   /** Continue one chat across runs instead of starting a new chat each time. */
   reuseChat: boolean;
+  /** Run this workflow (with the prompt as its input) instead of sending the prompt to a bot. */
+  workflowId?: string;
   chatId?: string;
   nextRunAt?: string;
   runs: TaskRun[];

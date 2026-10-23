@@ -1,3 +1,4 @@
+import { BUILTIN_COMMANDS } from './agentic.js';
 import type { ServerResponse } from 'node:http';
 import { homedir } from 'node:os';
 import type { McpServerConfig, McpTransport, McpTrust } from '../shared/types.js';
@@ -324,7 +325,7 @@ export function registerExtensionRoutes(route: Route, ctx: ExtensionContext): vo
     }
   });
 
-  route('GET', '/api/commands', () => ctx.commands().map(({ file: _file, ...c }) => c));
+  route('GET', '/api/commands', () => [...BUILTIN_COMMANDS.map((c) => ({ ...c, source: 'mitzi' })), ...ctx.commands().map(({ file: _file, ...c }) => c)]);
 }
 
 function page(res: ServerResponse, status: number, title: string, message: string): void {

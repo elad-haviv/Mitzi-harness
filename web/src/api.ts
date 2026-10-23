@@ -34,6 +34,15 @@ import type {
   RepoStatus,
   ImportSource,
   ImportedConversation,
+  ChatMessage,
+  ChatMode,
+  FeedbackLoop,
+  Goal,
+  Plan,
+  Todo,
+  Workflow,
+  WorkflowEvent,
+  WorkflowNodeType,
 } from '../../src/shared/types';
 
 export type * from '../../src/shared/types';
@@ -42,6 +51,51 @@ export type { UpdateEvent, UpdateInfo, UpdateStep } from '../../src/updater';
 export { DEFAULT_BOT_ID, TEXT_ARTIFACT_TYPES } from '../../src/shared/types';
 
 export type ProjectView = Project & { chatCount: number };
+export type WorkflowView = Workflow & { running: boolean };
+export interface NodeSpec {
+  label: string;
+  description: string;
+  outputs: string[];
+  defaults: Record<string, unknown>;
+}
+export interface UsageTotalsView {
+  prompt: number;
+  completion: number;
+  cost: number;
+  requests: number;
+}
+export interface UsageGroup {
+  key: string;
+  name?: string;
+  totals: UsageTotalsView;
+}
+export interface UsageReport {
+  days: number;
+  totals: UsageTotalsView;
+  allTime: UsageTotalsView;
+  daily: (UsageTotalsView & { day: string })[];
+  byModel: UsageGroup[];
+  byKind: UsageGroup[];
+  byProject: UsageGroup[];
+  byBot: UsageGroup[];
+  topChats: UsageGroup[];
+}
+export interface LearningPoint {
+  n: number;
+  id: string;
+  at: string;
+  botId: string;
+  task: string;
+  attempts: number;
+  firstRating: number;
+  finalRating: number;
+  accepted: boolean;
+  lesson?: string;
+}
+export interface LearningCurve {
+  points: LearningPoint[];
+  summary: { loops: number; accepted: number; lessons: number; avgAttempts: number; avgFirstRating: number; earlyFirstRating: number; lateFirstRating: number };
+}
 export type UpdateStatus = UpdateInfo & { updating: boolean; canRestart: boolean };
 export type UpdateStreamEvent = UpdateEvent | { type: 'restarting' } | { type: 'restart-required' };
 export type ChatListItem = ChatSummary & { running?: boolean };
@@ -107,7 +161,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 }
 
 /** POSTs and consumes a server-sent event stream until it ends. */
-async function stream(path: string, body: unknown, onEvent: (e: StreamEvent) => void): Promise<void> {
+async function stream<E = StreamEvent>(path: string, body: unknown, onEvent: (e: E) => void): Promise<void> {
   const res = await fetch(path, {
     method: 'POST',
     headers: { 'x-mitzi-token': token, 'content-type': 'application/json' },
@@ -150,14 +204,40 @@ export const api = {
 
   chats: (projectId?: string) => request<ChatListItem[]>('GET', `/api/chats${projectId ? `?projectId=${projectId}` : ''}`),
   chat: (id: string) => request<Chat & { running: boolean }>('GET', `/api/chats/${id}`),
-  createChat: (body: { projectId?: string; botId?: string; model?: string }) => request<Chat>('POST', '/api/chats', body),
-  updateChat: (id: string, body: Partial<{ title: string; model: string; pinned: boolean; webSearch: boolean; projectId: string | null }>) =>
+  createChat: (body: { projectId?: string; botId?: string; model?: string; mode?: ChatMode }) => request<Chat>('POST', '/api/chats', body),
+  updateChat: (id: string, body: Partial<{ title: string; model: string; pinned: boolean; webSearch: boolean; projectId: string | null; mode: ChatMode }>) =>
     request<ChatSummary>('PATCH', `/api/chats/${id}`, body),
   deleteChat: (id: string) => request('DELETE', `/api/chats/${id}`),
-  send: (id: string, body: { content: string; attachments: Attachment[]; editIndex?: number; focus?: string }, onEvent: (e: StreamEvent) => void) =>
+  send: (
+    id: string,
+    body: { content: string; attachments: Attachment[]; editIndex?: number; focus?: string; auto?: ChatMessage['auto']; feedbackLoopId?: string },
+    onEvent: (e: StreamEvent) => void,
+  ) =>
     stream(`/api/chats/${id}/messages`, body, onEvent),
   regenerate: (id: string, onEvent: (e: StreamEvent) => void) => stream(`/api/chats/${id}/regenerate`, {}, onEvent),
   stop: (id: string) => request('POST', `/api/chats/${id}/stop`, {}),
+  planAction: (id: string, action: 'approve' | 'revise') => request<{ plan: Plan; todos: Todo[]; mode: ChatMode }>('POST', `/api/chats/${id}/plan`, { action }),
+  /** /goal pause|resume|clear|status and /subgoal. */
+  command: (id: string, text: string) => request<{ goal: Goal | null; message: string; resume: boolean }>('POST', `/api/chats/${id}/command`, { text }),
+  /** /btw: a side question, answered without tools and not saved. */
+  btw: (id: string, question: string, onEvent: (e: { type: 'start' | 'text' | 'done' | 'error'; text?: string }) => void) => stream(`/api/chats/${id}/btw`, { question }, onEvent),
+  review: (id: string, index: number, body: { rating: number; meant?: string; did?: string; directions?: string; redo?: boolean }) =>
+    request<{ loop: FeedbackLoop; redo?: string }>('POST', `/api/chats/${id}/messages/${index}/review`, body),
+  acceptLoop: (id: string) => request<FeedbackLoop>('POST', `/api/feedback/${id}/accept`, {}),
+  feedbackLoops: (botId?: string) => request<(FeedbackLoop & { chatTitle?: string })[]>('GET', `/api/feedback${botId ? `?botId=${botId}` : ''}`),
+  deleteLoop: (id: string) => request('DELETE', `/api/feedback/${id}`),
+  learning: (botId?: string) => request<LearningCurve>('GET', `/api/insights/learning${botId ? `?botId=${botId}` : ''}`),
+  usage: (q: { days?: number; projectId?: string; chatId?: string; botId?: string } = {}) =>
+    request<UsageReport>('GET', `/api/usage?${new URLSearchParams(Object.entries(q).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))}`),
+
+  workflows: () => request<WorkflowView[]>('GET', '/api/workflows'),
+  workflow: (id: string) => request<WorkflowView>('GET', `/api/workflows/${id}`),
+  workflowNodeTypes: () => request<Record<WorkflowNodeType, NodeSpec>>('GET', '/api/workflows/node-types'),
+  createWorkflow: (template?: string) => request<WorkflowView>('POST', '/api/workflows', { template }),
+  updateWorkflow: (id: string, body: Partial<Pick<Workflow, 'name' | 'description' | 'emoji' | 'nodes' | 'edges' | 'exposeToChat'>>) => request<WorkflowView>('PATCH', `/api/workflows/${id}`, body),
+  deleteWorkflow: (id: string) => request('DELETE', `/api/workflows/${id}`),
+  runWorkflow: (id: string, input: string, onEvent: (e: WorkflowEvent) => void) => stream<WorkflowEvent>(`/api/workflows/${id}/run`, { input }, onEvent),
+  stopWorkflow: (id: string) => request('POST', `/api/workflows/${id}/stop`, {}),
   answerPermission: (id: string, requestId: string, answer: 'yes' | 'always' | 'no' | 'feedback', feedback?: string) =>
     request('POST', `/api/chats/${id}/permission`, { requestId, answer, feedback }),
   context: (id: string) => request<ContextBreakdown>('GET', `/api/chats/${id}/context`),

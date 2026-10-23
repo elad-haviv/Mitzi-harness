@@ -1,4 +1,4 @@
-import { ArrowUpCircle, Bot, Brain, CalendarClock, Check, ChevronDown, ChevronRight, FolderOpen, GitBranch, KeyRound, Layers, ListTree, MoreHorizontal, PanelLeftClose, Pencil, Pin, PinOff, Plug, Puzzle, Search, Settings, SquarePen, Trash2, WandSparkles, X } from 'lucide-react';
+import { ArrowUpCircle, BarChart3, Bot, Brain, CalendarClock, Check, ChevronDown, ChevronRight, FolderOpen, GitBranch, KeyRound, Layers, ListTree, MoreHorizontal, PanelLeftClose, Pencil, Pin, PinOff, Plug, Puzzle, Search, Settings, SquarePen, Trash2, WandSparkles, Workflow as WorkflowIcon, X } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ChatListItem } from '../api';
 import { href, navigate, Route } from '../router';
@@ -123,7 +123,9 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
     { route: { page: 'bots' } as Route, icon: <Bot size={17} />, label: 'Bots', count: bots.length, match: ['bots'] },
     { route: { page: 'artifacts' } as Route, icon: <Layers size={17} />, label: 'Artifacts', match: ['artifacts', 'artifact'] },
     { route: { page: 'tasks' } as Route, icon: <CalendarClock size={17} />, label: 'Scheduled', match: ['tasks'], badge: unseen },
+    { route: { page: 'workflows' } as Route, icon: <WorkflowIcon size={17} />, label: 'Workflows', match: ['workflows', 'workflow'] },
     { route: { page: 'memory' } as Route, icon: <Brain size={17} />, label: 'Memory', match: ['memory'] },
+    { route: { page: 'insights' } as Route, icon: <BarChart3 size={17} />, label: 'Insights', match: ['insights'] },
   ];
   const extend = [
     { route: { page: 'connectors' } as Route, icon: <Plug size={17} />, label: 'Connectors', match: ['connectors'] },
