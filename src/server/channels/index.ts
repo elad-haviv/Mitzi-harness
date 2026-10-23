@@ -5,6 +5,7 @@ import { readRaw } from '../workflow-triggers.js';
 import { ChannelAdapter, ChannelEnv, ChannelHub, newPairingCode } from './hub.js';
 import { DiscordAdapter } from './discord.js';
 import { SlackAdapter } from './slack.js';
+import { WhatsAppAdapter } from './whatsapp.js';
 import { TelegramAdapter } from './telegram.js';
 
 export { ChannelHub, newPairingCode } from './hub.js';
@@ -19,7 +20,7 @@ export class Channels {
 
   constructor(env: ChannelEnv, opts: ChannelOptions = {}) {
     migrateTelegram(env);
-    const adapters: ChannelAdapter[] = [new TelegramAdapter(opts.apiBase?.telegram), new DiscordAdapter(opts.apiBase?.discord), new SlackAdapter(opts.apiBase?.slack)];
+    const adapters: ChannelAdapter[] = [new TelegramAdapter(opts.apiBase?.telegram), new DiscordAdapter(opts.apiBase?.discord), new SlackAdapter(opts.apiBase?.slack), new WhatsAppAdapter(opts.apiBase?.whatsapp)];
     for (const a of adapters) this.hubs.set(a.kind, new ChannelHub(a, env));
     env.workflows.approvalListeners.add((w, run, ask) => {
       for (const hub of this.hubs.values()) void hub.askWorkflowApproval(w, run, ask);

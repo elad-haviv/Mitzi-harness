@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer, IncomingMessage, Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { createHmac } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
@@ -53,6 +54,8 @@ let discord: { url: string; calls: Call[] };
 let slack: { url: string; calls: Call[] };
 let slackSocket: FakeSocket | undefined;
 let slackTs = 1;
+let whatsapp: { url: string; calls: Call[] };
+let waIds = 1;
 let gateway: FakeSocket | undefined;
 let discordIds = 100;
 
@@ -112,6 +115,16 @@ before(async () => {
     return { ok: true };
   });
   process.env.MITZI_SLACK_API = slack.url;
+
+  // WhatsApp: the Graph API (the messages themselves come to Mitzi's webhook).
+  whatsapp = await fakeApi((c) => {
+    if (c.method === 'GET' && c.path.startsWith('/PHONE1?')) return { display_phone_number: '+1 555 0100', verified_name: 'Mitzi Cat' };
+    if (c.method === 'GET' && c.path === '/media9') return { url: `${whatsapp.url}/files/media9` };
+    if (c.path === '/files/media9') return Buffer.from('notes from a file');
+    if (c.method === 'POST') return { messages: [{ id: `wamid.${waIds++}` }] };
+    return {};
+  });
+  process.env.MITZI_WHATSAPP_API = whatsapp.url;
 
   const { startServer } = await import('../server/index.js');
   const webDir = tempDir();
@@ -236,4 +249,67 @@ test('Slack: Socket Mode events are acknowledged, pairing, mrkdwn answers, appro
   await until(() => slack.calls.some((c) => c.path === '/chat.update' && c.body.text === 'Fetched it.'), 'carried on');
 
   await call('PUT', '/api/channels/slack', { enabled: false });
+});
+
+test('WhatsApp: verified, signed webhooks; pairing; whole answers; buttons and lists', { timeout: 30_000 }, async () => {
+  const sentTo = () => whatsapp.calls.filter((c) => c.method === 'POST' && c.path === '/PHONE1/messages').map((c) => c.body);
+  const hook = (body: object, secret = 'app-secret') => {
+    const raw = JSON.stringify(body);
+    return fetch(`${base}/hooks/channels/whatsapp`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-hub-signature-256': `sha256=${createHmac('sha256', secret).update(raw).digest('hex')}` }, body: raw });
+  };
+  let id = 1;
+  const message = (m: object) => hook({ entry: [{ changes: [{ value: { contacts: [{ wa_id: '972500000001', profile: { name: 'Dana' } }], messages: [{ from: '972500000001', id: `wamid.in${id++}`, ...m }] } }] }] });
+
+  assert.equal((await fetch(`${base}/hooks/channels/whatsapp`)).status, 404, 'off until turned on');
+  const on = (await call('PUT', '/api/channels/whatsapp', { config: { phoneNumberId: 'PHONE1', accessToken: 'wa-token', appSecret: 'app-secret', verifyToken: 'purr' }, enabled: true })).data;
+  assert.equal(on.running, true);
+  assert.equal(on.username, 'Mitzi Cat · +1 555 0100');
+  assert.equal(on.webhookPath, '/hooks/channels/whatsapp');
+  assert.equal(on.values.verifyToken, 'purr');
+  assert.equal(on.values.accessToken, true);
+
+  // Meta's address check, and only signed posts get in.
+  const verify = await fetch(`${base}/hooks/channels/whatsapp?hub.mode=subscribe&hub.verify_token=purr&hub.challenge=12345`);
+  assert.equal(await verify.text(), '12345');
+  assert.equal((await fetch(`${base}/hooks/channels/whatsapp?hub.mode=subscribe&hub.verify_token=nope&hub.challenge=1`)).status, 403);
+  assert.equal((await hook({ entry: [] }, 'wrong-secret')).status, 401);
+
+  assert.equal((await message({ type: 'text', text: { body: `pair ${on.pairingCode}` } })).status, 200);
+  await until(() => sentTo().some((b) => /Connected/.test(b.text?.body ?? '')), 'paired');
+  assert.equal(sentTo()[0].to, '972500000001');
+  assert.equal(whatsapp.calls.find((c) => c.method === 'POST')!.headers.authorization, 'Bearer wa-token');
+
+  // The answer comes whole, in WhatsApp's formatting; a retried delivery is handled once.
+  reply = () => textChunks('**Purr**fect. Read [this](https://example.com).');
+  const retry = { type: 'text', text: { body: 'hi' } };
+  await hook({ entry: [{ changes: [{ value: { messages: [{ from: '972500000001', id: 'wamid.same', ...retry }] } }] }] });
+  await hook({ entry: [{ changes: [{ value: { messages: [{ from: '972500000001', id: 'wamid.same', ...retry }] } }] }] });
+  await until(() => sentTo().some((b) => b.text?.body === '*Purr*fect. Read this (https://example.com).'), 'answer');
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(sentTo().filter((b) => /Purr/.test(b.text?.body ?? '')).length, 1);
+
+  // Three short choices are buttons; tapping one answers. A file comes through as an attachment.
+  reply = (body) => (body.messages.at(-1).role === 'tool' ? textChunks(`Got: ${body.messages.at(-1).content}`) : toolCallChunks('q', 'AskUser', { questions: [{ question: 'Size?', options: [{ label: 'S' }, { label: 'M' }, { label: 'L' }] }] }));
+  await message({ type: 'document', document: { id: 'media9', filename: 'notes.txt', mime_type: 'text/plain' } });
+  await until(() => sentTo().some((b) => b.type === 'interactive'), 'question');
+  const q = sentTo().find((b) => b.type === 'interactive')!;
+  assert.equal(q.interactive.type, 'button');
+  assert.deepEqual(q.interactive.action.buttons.map((b: any) => b.reply.title), ['S', 'M', 'L']);
+  await message({ type: 'interactive', interactive: { button_reply: { id: q.interactive.action.buttons[2].reply.id, title: 'L' } } });
+  await until(() => sentTo().some((b) => /Size\?\n→ L/.test(b.text?.body ?? '')), 'carried on');
+  const chat = (await call('GET', `/api/chats/${(await channel('whatsapp')).links[0].mitziChatId}`)).data;
+  assert.match(JSON.stringify(chat.messages), /notes from a file/);
+
+  // Many choices go in a list.
+  reply = (body) => (body.messages.at(-1).role === 'tool' ? textChunks('ok') : toolCallChunks('q2', 'AskUser', { questions: [{ question: 'Which day?', options: ['Monday', 'Tuesday', 'Wednesday', 'Thursday'].map((label) => ({ label })) }] }));
+  await message({ type: 'text', text: { body: 'book something' } });
+  await until(() => sentTo().filter((b) => b.type === 'interactive').length === 2, 'list');
+  const list = sentTo().filter((b) => b.type === 'interactive')[1];
+  assert.equal(list.interactive.type, 'list');
+  assert.equal(list.interactive.action.sections[0].rows.length, 4);
+  // A typed number answers too.
+  await message({ type: 'text', text: { body: '2' } });
+  await until(() => chat && sentTo().at(-1)?.text?.body === 'ok', 'answered by number');
+
+  await call('PUT', '/api/channels/whatsapp', { enabled: false });
 });
