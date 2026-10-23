@@ -899,6 +899,18 @@ test('messages sent while the bot works are queued and sent in order; "now" inte
     assert.deepEqual((await call('DELETE', `/api/chats/${chat.id}/queue/${q[0].id}`)).data.queue, []);
     await third;
     assert.ok(!(await idle(chat.id)).messages.some((m: any) => m.content === 'Never mind'));
+
+    // And reordered: they go in the new order.
+    const fourth = stream(`/api/chats/${chat.id}/messages`, { content: 'First' });
+    await new Promise((r) => setTimeout(r, 80));
+    for (const content of ['A', 'B', 'C']) await call('POST', `/api/chats/${chat.id}/queue`, { content });
+    const ids = (await call('GET', `/api/chats/${chat.id}`)).data.queue.map((q: any) => q.id);
+    const reordered = (await call('PUT', `/api/chats/${chat.id}/queue`, { order: [ids[2], ids[0], ids[1], 'gone'] })).data.queue;
+    assert.deepEqual(reordered.map((q: any) => q.content), ['C', 'A', 'B']);
+    assert.equal((await call('PUT', `/api/chats/${chat.id}/queue`, { order: 'C' })).status, 400);
+    await fourth;
+    const sent = (await idle(chat.id)).messages.filter((m: any) => m.role === 'user').map((m: any) => m.content).slice(-3);
+    assert.deepEqual(sent, ['C', 'A', 'B']);
   } finally {
     chunkDelay = 0;
   }

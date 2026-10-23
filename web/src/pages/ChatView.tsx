@@ -22,8 +22,6 @@ import {
   Trash2,
   Wallet,
   X,
-  ListPlus,
-  Zap,
   Share2,
 } from 'lucide-react';
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -31,6 +29,7 @@ import { api, ApprovalLevel, Artifact, Attachment, AUTO_MODEL, Chat, ChatMessage
 import { ImportModal } from '../components/Import';
 import { LiveMode } from '../components/LiveMode';
 import { RealtimeMode } from '../components/RealtimeMode';
+import { QueueList } from '../components/QueueList';
 import { ProjectChip } from '../components/ProjectChip';
 import { speaker } from '../speech';
 import { ArtifactIcon, ArtifactView, TYPE_LABEL } from '../components/Artifacts';
@@ -934,22 +933,19 @@ export function ChatView({
         )}
         {btw && <BtwCard state={btw} onClose={() => setBtw(undefined)} />}
         {chat?.queue && chat.queue.length > 0 && (
-          <div className="queue-list" aria-label="Queued messages">
-            {chat.queue.map((q, i) => (
-              <div key={q.id} className="queue-item">
-                <ListPlus size={14} className="muted" />
-                <span className="queue-text" dir="auto" title={q.content}>
-                  <span className="muted small">{i === 0 ? 'Next' : `${i + 1}.`}</span> {q.content || q.attachments?.map((a) => a.name).join(', ')}
-                </span>
-                <button className="link-btn small" onClick={() => chat && void api.sendQueuedNow(chat.id, q.id).then((r) => setChat((c) => c && { ...c, queue: r.queue }), (err) => toast(err.message))}>
-                  <Zap size={12} /> Send now
-                </button>
-                <button className="icon-btn sm" aria-label="Remove from the queue" title="Remove" onClick={() => chat && void api.unqueue(chat.id, q.id).then((r) => setChat((c) => c && { ...c, queue: r.queue }), (err) => toast(err.message))}>
-                  <X size={13} />
-                </button>
-              </div>
-            ))}
-          </div>
+          <QueueList
+            queue={chat.queue}
+            onReorder={(order) => {
+              const byId = new Map(chat.queue!.map((q) => [q.id, q]));
+              setChat((c) => c && { ...c, queue: order.map((id) => byId.get(id)!).filter(Boolean) });
+              void api.reorderQueue(chat.id, order).then(
+                (r) => setChat((c) => c && { ...c, queue: r.queue }),
+                (err) => toast(err.message),
+              );
+            }}
+            onSendNow={(id) => void api.sendQueuedNow(chat.id, id).then((r) => setChat((c) => c && { ...c, queue: r.queue }), (err) => toast(err.message))}
+            onRemove={(id) => void api.unqueue(chat.id, id).then((r) => setChat((c) => c && { ...c, queue: r.queue }), (err) => toast(err.message))}
+          />
         )}
         {chat?.goal && <GoalBar goal={chat.goal} onCommand={(t) => void runCommand(t)} onOpen={() => setPanel({ tab: 'tasks' })} />}
       </div>

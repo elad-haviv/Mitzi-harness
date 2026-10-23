@@ -609,6 +609,19 @@ export class ChatRunner {
     return chat.queue;
   }
 
+  /** Puts queued messages in the given order; ids no longer queued (already sent) are skipped, unknown ones keep their place at the end. */
+  reorderQueue(chatId: string, order: string[]): QueuedMessage[] {
+    const chat = this.deps.store.chats.get(chatId);
+    if (!chat) throw new Error('Chat not found');
+    const queue = chat.queue ?? [];
+    const byId = new Map(queue.map((q) => [q.id, q]));
+    const ordered = order.map((id) => byId.get(id)).filter((q): q is QueuedMessage => !!q);
+    chat.queue = [...new Set([...ordered, ...queue])];
+    this.deps.store.chats.put(chat);
+    this.active.get(chatId)?.emit?.({ type: 'queue', queue: chat.queue });
+    return chat.queue;
+  }
+
   /** Starts the next queued message, if the chat is free. */
   private sendQueued(chatId: string): void {
     const chat = this.deps.store.chats.get(chatId);

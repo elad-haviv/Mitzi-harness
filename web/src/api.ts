@@ -258,6 +258,7 @@ export const api = {
   /** Queues a message while the chat responds; `now` stops the response and sends it right away. */
   queueMessage: (id: string, content: string, attachments: Attachment[], now = false) =>
     request<{ queue: QueuedMessage[] }>('POST', `/api/chats/${id}/queue`, { content, attachments, now }),
+  reorderQueue: (id: string, order: string[]) => request<{ queue: QueuedMessage[] }>('PUT', `/api/chats/${id}/queue`, { order }),
   unqueue: (id: string, qid: string) => request<{ queue: QueuedMessage[] }>('DELETE', `/api/chats/${id}/queue/${qid}`),
   sendQueuedNow: (id: string, qid: string) => request<{ queue: QueuedMessage[] }>('POST', `/api/chats/${id}/queue/${qid}/now`),
   /** Follows a chat that is already responding: what it streamed so far, then the rest. */

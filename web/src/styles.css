@@ -6621,6 +6621,43 @@ button.todo-check:not(:disabled):hover {
   background: var(--surface);
   font-size: 13px;
 }
+.queue-item {
+  transition: transform 0.15s ease;
+}
+.queue-list.dragging .queue-item.lifted {
+  transition: none;
+  position: relative;
+  z-index: 2;
+  box-shadow: var(--shadow-md, 0 6px 18px rgba(0, 0, 0, 0.12));
+  border-style: solid;
+}
+.queue-grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  margin-left: -6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: grab;
+  touch-action: none;
+}
+.queue-grip:hover,
+.queue-grip:focus-visible {
+  color: var(--text);
+  background: var(--hover, rgba(0, 0, 0, 0.05));
+}
+.queue-list.dragging,
+.queue-list.dragging .queue-grip {
+  cursor: grabbing;
+  user-select: none;
+}
+.queue-grip.idle {
+  cursor: default;
+  opacity: 0.4;
+}
 .queue-text {
   flex: 1;
   min-width: 0;

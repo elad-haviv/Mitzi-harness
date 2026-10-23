@@ -457,6 +457,11 @@ export function createApp(opts: AppOptions) {
     if (!content.trim() && !attachments.length) throw new HttpError(400, 'Message is empty');
     return { queue: runner.enqueue(params.id, { content, ...(attachments.length ? { attachments } : {}) }, body?.now === true) };
   });
+  route('PUT', '/api/chats/:id/queue', ({ params, body }) => {
+    getChat(params.id);
+    if (!Array.isArray(body?.order) || !body.order.every((id: unknown) => typeof id === 'string')) throw new HttpError(400, 'order must be a list of queued message ids');
+    return { queue: runner.reorderQueue(params.id, body.order) };
+  });
   route('DELETE', '/api/chats/:id/queue/:qid', ({ params }) => ({ queue: runner.dequeue(params.id, params.qid) }));
   route('POST', '/api/chats/:id/queue/:qid/now', ({ params }) => ({ queue: runner.dequeue(params.id, params.qid, true) }));
   /** Follows a running chat: what it streamed so far, then live events until it's done. */
