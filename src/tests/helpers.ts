@@ -134,3 +134,85 @@ createInterface({ input: process.stdin }).on('line', (line) => {
   );
   return main;
 }
+
+/** One connection to the fake WebSocket server. */
+export interface FakeSocket {
+  path: string;
+  /** JSON messages the client sent. */
+  received: any[];
+  onMessage?: (m: any) => void;
+  send(data: unknown): void;
+  close(): void;
+}
+
+/**
+ * A minimal WebSocket server (text frames only), for testing clients of services such as Discord's gateway or
+ * Slack's Socket Mode without the real thing.
+ */
+export async function fakeWebSocketServer(onConnect: (socket: FakeSocket) => void): Promise<{ url: string; server: Server; sockets: FakeSocket[] }> {
+  const { createHash } = await import('node:crypto');
+  const sockets: FakeSocket[] = [];
+  const server = createServer((_req, res) => res.writeHead(426).end());
+  server.on('upgrade', (req, conn) => {
+    const accept = createHash('sha1').update(`${req.headers['sec-websocket-key']}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest('base64');
+    conn.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
+    const frame = (opcode: number, payload: Buffer) => {
+      const len = payload.length;
+      const head = len < 126 ? Buffer.from([0x80 | opcode, len]) : len < 65536 ? Buffer.from([0x80 | opcode, 126, len >> 8, len & 255]) : Buffer.concat([Buffer.from([0x80 | opcode, 127]), (() => { const b = Buffer.alloc(8); b.writeBigUInt64BE(BigInt(len)); return b; })()]);
+      return Buffer.concat([head, payload]);
+    };
+    const socket: FakeSocket = {
+      path: req.url ?? '/',
+      received: [],
+      send: (data) => {
+        if (!conn.destroyed) conn.write(frame(1, Buffer.from(typeof data === 'string' ? data : JSON.stringify(data))));
+      },
+      close: () => {
+        if (!conn.destroyed) conn.end(frame(8, Buffer.from([0x03, 0xe8])));
+      },
+    };
+    sockets.push(socket);
+    let buf = Buffer.alloc(0);
+    conn.on('data', (chunk: Buffer) => {
+      buf = Buffer.concat([buf, chunk]);
+      for (;;) {
+        if (buf.length < 2) return;
+        const opcode = buf[0] & 15;
+        let len = buf[1] & 127;
+        let at = 2;
+        if (len === 126) {
+          if (buf.length < 4) return;
+          len = buf.readUInt16BE(2);
+          at = 4;
+        } else if (len === 127) {
+          if (buf.length < 10) return;
+          len = Number(buf.readBigUInt64BE(2));
+          at = 10;
+        }
+        const masked = (buf[1] & 128) !== 0;
+        const mask = masked ? buf.subarray(at, at + 4) : undefined;
+        if (masked) at += 4;
+        if (buf.length < at + len) return;
+        const payload = Buffer.from(buf.subarray(at, at + len));
+        if (mask) for (let i = 0; i < payload.length; i++) payload[i] ^= mask[i % 4];
+        buf = buf.subarray(at + len);
+        if (opcode === 8) return void conn.end(frame(8, Buffer.alloc(0)));
+        if (opcode === 9) conn.write(frame(10, payload));
+        if (opcode === 1) {
+          let message: any = payload.toString('utf8');
+          try {
+            message = JSON.parse(message);
+          } catch {
+            // Plain text.
+          }
+          socket.received.push(message);
+          socket.onMessage?.(message);
+        }
+      }
+    });
+    conn.on('error', () => {});
+    onConnect(socket);
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  return { url: `ws://127.0.0.1:${(server.address() as AddressInfo).port}`, server, sockets };
+}

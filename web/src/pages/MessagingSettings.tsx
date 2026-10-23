@@ -15,14 +15,18 @@ export const CHANNEL_ICONS: Record<ChannelKind, ReactNode> = {
   email: <Mail size={15} />,
 };
 
-/** Steps use a little Markdown: `code` and [links](https://…). */
+/** Steps use a little Markdown: `code`, **bold**, *italics* and [links](https://…). */
 function Inline({ text }: { text: string }) {
-  const parts = text.split(/(`[^`]+`|\[[^\]]+\]\(https?:\/\/[^)\s]+\))/g);
+  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\(https?:\/\/[^)\s]+\))/g);
   return (
     <>
       {parts.map((p, i) => {
         const code = /^`([^`]+)`$/.exec(p);
         if (code) return <code key={i}>{code[1]}</code>;
+        const bold = /^\*\*([^*]+)\*\*$/.exec(p);
+        if (bold) return <strong key={i}>{bold[1]}</strong>;
+        const em = /^\*([^*]+)\*$/.exec(p);
+        if (em) return <em key={i}>{em[1]}</em>;
         const link = /^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/.exec(p);
         if (link) {
           return (

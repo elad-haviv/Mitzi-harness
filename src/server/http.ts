@@ -728,7 +728,7 @@ export function createApp(opts: AppOptions) {
   const { scheduler } = registerFeatureRoutes(route, { store, runner, client, config, memory, media, newChat, workflows });
 
   // ---- Messaging (Telegram, Discord, Slack, WhatsApp, email) --------------------------------
-  const channels = new Channels({ store, runner, media, workflows, newChat }, { apiBase: { telegram: process.env.MITZI_TELEGRAM_API } });
+  const channels = new Channels({ store, runner, media, workflows, newChat }, { apiBase: { telegram: process.env.MITZI_TELEGRAM_API, discord: process.env.MITZI_DISCORD_API, slack: process.env.MITZI_SLACK_API } });
   channels.start();
   scheduler.finishedListeners.add((task) => {
     const run = task.runs.at(-1);

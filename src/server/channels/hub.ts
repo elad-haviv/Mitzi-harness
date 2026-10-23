@@ -197,7 +197,9 @@ export class ChannelHub {
       this.username = username;
       this.running = true;
     } catch (err) {
-      this.startError = (err as Error).message;
+      const e = err as Error & { cause?: { code?: string } };
+      // fetch's own errors say only "fetch failed"; the cause has the reason.
+      this.startError = e.message === 'fetch failed' || e.name === 'TimeoutError' ? `Couldn’t reach ${this.adapter.label}${e.cause?.code ? ` (${e.cause.code})` : ''}. Check the internet connection.` : e.message;
     }
   }
 
@@ -338,15 +340,20 @@ export class ChannelHub {
     let shown = '';
     let lastEdit = 0;
     let status = '';
-    // Services that can edit show the answer as it comes; others get it whole at the end.
-    const show = async (final = false) => {
-      if (!adapter.canEdit) return;
+    // Services that can edit show the answer as it comes; others get it whole at the end. Sends and edits go
+    // one after another, so a quick answer can't overtake the first send and post twice.
+    let updates = Promise.resolve();
+    const show = (final = false): Promise<void> => {
+      if (!adapter.canEdit) return updates;
       const body = (text.trim() || status || '…').slice(0, adapter.maxText);
-      if (body === shown || (!final && Date.now() - lastEdit < EDIT_EVERY_MS)) return;
+      if (body === shown || (!final && Date.now() - lastEdit < EDIT_EVERY_MS)) return updates;
       lastEdit = Date.now();
       shown = body;
-      if (!replyId) replyId = await this.reply(address, body);
-      else await adapter.edit?.(address, replyId, body).catch(() => {});
+      updates = updates.then(async () => {
+        if (!replyId) replyId = await this.reply(address, body);
+        else await adapter.edit?.(address, replyId, body).catch(() => {});
+      });
+      return updates;
     };
     const emit = (e: StreamEvent) => {
       if (e.type === 'text') {
@@ -373,6 +380,7 @@ export class ChannelHub {
     await runner.run(mitziChatId, { kind: 'message', content, attachments }, emit, new AbortController().signal);
     // The whole answer, formatted: the first part replaces the streamed message, the rest follow.
     const parts = splitMessage(text, adapter.maxText);
+    await updates;
     if (adapter.canEdit && replyId) {
       text = parts[0];
       await show(true);
