@@ -36,6 +36,7 @@ import {
   Zap,
   Code2,
 } from 'lucide-react';
+import { AskedCard } from './Questions';
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import type { Artifact, Attachment, Bot, ChatMessage, ContentPart, Rating, RecalledMemory, RouteChoice, Todo } from '../api';
 import { speaker, useSpeaking } from '../speech';
@@ -668,6 +669,8 @@ export function ToolBlock({
   const [open, setOpen] = useState(false);
 
   if (name === 'Delegate' && Array.isArray(args?.assignments)) return <TeamCard args={args} result={result} running={running} progress={team} />;
+  // While it waits, the question card below the answer is what shows.
+  if (name === 'AskUser') return result ? <AskedCard args={args} output={result.output} isError={result.isError} /> : null;
   if (name === 'Subagents' && Array.isArray(args?.tasks)) return <SubagentsCard args={args} result={result} running={running} progress={team} />;
 
   if (name === 'Artifact') {

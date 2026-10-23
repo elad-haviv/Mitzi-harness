@@ -2,7 +2,7 @@
 // chat talks in a Mitzi chat (it shows in the app too); answers stream by editing the reply, approvals are
 // buttons, voice notes are transcribed, and workflows can be run and approved.
 import { randomInt } from 'node:crypto';
-import type { Attachment, Chat, StreamEvent, TelegramLink, TelegramSettings, Workflow, WorkflowRun } from '../shared/types.js';
+import type { AskQuestion, Attachment, Chat, StreamEvent, TelegramLink, TelegramSettings, Workflow, WorkflowRun } from '../shared/types.js';
 import type { MediaService } from './media.js';
 import type { ChatRunner } from './runner.js';
 import { now, Store } from './store.js';
@@ -80,8 +80,10 @@ export class TelegramBot {
   private abort?: AbortController;
   private username?: string;
   private error?: string;
-  /** Pending approvals: callback id → how to answer. */
-  private readonly callbacks = new Map<string, (yes: boolean) => void>();
+  /** Pending buttons: callback id → what pressing one does (returns the note Telegram shows). */
+  private readonly callbacks = new Map<string, (answer: string) => string>();
+  /** Questions a bot asked in a Telegram chat, answered by tapping an option or replying. */
+  private readonly questions = new Map<number, { mitziChatId: string; requestId: string; questions: AskQuestion[]; answers: (string[] | undefined)[] }>();
   private nextCallback = 1;
 
   constructor(private readonly deps: TelegramDeps) {
@@ -165,10 +167,10 @@ export class TelegramBot {
     if (u.callback_query) {
       const [kind, id, answer] = String(u.callback_query.data ?? '').split(':');
       const resolve = kind === 'cb' ? this.callbacks.get(id) : undefined;
-      await this.api('answerCallbackQuery', { callback_query_id: u.callback_query.id, text: resolve ? (answer === 'yes' ? 'Allowed' : 'Declined') : 'This was already answered' }).catch(() => {});
+      const note = resolve?.(answer ?? '');
+      await this.api('answerCallbackQuery', { callback_query_id: u.callback_query.id, text: note || 'This was already answered' }).catch(() => {});
       if (resolve) {
         this.callbacks.delete(id);
-        resolve(answer === 'yes');
         const m = u.callback_query.message;
         if (m) await this.api('editMessageReplyMarkup', { chat_id: m.chat.id, message_id: m.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => {});
       }
@@ -217,6 +219,9 @@ export class TelegramBot {
           return this.runWorkflow(chatId, args);
       }
     }
+
+    // A reply while a question waits answers it.
+    if (text && this.questions.has(chatId)) return this.answerQuestion(chatId, undefined, [text]);
 
     // The message: text, a transcribed voice note, a photo, or a text file.
     let content = text;
@@ -289,10 +294,14 @@ export class TelegramBot {
         if (!text.trim()) void show();
       } else if (e.type === 'permission') {
         const id = String(this.nextCallback++);
-        this.callbacks.set(id, (yes) => runner.resolvePermission(chatId!, e.requestId, { kind: yes ? 'yes' : 'no' }));
+        this.callbacks.set(id, (a) => (runner.resolvePermission(chatId!, e.requestId, { kind: a === 'yes' ? 'yes' : 'no' }) ? (a === 'yes' ? 'Allowed' : 'Declined') : ''));
         void this.send(link.chatId, `🐾 May I ${e.tool}?\n${e.summary}${e.why ? `\n(${e.why})` : ''}`, {
           reply_markup: { inline_keyboard: [[{ text: '✅ Allow', callback_data: `cb:${id}:yes` }, { text: '✋ Deny', callback_data: `cb:${id}:no` }]] },
         });
+      } else if (e.type === 'question') {
+        void this.askQuestions(link.chatId, chatId!, e.requestId, e.questions);
+      } else if (e.type === 'question_resolved') {
+        if (this.questions.get(link.chatId)?.requestId === e.requestId) this.questions.delete(link.chatId);
       } else if (e.type === 'error') {
         void this.send(link.chatId, `⚠️ ${e.message}`);
       }
@@ -322,12 +331,44 @@ export class TelegramBot {
     for (const part of splitMessage(run.output || 'Done (no result).')) await this.send(chatId, part);
   }
 
+  /** A bot's questions: one message each, with its options as buttons; a reply answers in the user's own words. */
+  private async askQuestions(tgChat: number, mitziChatId: string, requestId: string, questions: AskQuestion[]): Promise<void> {
+    const pending = { mitziChatId, requestId, questions, answers: questions.map(() => undefined as string[] | undefined) };
+    this.questions.set(tgChat, pending);
+    for (const [qi, q] of questions.entries()) {
+      const id = String(this.nextCallback++);
+      const options = q.options ?? [];
+      this.callbacks.set(id, (a) => {
+        const label = options[Number(a)]?.label;
+        if (!label || this.questions.get(tgChat) !== pending) return '';
+        this.answerQuestion(tgChat, qi, [label]);
+        return label;
+      });
+      const lines = [`❓ ${q.question}`, ...options.filter((o) => o.description).map((o) => `• ${o.label}: ${o.description}`)];
+      if (qi === questions.length - 1) lines.push('', options.length ? 'Tap an option, or reply in your own words.' : 'Reply with your answer.');
+      await this.send(tgChat, lines.join('\n').slice(0, MAX_TEXT), options.length ? { reply_markup: { inline_keyboard: options.map((o, i) => [{ text: o.label, callback_data: `cb:${id}:${i}` }]) } } : {}).catch(() => {});
+    }
+  }
+
+  /** Records an answer; once every question has one, the bot carries on. */
+  private answerQuestion(tgChat: number, index: number | undefined, answer: string[]): void {
+    const pending = this.questions.get(tgChat);
+    if (!pending) return;
+    const i = index ?? pending.answers.findIndex((a) => !a);
+    if (i < 0) return;
+    pending.answers[i] = answer;
+    if (pending.answers.every(Boolean)) {
+      this.questions.delete(tgChat);
+      this.deps.runner.resolveQuestion(pending.mitziChatId, pending.requestId, pending.answers as string[][]);
+    }
+  }
+
   /** A workflow waiting for approval asks the paired chats. */
   private async askApproval(w: Workflow, run: WorkflowRun, ask: string): Promise<void> {
     const s = this.settings;
     if (!this.running || !s?.notify || !s.links.length) return;
     const id = String(this.nextCallback++);
-    this.callbacks.set(id, (yes) => this.deps.workflows.decide(run.id, { approved: yes }));
+    this.callbacks.set(id, (a) => (this.deps.workflows.decide(run.id, { approved: a === 'yes' }), a === 'yes' ? 'Approved' : 'Rejected'));
     for (const link of s.links) {
       await this.send(link.chatId, `${w.emoji} ${w.name} needs your approval:\n\n${ask}`.slice(0, MAX_TEXT), {
         reply_markup: { inline_keyboard: [[{ text: '✅ Approve', callback_data: `cb:${id}:yes` }, { text: '✋ Reject', callback_data: `cb:${id}:no` }]] },

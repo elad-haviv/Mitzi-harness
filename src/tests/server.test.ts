@@ -1089,6 +1089,39 @@ test('workflow triggers: a secret webhook, and a watched folder', { timeout: 30_
   await call('PATCH', `/api/workflows/${wf.id}`, { triggers: { folder: { path: dir, pattern: '*.txt', enabled: false } } });
 });
 
+test('bots ask the user: options or own words, answered from the chat (or skipped)', async () => {
+  const questions = [
+    { question: 'Which color?', header: 'Color', options: [{ label: 'Red (recommended)' }, 'Blue', { label: '' }], multiSelect: false },
+    { question: 'Which toppings?', options: [{ label: 'Cheese' }, { label: 'Olives' }], multiSelect: true },
+  ];
+  reply = (body) => (body.messages.at(-1).role === 'tool' ? textChunks(`Noted. ${body.messages.at(-1).content}`) : toolCallChunks('ask_1', 'AskUser', { questions }));
+  const chat = (await call('POST', '/api/chats', {})).data;
+  let asked: any;
+  const events = await stream(`/api/chats/${chat.id}/messages`, { content: 'Make me a pizza' }, (e) => {
+    if (e.type !== 'question') return;
+    asked = e;
+    void (async () => {
+      assert.equal((await call('GET', '/api/chats')).data.find((c: any) => c.id === chat.id)?.waiting, true);
+      assert.equal((await call('POST', `/api/chats/${chat.id}/answer`, { requestId: 'nope', answers: null })).status, 404);
+      assert.equal((await call('POST', `/api/chats/${chat.id}/answer`, { requestId: e.requestId, answers: 'Red' })).status, 400);
+      await call('POST', `/api/chats/${chat.id}/answer`, { requestId: e.requestId, answers: [['Red (recommended)'], ['Cheese', ' extra basil ']] });
+    })();
+  });
+  // Options are tidied: strings become options, empty ones go.
+  assert.deepEqual(asked.questions[0], { question: 'Which color?', header: 'Color', options: [{ label: 'Red (recommended)' }, { label: 'Blue' }] });
+  assert.equal(asked.questions[1].multiSelect, true);
+  assert.equal(asked.callId, 'ask_1');
+  assert.ok(events.some((e) => e.type === 'question_resolved' && e.requestId === asked.requestId));
+  const done = (await call('GET', `/api/chats/${chat.id}`)).data;
+  assert.equal(done.messages.at(-1).content, 'Noted. Which color?\n→ Red (recommended)\n\nWhich toppings?\n→ Cheese, extra basil');
+
+  // Skipping lets the bot decide.
+  await stream(`/api/chats/${chat.id}/messages`, { content: 'Another one' }, (e) => {
+    if (e.type === 'question') void call('POST', `/api/chats/${chat.id}/answer`, { requestId: e.requestId, answers: null });
+  });
+  assert.match((await call('GET', `/api/chats/${chat.id}`)).data.messages.at(-1).content, /^Noted. The user skipped/);
+});
+
 test('Telegram: pairing, chatting, and strangers kept out', { timeout: 30_000 }, async () => {
   reply = (body) => textChunks(`Hi from Mitzi: ${body.messages.at(-1).content}`);
   const sent = (chatId: number) => tgCalls.filter((c) => (c.method === 'sendMessage' || c.method === 'editMessageText') && c.body.chat_id === chatId).map((c) => c.body.text);
@@ -1124,6 +1157,20 @@ test('Telegram: pairing, chatting, and strangers kept out', { timeout: 30_000 },
   const chat = (await call('GET', `/api/chats/${link.mitziChatId}`)).data;
   assert.equal(chat.title, 'Telegram: Dana');
   assert.deepEqual(chat.messages.map((m: any) => m.content), ['What is up', 'Hi from Mitzi: What is up']);
+
+  // Questions come with their options as buttons; a tap or a reply answers them.
+  const ask = { questions: [{ question: 'Which size?', options: [{ label: 'Small' }, { label: 'Large', description: 'Twice the coffee' }] }, { question: 'Any name for the cup?' }] };
+  reply = (body) => (body.messages.at(-1).role === 'tool' ? textChunks(`Got: ${body.messages.at(-1).content}`) : toolCallChunks('ask_tg', 'AskUser', ask));
+  say(42, 'Order me a coffee');
+  await until(() => tgCalls.some((c) => c.method === 'sendMessage' && /Which size\?/.test(c.body.text) && c.body.reply_markup));
+  const buttons = tgCalls.find((c) => /Which size\?/.test(c.body.text ?? ''))!.body.reply_markup.inline_keyboard.flat();
+  assert.deepEqual(buttons.map((b: any) => b.text), ['Small', 'Large']);
+  assert.ok(sent(42).some((t) => /Large: Twice the coffee/.test(t)));
+  tgUpdates.push({ update_id: update++, callback_query: { id: 'tap1', data: buttons[1].callback_data, message: { message_id: 5, chat: { id: 42 } } } });
+  await until(() => tgCalls.some((c) => c.method === 'answerCallbackQuery' && c.body.text === 'Large'));
+  say(42, 'Mitzi');
+  await until(() => sent(42).some((t) => /^Got: Which size\?\n→ Large\n\nAny name for the cup\?\n→ Mitzi$/.test(t)));
+  reply = (body) => textChunks(`Hi from Mitzi: ${body.messages.at(-1).content}`);
 
   // Another Telegram user can't use it.
   say(99, 'let me in');

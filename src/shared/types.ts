@@ -140,6 +140,21 @@ export interface Project {
   updatedAt: string;
 }
 
+export interface AskOption {
+  label: string;
+  description?: string;
+}
+
+/** A question a bot puts to the user: options to click, or an open answer when there are none. */
+export interface AskQuestion {
+  question: string;
+  /** A word or two naming it. */
+  header?: string;
+  options?: AskOption[];
+  /** Several options can be picked. */
+  multiSelect?: boolean;
+}
+
 export interface BotTools {
   /** Generate images, video, speech, sound effects and music. */
   media?: boolean;
@@ -712,6 +727,9 @@ export type StreamEvent =
   | { type: 'delegate'; callId: string; botId: string; event: 'start' | 'text' | 'tool' | 'done' | 'error'; text: string }
   | { type: 'permission'; requestId: string; callId?: string; tool: string; summary: string; preview?: string; alwaysRule: string; why?: string }
   | { type: 'permission_resolved'; requestId: string }
+  /** The bot asks the user something and waits for the answer (POST /api/chats/:id/answer). */
+  | { type: 'question'; requestId: string; callId?: string; questions: AskQuestion[] }
+  | { type: 'question_resolved'; requestId: string }
   | { type: 'artifact'; artifact: Artifact }
   | { type: 'todos'; todos: Todo[] }
   | { type: 'goal'; goal: Goal | null }

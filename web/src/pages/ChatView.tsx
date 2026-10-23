@@ -30,6 +30,7 @@ import { ImportModal } from '../components/Import';
 import { LiveMode } from '../components/LiveMode';
 import { RealtimeMode } from '../components/RealtimeMode';
 import { QueueList } from '../components/QueueList';
+import { QuestionCard, QuestionRequest } from '../components/Questions';
 import { ProjectChip } from '../components/ProjectChip';
 import { speaker } from '../speech';
 import { ArtifactIcon, ArtifactView, TYPE_LABEL } from '../components/Artifacts';
@@ -67,6 +68,7 @@ type LiveBlock =
   | { kind: 'reasoning'; text: string }
   | { kind: 'tool'; id: string; name: string; summary: string; args: any; result?: { output: string; isError: boolean }; team?: TeamProgress }
   | { kind: 'permission'; req: PermissionRequest }
+  | { kind: 'question'; req: QuestionRequest }
   | { kind: 'goal'; goal: Goal };
 
 interface Live {
@@ -304,6 +306,12 @@ export function ChatView({
         break;
       case 'permission':
         setLive((l) => l && { ...l, blocks: [...l.blocks, { kind: 'permission', req: e }] });
+        break;
+      case 'question':
+        setLive((l) => l && { ...l, blocks: [...l.blocks, { kind: 'question', req: e }] });
+        break;
+      case 'question_resolved':
+        setLive((l) => l && { ...l, blocks: l.blocks.filter((b) => !(b.kind === 'question' && b.req.requestId === e.requestId)) });
         break;
       case 'permission_resolved':
         setLive((l) => l && { ...l, blocks: l.blocks.filter((b) => !(b.kind === 'permission' && b.req.requestId === e.requestId)) });
@@ -796,6 +804,7 @@ export function ChatView({
           {live.blocks.map((b, i) => {
             if (b.kind === 'text') return <Markdown key={i} text={b.text} streaming={i === live.blocks.length - 1} />;
             if (b.kind === 'reasoning') return <Reasoning key={i} text={b.text} active={i === live.blocks.length - 1} />;
+            if (b.kind === 'question') return <QuestionCard key={b.req.requestId} req={b.req} onAnswer={(a) => chatId && api.answerQuestion(chatId, b.req.requestId, a).catch((err) => toast(err.message))} />;
             if (b.kind === 'permission') return <PermissionCard key={b.req.requestId} req={b.req} onAnswer={(a, fb) => answerPermission(b.req.requestId, a, fb)} />;
             if (b.kind === 'goal') {
               return (
@@ -820,7 +829,7 @@ export function ChatView({
               />
             );
           })}
-          {(live.blocks.length === 0 || live.status || live.blocks.at(-1)?.kind === 'tool' || live.blocks.at(-1)?.kind === 'goal') && !live.blocks.some((b) => b.kind === 'permission') && (
+          {(live.blocks.length === 0 || live.status || live.blocks.at(-1)?.kind === 'tool' || live.blocks.at(-1)?.kind === 'goal') && !live.blocks.some((b) => b.kind === 'permission' || b.kind === 'question') && (
             <div className="status-line">
               <span className="thinking-dots" aria-label="Thinking">
                 <span />

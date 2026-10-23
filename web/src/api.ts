@@ -305,6 +305,8 @@ export const api = {
   decideWorkflowRun: (id: string, runId: string, approved: boolean, note?: string) => request('POST', `/api/workflows/${id}/runs/${runId}/decide`, { approved, note }),
   answerPermission: (id: string, requestId: string, answer: 'yes' | 'always' | 'no' | 'feedback', feedback?: string) =>
     request('POST', `/api/chats/${id}/permission`, { requestId, answer, feedback }),
+  /** Answers a bot's questions: one list per question, or null to skip. */
+  answerQuestion: (id: string, requestId: string, answers: string[][] | null) => request('POST', `/api/chats/${id}/answer`, { requestId, answers }),
   context: (id: string) => request<ContextBreakdown>('GET', `/api/chats/${id}/context`),
   compact: (id: string) => request<{ compacted: boolean }>('POST', `/api/chats/${id}/compact`, {}),
   uncompact: (id: string) => request('POST', `/api/chats/${id}/uncompact`, {}),

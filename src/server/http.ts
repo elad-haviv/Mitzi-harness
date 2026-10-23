@@ -494,6 +494,19 @@ export function createApp(opts: AppOptions) {
     if (!runner.resolvePermission(params.id, str(body?.requestId), answer)) throw new HttpError(404, 'No pending permission request');
     return { ok: true };
   });
+  route('POST', '/api/chats/:id/answer', ({ params, body }) => {
+    // One list of strings per question; null (or nothing) skips.
+    const raw = body?.answers;
+    const answers =
+      raw == null
+        ? null
+        : Array.isArray(raw) && raw.every((a: unknown) => Array.isArray(a) && a.every((x) => typeof x === 'string'))
+          ? (raw as string[][]).map((a) => a.map((x) => x.trim().slice(0, 4000)).filter(Boolean))
+          : undefined;
+    if (answers === undefined) throw new HttpError(400, 'answers must be a list of string lists, or null to skip');
+    if (!runner.resolveQuestion(params.id, str(body?.requestId), answers)) throw new HttpError(404, 'No question is waiting for an answer');
+    return { ok: true };
+  });
   route('GET', '/api/chats/:id/context', async ({ params }) => {
     const chat = getChat(params.id);
     const setup = runner.setup(chat);

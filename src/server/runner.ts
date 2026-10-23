@@ -9,7 +9,7 @@ import { ApprovalAnswer, Approver, Permissions } from '../permissions.js';
 import { ApprovalLevel, Artifact, Attachment, AUTO_MODEL, Project, QueuedMessage, Bot, Chat, ChatMessage, ChatSummary, DEFAULT_BOT_ID, RecalledMemory, RouteChoice, StreamEvent } from '../shared/types.js';
 import { ALL_TOOLS, Tool, toToolSpecs } from '../tools/index.js';
 import { webFetchTool } from '../tools/web.js';
-import type { Todo } from '../tools/types.js';
+import { ToolError, type Todo } from '../tools/types.js';
 import type { UI } from '../ui.js';
 import { ChatSetup, compactChat, contextMessages, generateTitle, ModelCatalog, systemPrompt } from './context.js';
 import { newId, now, Store } from './store.js';
@@ -31,6 +31,7 @@ import { currentUsageTag, UsageLog, withUsage } from './usage.js';
 import { concreteModel, route, RouteInput, RouteModels, routeModels } from './routing.js';
 import { BrowserService, browserTool } from './browser.js';
 import { ComputerService, computerTool } from './computer.js';
+import { askTool, AskAnswers, Asker } from './ask.js';
 
 const MAX_EVENT_OUTPUT = 20_000;
 
@@ -99,6 +100,8 @@ interface RunTotals {
 interface ActiveRun {
   controller: AbortController;
   pending: Map<string, (answer: ApprovalAnswer) => void>;
+  /** Questions to the user waiting for an answer. */
+  questions: Map<string, (answers: AskAnswers) => void>;
   startedAt: number;
   /** Everything the run has streamed so far, so a browser that comes back can catch up. */
   events: StreamEvent[];
@@ -199,9 +202,10 @@ export class ChatRunner {
     return this.active.has(chatId);
   }
 
-  /** Whether a running chat is waiting for the user to approve something. */
+  /** Whether a running chat is waiting for the user to approve or answer something. */
   isWaiting(chatId: string): boolean {
-    return (this.active.get(chatId)?.pending.size ?? 0) > 0;
+    const run = this.active.get(chatId);
+    return !!run && run.pending.size + run.questions.size > 0;
   }
 
   /**
@@ -230,6 +234,13 @@ export class ChatRunner {
     this.active.get(chatId)!.comparePick = undefined;
     resolve(choice);
     return true;
+  }
+
+  /** The user answered (or skipped, with null) a bot's question. */
+  resolveQuestion(chatId: string, requestId: string, answers: AskAnswers): boolean {
+    const resolve = this.active.get(chatId)?.questions.get(requestId);
+    resolve?.(answers);
+    return !!resolve;
   }
 
   resolvePermission(chatId: string, requestId: string, answer: ApprovalAnswer): boolean {
@@ -545,7 +556,7 @@ export class ChatRunner {
     if (!chat) throw new Error('Chat not found');
     if (this.active.has(chatId)) throw new Error('This chat is already running');
 
-    const run: ActiveRun = { controller: new AbortController(), pending: new Map(), startedAt: Date.now(), events: [], listeners: new Set() };
+    const run: ActiveRun = { controller: new AbortController(), pending: new Map(), questions: new Map(), startedAt: Date.now(), events: [], listeners: new Set() };
     const signal = AbortSignal.any([run.controller.signal, disconnect]);
     this.active.set(chatId, run);
     const caller = emit;
@@ -763,6 +774,27 @@ export class ChatRunner {
         });
       });
 
+    const asker: Asker = (questions, callId, abort) =>
+      headless
+        ? Promise.reject(new ToolError('This run is unattended, so nobody can answer questions. Use your best judgment and say what you assumed.'))
+        : new Promise((resolve, reject) => {
+            const requestId = newId();
+            run.questions.set(requestId, (answers) => {
+              run.questions.delete(requestId);
+              emit({ type: 'question_resolved', requestId });
+              resolve(answers);
+            });
+            abort?.addEventListener(
+              'abort',
+              () => {
+                run.questions.delete(requestId);
+                reject(new Error('aborted'));
+              },
+              { once: true },
+            );
+            emit({ type: 'question', requestId, ...(callId ? { callId } : {}), questions });
+          });
+
     const toolset = await this.allTools(chat, (artifact) => emit({ type: 'artifact', artifact }), undefined, (v) => emit({ type: 'browser', ...v }));
     for (const w of toolset.warnings) emit({ type: 'warn', message: w });
     let tools = toolset.tools;
@@ -778,6 +810,7 @@ export class ChatRunner {
         ),
       );
     }
+    tools.push(askTool(asker));
     if (working && !tools.some((t) => t.name === 'TodoWrite')) tools.push(todoTool);
     if (chat.goal?.status === 'active') {
       const goal = chat.goal;
