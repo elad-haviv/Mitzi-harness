@@ -27,6 +27,7 @@ import {
   WandSparkles,
   RefreshCw,
   Search,
+  Sparkles,
   ShieldCheck,
   Terminal,
   Wrench,
@@ -457,6 +458,7 @@ function AssistantMessageBody({
   const text = messageText(message);
   return (
     <>
+      {message.reasoning?.trim() && <Reasoning text={message.reasoning} />}
       {text && <Markdown text={text} />}
       {message.tool_calls?.map((call) => (
         <ToolBlock
@@ -471,6 +473,29 @@ function AssistantMessageBody({
         />
       ))}
     </>
+  );
+}
+
+// ---------- Thinking ----------
+
+/** The model's thinking, collapsed by default. While it streams, the latest line shows as a preview. */
+export function Reasoning({ text, active }: { text: string; active?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const preview = active ? (text.trim().split('\n').filter(Boolean).at(-1) ?? '').replace(/[*_#`>]/g, '').slice(0, 120) : '';
+  return (
+    <div className="tool reasoning">
+      <button className="tool-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <span className="tool-icon">{active ? <Loader2 size={13} className="spin" /> : <Sparkles size={13} />}</span>
+        <span className="tool-name">{active ? 'Thinking…' : 'Thought process'}</span>
+        <span className="tool-summary">{!open && preview}</span>
+        {open ? <ChevronDown size={14} className="muted" /> : <ChevronRight size={14} className="muted" />}
+      </button>
+      {open && (
+        <div className="tool-body reasoning-body">
+          <Markdown text={text} streaming={active} />
+        </div>
+      )}
+    </div>
   );
 }
 

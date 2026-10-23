@@ -28,7 +28,7 @@ import { ArtifactIcon, ArtifactView, TYPE_LABEL } from '../components/Artifacts'
 import { Composer, ComposerHandle, ContextRing } from '../components/Composer';
 import { ContextPanel } from '../components/ContextPanel';
 import { Markdown } from '../components/Markdown';
-import { AssistantTurn, Avatar, buildTurns, messageText, CompactDivider, MemoryRecall, PermissionCard, PermissionRequest, ToolBlock, UserTurn } from '../components/Messages';
+import { AssistantTurn, Avatar, buildTurns, messageText, Reasoning, CompactDivider, MemoryRecall, PermissionCard, PermissionRequest, ToolBlock, UserTurn } from '../components/Messages';
 import { Menu, useConfirm } from '../components/ui';
 import { href, navigate } from '../router';
 import { LOGO, relativeTime, useApp } from '../state';
@@ -803,25 +803,6 @@ function Starters({ botId, onPick }: { botId: string; onPick(text: string): void
         </div>
       )}
     </>
-  );
-}
-
-function Reasoning({ text, active }: { text: string; active: boolean }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="tool" style={{ background: 'transparent' }}>
-      <button className="tool-head" onClick={() => setOpen((o) => !o)}>
-        <span className="tool-icon">{active ? <Loader2 size={13} className="spin" /> : <Sparkles size={13} />}</span>
-        <span className="tool-name">{active ? 'Thinking…' : 'Thought process'}</span>
-        <span className="tool-summary" />
-        {open ? <ChevronDown size={14} className="muted" /> : <ChevronRight size={14} className="muted" />}
-      </button>
-      {open && (
-        <div className="tool-body">
-          <pre style={{ fontFamily: 'var(--font)', fontStyle: 'italic' }}>{text}</pre>
-        </div>
-      )}
-    </div>
   );
 }
 

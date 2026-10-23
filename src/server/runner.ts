@@ -56,6 +56,7 @@ interface ActiveRun {
 /** Streams agent activity to the browser as StreamEvents. */
 class WebUI implements UI {
   partialText = '';
+  partialReasoning = '';
 
   constructor(private readonly emit: (e: StreamEvent) => void) {}
 
@@ -66,10 +67,12 @@ class WebUI implements UI {
     this.emit({ type: 'text', text: chunk });
   }
   reasoning(chunk: string): void {
+    this.partialReasoning += chunk;
     this.emit({ type: 'reasoning', text: chunk });
   }
   toolCall(name: string, summary: string, id?: string, args?: unknown): void {
     this.partialText = '';
+    this.partialReasoning = '';
     this.emit({ type: 'tool_call', id: id ?? newId(), name, summary, args: args ?? {} });
   }
   toolResult(output: string, isError: boolean, id?: string): void {
@@ -90,6 +93,7 @@ class WebUI implements UI {
   }
   endTurn(): void {
     this.partialText = '';
+    this.partialReasoning = '';
   }
 }
 
@@ -402,8 +406,8 @@ export class ChatRunner {
     } finally {
       const added = agent.messages.slice(before);
       // Keep whatever the model had streamed before the user pressed stop.
-      if (signal.aborted && ui.partialText.trim() && added.at(-1)?.role !== 'assistant') {
-        added.push({ role: 'assistant', content: ui.partialText });
+      if (signal.aborted && (ui.partialText.trim() || ui.partialReasoning.trim()) && added.at(-1)?.role !== 'assistant') {
+        added.push({ role: 'assistant', content: ui.partialText, ...(ui.partialReasoning.trim() ? { reasoning: ui.partialReasoning } : {}) });
       }
       const ts = Date.now();
       chat.messages.push(...added.map((m) => ({ ...m, ts, ...(m.role === 'assistant' ? { model: chat.model } : {}) })));

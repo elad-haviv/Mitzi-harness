@@ -133,6 +133,24 @@ test('starters are the bot\'s own until it has history, then personalized', asyn
   assert.equal(asked(), before + 1);
 });
 
+test('thinking is saved with the answer but never sent back to the model', async () => {
+  reply = () => [
+    { choices: [{ delta: { reasoning: '**Plan:** check the ' } }] },
+    { choices: [{ delta: { reasoning_content: 'facts first.' } }] },
+    ...textChunks('The answer is 42.'),
+  ];
+  const chat = (await call('POST', '/api/chats', {})).data;
+  const events = await send(chat.id, 'What is the answer?');
+  assert.equal(events.filter((e) => e.type === 'reasoning').map((e) => e.text).join(''), '**Plan:** check the facts first.');
+  const saved = (await call('GET', `/api/chats/${chat.id}`)).data;
+  assert.equal(saved.messages[1].reasoning, '**Plan:** check the facts first.');
+  assert.equal(saved.messages[1].content, 'The answer is 42.');
+
+  reply = () => textChunks('Sure.');
+  await send(chat.id, 'Thanks');
+  assert.ok(!JSON.stringify(lastMain().messages).includes('check the facts'));
+});
+
 test('cron and schedules compute the next run in local time', () => {
   const from = new Date(2026, 0, 5, 10, 7); // Monday 10:07
   assert.deepEqual(nextRun({ kind: 'cron', cron: '*/15 * * * *' }, from), new Date(2026, 0, 5, 10, 15));

@@ -146,6 +146,7 @@ export class Agent {
         role: 'assistant',
         content: result.content || null,
         ...(result.toolCalls.length ? { tool_calls: result.toolCalls } : {}),
+        ...(result.reasoning ? { reasoning: result.reasoning } : {}),
       });
       if (!result.toolCalls.length) {
         if (result.finishReason === 'length') ui.warn('Response was cut off by the max token limit.');

@@ -149,7 +149,7 @@ export function systemPrompt(setup: ChatSetup): string {
 
 /** The messages actually sent to the model: the summary (if any) plus the uncompacted tail. */
 export function contextMessages(chat: Chat): Message[] {
-  const tail = chat.messages.slice(chat.contextStart).map(({ ts: _ts, model: _model, memories: _memories, command: _command, rating: _rating, ...m }) => m as Message);
+  const tail = chat.messages.slice(chat.contextStart).map(({ ts: _ts, model: _model, memories: _memories, command: _command, rating: _rating, reasoning: _reasoning, ...m }) => m as Message);
   if (!chat.summary) return tail;
   return [
     { role: 'user', content: `Earlier parts of this conversation were summarized to save context:\n\n${chat.summary}` },
@@ -232,7 +232,13 @@ export async function generateTitle(client: LlmClient, model: string, firstMessa
         },
       ],
     });
-    const title = res.content.trim().split('\n')[0].replace(/^["'#*\s]+|["'*.\s]+$/g, '');
+    // Titles are plain text: drop any markdown the model added.
+    const title = res.content
+      .trim()
+      .split('\n')[0]
+      .replace(/(\*\*|__|\*|_|`|~~)/g, '')
+      .replace(/^(title:\s*)/i, '')
+      .replace(/^["'#\s]+|["'.\s]+$/g, '');
     return title ? title.slice(0, 80) : undefined;
   } catch {
     return undefined;

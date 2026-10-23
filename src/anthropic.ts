@@ -116,6 +116,7 @@ export class AnthropicClient implements LlmClient {
     }
 
     let content = '';
+    let thinking = '';
     let finishReason: string | undefined;
     const usage: Usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
     const blocks = new Map<number, { id: string; name: string; json: string }>();
@@ -144,6 +145,7 @@ export class AnthropicClient implements LlmClient {
             const b = blocks.get(data.index);
             if (b) b.json += d.partial_json ?? '';
           } else if (d.type === 'thinking_delta' && d.thinking) {
+            thinking += d.thinking;
             handlers.onReasoning?.(d.thinking);
           }
           break;
@@ -165,6 +167,7 @@ export class AnthropicClient implements LlmClient {
       toolCalls,
       usage,
       finishReason: finishReason === 'tool_use' ? 'tool_calls' : finishReason === 'max_tokens' ? 'length' : 'stop',
+      ...(thinking.trim() ? { reasoning: thinking } : {}),
     };
   }
 

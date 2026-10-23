@@ -29,6 +29,8 @@ export interface Message {
   content: string | ContentPart[] | null;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
+  /** The model's thinking before this (assistant) message; kept for display, never sent back. */
+  reasoning?: string;
 }
 
 export interface ToolSpec {
@@ -62,6 +64,8 @@ export interface ChatResult {
   toolCalls: ToolCall[];
   usage?: Usage;
   finishReason?: string;
+  /** Thinking the model streamed, for models that expose it. */
+  reasoning?: string;
 }
 
 /** What the agent needs from a model provider. */
@@ -104,7 +108,7 @@ export class OpenRouterClient implements LlmClient {
     const reasoning = !!this.opts.reasoningModels?.test(req.model);
     const body = {
       model: req.model,
-      messages: req.messages,
+      messages: req.messages.map(({ reasoning: _reasoning, ...m }) => m),
       tools: req.tools?.length ? req.tools : undefined,
       ...(reasoning ? { max_completion_tokens: req.maxTokens } : { max_tokens: req.maxTokens, temperature: req.temperature }),
       stream: true,
@@ -114,6 +118,7 @@ export class OpenRouterClient implements LlmClient {
     if (!res.body) throw new OpenRouterError('Empty response body');
 
     let content = '';
+    let thinking = '';
     let usage: Usage | undefined;
     let finishReason: string | undefined;
     const calls: ToolCall[] = [];
@@ -132,7 +137,12 @@ export class OpenRouterClient implements LlmClient {
       const choice = chunk.choices?.[0];
       if (!choice) continue;
       const delta = choice.delta ?? {};
-      if (delta.reasoning) handlers.onReasoning?.(delta.reasoning);
+      // OpenRouter calls it "reasoning"; DeepSeek and others "reasoning_content".
+      const thought = delta.reasoning ?? delta.reasoning_content;
+      if (thought) {
+        thinking += thought;
+        handlers.onReasoning?.(thought);
+      }
       if (delta.content) {
         content += delta.content;
         handlers.onText?.(delta.content);
@@ -150,7 +160,7 @@ export class OpenRouterClient implements LlmClient {
     const toolCalls = calls
       .filter((c) => c && c.function.name)
       .map((c, i) => ({ ...c, id: c.id || `call_${Date.now()}_${i}` }));
-    return { content, toolCalls, usage, finishReason };
+    return { content, toolCalls, usage, finishReason, ...(thinking.trim() ? { reasoning: thinking } : {}) };
   }
 
   /** OpenAI-compatible embeddings, one vector per input. */

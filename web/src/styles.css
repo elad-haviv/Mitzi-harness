@@ -3720,3 +3720,22 @@ mark.doc-mark.hot {
   font-size: 2.4cqi;
   text-align: left;
 }
+
+/* ---------- Thinking ---------- */
+.tool.reasoning {
+  background: transparent;
+}
+.reasoning-body {
+  max-height: 420px;
+  overflow: auto;
+  border-left: 2px solid var(--border-strong);
+  margin: 0 0 4px 18px;
+  padding: 2px 0 2px 14px;
+}
+.reasoning-body .md {
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+.reasoning-body .md > :first-child {
+  margin-top: 0;
+}
