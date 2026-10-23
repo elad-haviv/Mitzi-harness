@@ -6630,3 +6630,25 @@ button.todo-check:not(:disabled):hover {
 .interrupt-btn {
   color: var(--warn);
 }
+
+/* Charts and images from a Python run, under its tool block. */
+.tool-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.tool-image {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  padding: 6px;
+  cursor: zoom-in;
+  max-width: 100%;
+}
+.tool-image img {
+  display: block;
+  max-width: 100%;
+  max-height: 420px;
+  min-width: 64px;
+  image-rendering: auto;
+}

@@ -34,6 +34,7 @@ import {
   Wrench,
   X,
   Zap,
+  Code2,
 } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import type { Artifact, Attachment, Bot, ChatMessage, ContentPart, Rating, RecalledMemory, RouteChoice, Todo } from '../api';
@@ -579,6 +580,8 @@ function toolIcon(name: string): ReactNode {
       return <Pencil size={13} />;
     case 'Bash':
       return <Terminal size={13} />;
+    case 'Python':
+      return <Code2 size={13} />;
     case 'Glob':
     case 'Grep':
       return <Search size={13} />;
@@ -632,6 +635,7 @@ function ToolInput({ name, args }: { name: string; args: any }) {
     return <Diff text={lines.slice(0, 60).map((l: string) => `+ ${l}`).join('\n') + (lines.length > 60 ? `\n… ${lines.length - 60} more lines` : '')} />;
   }
   if (name === 'Bash') return <pre>$ {args.command}</pre>;
+  if (name === 'Python' && typeof args.code === 'string') return <Markdown text={`\`\`\`python\n${args.code}\n\`\`\``} />;
   return <pre>{JSON.stringify(args, null, 2)}</pre>;
 }
 
@@ -745,7 +749,10 @@ export function ToolBlock({
   }
 
   const state = running && !result ? 'running' : result?.isError ? 'err' : 'ok';
+  // Charts and images a Python run made show under it.
+  const made = name === 'Python' ? artifacts.filter((a) => a.type === 'image' && a.versions.some((v) => v.callId === id)) : [];
   return (
+    <>
     <div className="tool">
       <button className="tool-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <span className="tool-icon">{toolIcon(name)}</span>
@@ -769,6 +776,16 @@ export function ToolBlock({
         </div>
       )}
     </div>
+    {made.length > 0 && (
+      <div className="tool-images">
+        {made.map((a) => (
+          <button key={a.id} className="tool-image" title={a.title} onClick={() => onOpenArtifact(a, a.versions.findIndex((v) => v.callId === id))}>
+            <img src={a.versions.find((v) => v.callId === id)?.content} alt={a.title} />
+          </button>
+        ))}
+      </div>
+    )}
+    </>
   );
 }
 

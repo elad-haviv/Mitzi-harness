@@ -28,6 +28,7 @@ import { registerImportRoutes } from './importer.js';
 import { mediaUpdate, registerFeatureRoutes } from './routes-features.js';
 import { newId, now, Store } from './store.js';
 import { INLINE_LIMIT, KnowledgeIndex } from './knowledge.js';
+import { PythonSandbox } from './python.js';
 import { budgetMessage, BudgetExceeded, budgetStatus, UsageLog } from './usage.js';
 import { SearchIndex } from './search.js';
 import { BrowserService } from './browser.js';
@@ -130,7 +131,8 @@ export function createApp(opts: AppOptions) {
   const browser = new BrowserService(join(MITZI_HOME, 'browser-profile'), media, () => !!store.settings.browserHeaded);
   const compareInsights = new CompareInsightsStore(opts.dataDir);
   const knowledge = new KnowledgeIndex();
-  const runner = new ChatRunner({ store, config, client, catalog, memory, mcp, skills, commands, media, usage, browser, compareInsights, knowledge });
+  const python = new PythonSandbox(opts.dataDir);
+  const runner = new ChatRunner({ store, config, client, catalog, memory, mcp, skills, commands, media, usage, browser, compareInsights, knowledge, python });
   const starters = new StarterService({ store, memory, client, config, memoryOn: (bot) => runner.memoryOn(bot) });
   seedBots(store, opts.dataDir);
   ensureDefaultBot(store);
@@ -732,6 +734,7 @@ export function createApp(opts: AppOptions) {
     dispose: () => {
       scheduler.stop();
       void browser.close();
+      python.close();
       updates.dispose();
       return mcp.dispose();
     },
@@ -875,6 +878,7 @@ function applyBot(bot: Bot, body: any, creating: boolean): Bot {
     media: tools.media ?? bot.tools?.media ?? true,
     team: tools.team ?? bot.tools?.team ?? true,
     subagents: tools.subagents ?? bot.tools?.subagents ?? true,
+    code: tools.code ?? bot.tools?.code ?? true,
     browser: tools.browser ?? bot.tools?.browser ?? true,
   };
   if (creating || Array.isArray(body?.starters)) {

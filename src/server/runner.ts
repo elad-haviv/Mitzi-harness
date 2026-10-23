@@ -20,6 +20,7 @@ import { commentTool } from './workspace.js';
 import { MediaService, mediaTools } from './media.js';
 import { delegateTool } from './team.js';
 import { KnowledgeIndex } from './knowledge.js';
+import { PythonSandbox, pythonTool } from './python.js';
 import { subagentId, subagentsTool } from './subagents.js';
 import { checkGoal, goalTool, newGoal, parseBuiltin, submitPlanTool } from './agentic.js';
 import { CompareInsightsStore, parseCompareArgs, runCompareRace, tallyFor, CompareOutcome } from './compare.js';
@@ -56,6 +57,7 @@ export interface RunnerDeps {
   browser: BrowserService;
   compareInsights: CompareInsightsStore;
   knowledge: KnowledgeIndex;
+  python?: PythonSandbox;
 }
 
 export type RunInput =
@@ -334,6 +336,27 @@ export class ChatRunner {
     if (focus || store.artifacts.all().some((a) => a.chatId === chat.id && a.comments?.length)) tools.push(commentTool(store, chat.id, onArtifact));
     if (this.memoryOn(bot)) tools.push(memoryTool(memory, memory.bankFor(bot)));
     if (project && this.deps.knowledge.isLarge(project)) tools.push(this.deps.knowledge.tool(project));
+    const python = this.deps.python;
+    if (bot.tools.code !== false && python?.available()) {
+      tools.push(
+        pythonTool(python, chat.id, project?.folder ?? python.sandboxDir(chat.id), !!project?.folder, (image, callId) => {
+          // Charts and images the code made are kept as artifacts of the chat.
+          const artifact: Artifact = {
+            id: newId(),
+            chatId: chat.id,
+            projectId: chat.projectId,
+            title: image.name,
+            type: 'image',
+            versions: [{ content: image.dataUrl, author: 'assistant', note: 'Made with Python', createdAt: now(), callId }],
+            createdAt: now(),
+            updatedAt: now(),
+          };
+          store.artifacts.put(artifact);
+          onArtifact(artifact);
+          return image.name;
+        }),
+      );
+    }
     if (bot.tools.skills && this.deps.skills.enabled().length) tools.push(skillTool(this.deps.skills));
     tools.push(...this.extraTools());
     if (bot.tools.browser !== false && !this.deps.browser.unavailable()) tools.push(browserTool(this.deps.browser, onBrowser));
