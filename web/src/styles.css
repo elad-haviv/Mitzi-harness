@@ -3199,6 +3199,7 @@ button.memory-chip:hover {
 .doc-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 10px 14px;
   border-bottom: 1px solid var(--border);
@@ -3379,9 +3380,8 @@ mark.doc-mark.hot {
   font-style: italic;
 }
 .doc-chat {
-  width: 420px;
+  width: var(--chat-width, 420px);
   flex-shrink: 0;
-  border-inline-start: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -3570,7 +3570,7 @@ mark.doc-mark.hot {
     width: 250px;
   }
   .doc-chat {
-    width: 360px;
+    width: var(--chat-width, 360px);
   }
 }
 @media (max-width: 860px) {
@@ -3585,6 +3585,9 @@ mark.doc-mark.hot {
     border-inline-start: 0;
     border-top: 1px solid var(--border);
     max-height: 40vh;
+  }
+  .doc-resize {
+    display: none;
   }
   .doc-chat {
     width: auto;
@@ -7626,4 +7629,40 @@ img.zoomable {
   margin-top: 16px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
+}
+
+/* ---------- Workspace chat resize handle ---------- */
+.doc-resize {
+  width: 7px;
+  margin-inline: -3px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  position: relative;
+  z-index: 2;
+  touch-action: none;
+}
+.doc-resize::after {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 3px;
+  width: 1px;
+  background: var(--border);
+  transition: background 0.15s, width 0.15s;
+}
+.doc-resize:hover::after,
+.doc-resize:focus-visible::after,
+.resizing-chat .doc-resize::after {
+  width: 3px;
+  inset-inline-start: 2px;
+  background: var(--accent);
+}
+.resizing-chat,
+.resizing-chat * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+/* Frames would swallow the pointer while dragging. */
+.resizing-chat iframe {
+  pointer-events: none;
 }

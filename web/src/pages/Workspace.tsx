@@ -246,6 +246,23 @@ export function ArtifactPage({ id }: { id: string }) {
   const pending = useRef<{ title?: string; content?: string }>({});
   const textarea = useRef<HTMLTextAreaElement>(null);
   const preview = useRef<HTMLDivElement>(null);
+  const layout = useRef<HTMLDivElement>(null);
+  const [chatWidth, setChatWidthState] = useState<number | undefined>(() => {
+    try {
+      return Number(localStorage.getItem('mitzi.workspaceChatWidth')) || undefined;
+    } catch {
+      return undefined;
+    }
+  });
+  const setChatWidth = (w: number | undefined) => {
+    setChatWidthState(w);
+    try {
+      if (w) localStorage.setItem('mitzi.workspaceChatWidth', String(Math.round(w)));
+      else localStorage.removeItem('mitzi.workspaceChatWidth');
+    } catch {
+      // Not remembered.
+    }
+  };
 
   const apply = useCallback((a: Artifact | ArtifactWork) => {
     setArtifact((prev) => ({ ...(prev ?? { running: false }), ...a }) as ArtifactWork);
@@ -445,7 +462,7 @@ export function ArtifactPage({ id }: { id: string }) {
   }
 
   return (
-    <div className="doc-layout">
+    <div className="doc-layout" ref={layout} style={chatWidth ? ({ '--chat-width': `${chatWidth}px` } as React.CSSProperties) : undefined}>
       <div className="doc-main">
         <div className="doc-toolbar">
           <a className="icon-btn" href={href({ page: 'artifacts' })} aria-label={tr('All artifacts')} title={tr('All artifacts')}>
@@ -555,6 +572,44 @@ export function ArtifactPage({ id }: { id: string }) {
           />
         )}
       </div>
+      {chatOpen && (
+        <div
+          className="doc-resize"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={tr('Resize the chat')}
+          title={tr('Drag to resize the chat · double-click to reset')}
+          tabIndex={0}
+          onDoubleClick={() => setChatWidth(undefined)}
+          onKeyDown={(e) => {
+            const step = e.key === 'ArrowLeft' ? 24 : e.key === 'ArrowRight' ? -24 : 0;
+            if (!step) return;
+            e.preventDefault();
+            const current = chatWidth ?? document.querySelector<HTMLElement>('.doc-chat')?.offsetWidth ?? 420;
+            setChatWidth(clampChat(current + (document.dir === 'rtl' ? -step : step)));
+          }}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            const handle = e.currentTarget;
+            handle.setPointerCapture(e.pointerId);
+            document.body.classList.add('resizing-chat');
+            const move = (ev: PointerEvent) => {
+              const box = layout.current?.getBoundingClientRect();
+              if (!box) return;
+              setChatWidth(clampChat(document.dir === 'rtl' ? ev.clientX - box.left : box.right - ev.clientX, box.width));
+            };
+            const up = () => {
+              document.body.classList.remove('resizing-chat');
+              handle.removeEventListener('pointermove', move);
+              handle.removeEventListener('pointerup', up);
+              handle.removeEventListener('pointercancel', up);
+            };
+            handle.addEventListener('pointermove', move);
+            handle.addEventListener('pointerup', up);
+            handle.addEventListener('pointercancel', up);
+          }}
+        />
+      )}
       {chatOpen && (
         <aside className="doc-chat">
           <div className="doc-chat-head">
