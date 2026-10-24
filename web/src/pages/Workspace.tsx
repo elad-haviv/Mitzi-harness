@@ -20,7 +20,8 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { api, Artifact, ArtifactComment, ArtifactListItem, ArtifactType, ArtifactWork, DEFAULT_BOT_ID, TEXT_ARTIFACT_TYPES } from '../api';
+import { api, Artifact, ArtifactComment, ArtifactListItem, ArtifactType, ArtifactWork, Attachment, DEFAULT_BOT_ID, TEXT_ARTIFACT_TYPES } from '../api';
+import { Annotator } from '../components/Annotator';
 import { artifactDocument, ArtifactIcon, ArtifactThumb, download, HighlightedCode, isMedia, MediaView, SlidesView, TYPE_LABEL } from '../components/Artifacts';
 import { Markdown } from '../components/Markdown';
 import { CodeEditor, editorLanguage, FormatCommand, formatMarkdown, FormatToolbar, RichEditor, RichEditorHandle, shortcut } from '../components/Editors';
@@ -225,6 +226,7 @@ const MODES: Partial<Record<ArtifactType, [string, string]>> = {
   react: [tr('Preview'), tr('Code')],
   svg: [tr('Preview'), tr('Code')],
   mermaid: [tr('Preview'), tr('Code')],
+  image: [tr('View'), tr('Mark up')],
 };
 
 const latestOf = (a: Artifact) => a.versions.at(-1)?.content ?? '';
@@ -242,7 +244,7 @@ export function ArtifactPage({ id }: { id: string }) {
   const [selection, setSelection] = useState<{ text: string; x: number; y: number } | null>(null);
   const [flash, setFlash] = useState(false);
   const [confirmNode, confirm] = useConfirm();
-  const sendRef = useRef<(text: string) => void>(undefined);
+  const sendRef = useRef<(text: string, attachments?: Attachment[]) => void>(undefined);
   const saveTimer = useRef<number | undefined>(undefined);
   const pending = useRef<{ title?: string; content?: string }>({});
   const textarea = useRef<HTMLTextAreaElement>(null);
@@ -352,9 +354,9 @@ export function ArtifactPage({ id }: { id: string }) {
   };
 
   // The bot works from the saved version, so save before each request.
-  const ask = async (text: string) => {
+  const ask = async (text: string, attachments?: Attachment[]) => {
     await flush();
-    sendRef.current?.(text);
+    sendRef.current?.(text, attachments);
     setChatOpen(true);
   };
 
@@ -450,7 +452,33 @@ export function ArtifactPage({ id }: { id: string }) {
   const kind = TYPE_LABEL[artifact.type].toLowerCase();
 
   let body;
-  if (!text) {
+  if (artifact.type === 'image' && mode === 'edit') {
+    body = (
+      <Annotator
+        src={draft}
+        botName={botName}
+        busy={busy}
+        onSaveVersion={async (dataUrl) => {
+          try {
+            apply(await api.saveArtifactImage(id, dataUrl, 'version'));
+            setMode('view');
+          } catch (err) {
+            toast((err as Error).message);
+          }
+        }}
+        onAsk={async (dataUrl, request) => {
+          try {
+            // The markup goes to the bot twice: as a picture it can see, and kept on the artifact for the image model.
+            apply(await api.saveArtifactImage(id, dataUrl, 'markup'));
+            await ask(`${request}\n\n(I marked up the image to show where.)`, [{ name: 'markup.png', kind: 'image', content: dataUrl }]);
+            setMode('view');
+          } catch (err) {
+            toast((err as Error).message);
+          }
+        }}
+      />
+    );
+  } else if (!text) {
     body = (
       <div className="ws-media">
         <MediaView type={artifact.type} url={draft} title={artifact.title} />
@@ -545,7 +573,7 @@ export function ArtifactPage({ id }: { id: string }) {
                 {artifact.type === 'slides' ? <Presentation size={14} /> : artifact.type === 'markdown' || artifact.type === 'code' ? <BookOpen size={14} /> : <Eye size={14} />} {modes[0]}
               </button>
               <button role="tab" aria-selected={mode === 'edit'} className={mode === 'edit' ? 'active' : ''} onClick={() => setMode('edit')}>
-                {artifact.type === 'markdown' || artifact.type === 'slides' ? <PenLine size={14} /> : <Code size={14} />} {modes[1]}
+                {artifact.type === 'markdown' || artifact.type === 'slides' || artifact.type === 'image' ? <PenLine size={14} /> : <Code size={14} />} {modes[1]}
               </button>
             </div>
           )}

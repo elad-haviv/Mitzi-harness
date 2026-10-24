@@ -212,6 +212,27 @@ export function registerFeatureRoutes(route: Route, deps: FeatureDeps): { schedu
     deps.edits?.artifactEdited(a);
     return artifactView(a);
   });
+  /**
+   * An image from the editor: `as: 'version'` saves an annotated picture as the image's next version; `as: 'markup'`
+   * keeps it as the markup the bot can use as a guide when it edits the image.
+   */
+  route('POST', '/api/artifacts/:id/image', ({ params, body }) => {
+    const a = getArtifact(params.id);
+    editable(a);
+    if (a.type !== 'image') throw new HttpError(400, 'Only images can be marked up');
+    let file;
+    try {
+      file = deps.media.saveDataUrl(str(body?.dataUrl));
+    } catch (err) {
+      throw new HttpError(400, (err as Error).message);
+    }
+    if (body?.as === 'markup') a.markup = { url: file.url, createdAt: now() };
+    else {
+      a.versions.push({ content: file.url, author: 'user', note: str(body?.note).slice(0, 200) || 'Annotated', createdAt: now() });
+      a.updatedAt = now();
+    }
+    return artifactView(store.artifacts.put(a));
+  });
   route('POST', '/api/artifacts/:id/comments', ({ params, body }) => {
     const a = getArtifact(params.id);
     const text = str(body?.text).trim();

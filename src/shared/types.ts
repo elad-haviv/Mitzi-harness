@@ -874,6 +874,8 @@ export interface Artifact {
   versions: ArtifactVersion[];
   /** Comments on passages, for text artifacts. */
   comments?: ArtifactComment[];
+  /** An image's latest markup by the user (annotations drawn over it), sent to the bot as a guide for edits. */
+  markup?: { url: string; createdAt: string };
   createdAt: string;
   updatedAt: string;
 }

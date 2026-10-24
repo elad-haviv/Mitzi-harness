@@ -141,3 +141,8 @@
 - Learned routing (`src/server/learned-routing.ts`, `settings.routing.learned`): when Auto picks the strong tier,
   `learnedPick` may switch to the model with the best share of tasks that went well in that category (work/chat), from
   outcomes and eval replays, only with `MIN_SAMPLES` on both models and a `MARGIN` lead. Stats are cached 5 minutes.
+- Workspace editing: while an artifact is open (`chat.focusArtifactId`), the Artifact tool's "create" of the same type
+  writes into it (`separate: true` makes a new one), and images get EditImage (`editImageTool` in `media.ts`), whose
+  result is the image's next version. `MediaService.editImage` sends the current image, plus the user's markup
+  (`artifact.markup`, saved from the editor's Mark up mode via `POST /api/artifacts/:id/image`) as a guide. Documents
+  are edited formatted (`web/src/components/Editors.tsx`) and stored as Markdown via `src/shared/htmlToMarkdown.ts`.

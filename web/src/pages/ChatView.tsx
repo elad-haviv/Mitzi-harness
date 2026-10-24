@@ -131,7 +131,7 @@ export function ChatView({
   onArtifact?(a: Artifact): void;
   onTurnDone?(): void;
   /** Lets the host page send messages into this chat. */
-  sendRef?: { current?: (text: string) => void };
+  sendRef?: { current?: (text: string, attachments?: Attachment[]) => void };
 }) {
   const app = useApp();
   const { toast, refreshChats, settings, projects, bots, models } = app;
@@ -502,7 +502,7 @@ export function ChatView({
       .join('\n\n');
   };
 
-  if (sendRef) sendRef.current = (text: string) => void send(text, []);
+  if (sendRef) sendRef.current = (text: string, attachments: Attachment[] = []) => void send(text, attachments);
 
   const branch = async (index: number) => {
     if (!chat) return;

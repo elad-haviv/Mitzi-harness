@@ -7774,3 +7774,56 @@ img.zoomable {
   padding: 4px 10px;
   min-width: 60px;
 }
+
+/* ---------- Image markup ---------- */
+.annotator {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.annotator-stage {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: var(--surface-2);
+}
+.annotator-canvas {
+  max-width: 100%;
+  max-height: calc(100vh - 260px);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  touch-action: none;
+  cursor: crosshair;
+}
+.annotator-canvas.tool-text {
+  cursor: text;
+}
+.annotator-ask {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+.swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  margin: 0 2px;
+  cursor: pointer;
+  padding: 0;
+}
+.swatch.on {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.stroke-dot {
+  display: inline-block;
+  border-radius: 50%;
+  background: currentColor;
+}

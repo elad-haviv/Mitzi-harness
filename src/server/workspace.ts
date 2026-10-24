@@ -40,6 +40,16 @@ export function focusPrompt(artifact: Artifact): string {
         })
         .join('\n')
     : '(none)';
+  if (artifact.type === 'image') {
+    const markup = artifact.markup && Date.parse(artifact.markup.createdAt) >= Date.parse(artifact.versions.at(-1)?.createdAt ?? '')
+      ? ' They marked it up (drawn lines, arrows, boxes and notes) to show where changes go: when they ask for changes, call EditImage with use_markup true.'
+      : '';
+    return (
+      `# Workspace\nThe user has the image "${artifact.title}" (artifact ${artifact.id}) open beside this chat. When they ask to change it, ` +
+      `use EditImage with artifact_id ${artifact.id} and a precise description of the change; the result becomes its next version. ` +
+      `Generate a new image only when they ask for a separate one.${markup}`
+    );
+  }
   if (!TEXT_ARTIFACT_TYPES.includes(artifact.type)) {
     return `# Workspace\nThe user has the ${artifact.type} "${artifact.title}" (artifact ${artifact.id}) open beside this chat. To make a variation, generate a new one.`;
   }

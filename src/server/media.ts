@@ -1,7 +1,7 @@
 // Media generation and voice through provider APIs. Generated files are stored under
 // <data>/media with unguessable names and served at /media/<file>.
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PROVIDER_PRESETS, ResolvedProvider, RoutingClient, usable } from '../providers.js';
 import type { MediaKind, MediaSettings, ProviderKind } from '../shared/types.js';
@@ -609,6 +609,113 @@ export class MediaService {
   exists(name: string): boolean {
     return /^[a-f0-9]{32}\.\w+$/.test(name) && existsSync(join(this.dir, name));
   }
+
+  /** The bytes of an image Mitzi has: a /media/ file it saved, or a data URL. */
+  load(url: string): { bytes: Buffer; mimeType: string } {
+    const data = /^data:([^;,]+);base64,(.*)$/s.exec(url);
+    if (data) return { bytes: Buffer.from(data[2], 'base64'), mimeType: data[1] };
+    const name = /^\/media\/([a-f0-9]{32}\.(\w+))$/.exec(url);
+    if (!name || !this.exists(name[1])) throw new ToolError('That image file is no longer available.');
+    const mime = Object.entries(EXT).find(([, ext]) => ext === name[2])?.[0] ?? 'image/png';
+    return { bytes: readFileSync(join(this.dir, name[1])), mimeType: mime };
+  }
+
+  /** Saves an image sent as a data URL (an annotated picture from the editor). */
+  saveDataUrl(dataUrl: string): MediaFile {
+    const m = /^data:(image\/(?:png|jpeg|webp));base64,(.+)$/s.exec(dataUrl);
+    if (!m) throw new ToolError('Send a PNG, JPEG or WebP image');
+    return this.save(Buffer.from(m[2], 'base64'), m[1]);
+  }
+
+  /** Changes an image as the prompt says. Later images in `inputs` are references (e.g. the user's markup). */
+  async editImage(prompt: string, inputs: { bytes: Buffer; mimeType: string }[], signal?: AbortSignal): Promise<MediaFile> {
+    const id = this.settings().imageModel;
+    if (!id) throw new ToolError('No image model is set up (Settings → Media & voice).');
+    const { provider, model, base, key } = this.resolve(id);
+    if (openAiCompatible(provider.kind)) {
+      const form = new FormData();
+      form.set('model', model);
+      form.set('prompt', prompt);
+      inputs.forEach((img, i) => form.append(model.startsWith('dall-e') ? 'image' : 'image[]', new Blob([new Uint8Array(img.bytes)], { type: img.mimeType }), `image-${i}.${EXT[img.mimeType] ?? 'png'}`));
+      const res = await check(await fetch(`${base}/images/edits`, { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: form, signal }), 'Image editing');
+      const item = ((await res.json()) as { data?: { b64_json?: string; url?: string }[] }).data?.[0];
+      if (item?.b64_json) return this.save(Buffer.from(item.b64_json, 'base64'), 'image/png');
+      if (item?.url) return this.save(Buffer.from(await (await fetch(item.url)).arrayBuffer()), 'image/png');
+      throw new ToolError('The image API returned no image');
+    }
+    if (provider.kind === 'google' && !model.startsWith('imagen')) {
+      const parts = [...inputs.map((img) => ({ inline_data: { mime_type: img.mimeType, data: img.bytes.toString('base64') } })), { text: prompt }];
+      const res = await check(
+        await fetch(`${GEMINI}/models/${model}:generateContent`, {
+          method: 'POST',
+          headers: { 'x-goog-api-key': key, 'content-type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts }], generationConfig: { responseModalities: ['TEXT', 'IMAGE'] } }),
+          signal,
+        }),
+        'Image editing',
+      );
+      const out: any[] = ((await res.json()) as any).candidates?.[0]?.content?.parts ?? [];
+      const img = out.find((p) => p.inlineData ?? p.inline_data);
+      const data = img?.inlineData ?? img?.inline_data;
+      if (!data?.data) throw new ToolError('No image was returned.');
+      return this.save(Buffer.from(data.data, 'base64'), data.mimeType ?? data.mime_type ?? 'image/png');
+    }
+    if (provider.kind === 'openrouter') {
+      const content = [...inputs.map((img) => ({ type: 'image_url', image_url: { url: `data:${img.mimeType};base64,${img.bytes.toString('base64')}` } })), { type: 'text', text: prompt }];
+      const res = await check(
+        await fetch(`${base}/chat/completions`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ model, messages: [{ role: 'user', content }], modalities: ['image', 'text'] }),
+          signal,
+        }),
+        'Image editing',
+      );
+      const msg = ((await res.json()) as any).choices?.[0]?.message;
+      const url: string | undefined = msg?.images?.[0]?.image_url?.url ?? msg?.images?.[0]?.imageUrl?.url;
+      const m = url && /^data:([^;]+);base64,(.*)$/.exec(url);
+      if (!m) throw new ToolError('The model returned no image. Make sure it can edit images.');
+      return this.save(Buffer.from(m[2], 'base64'), m[1]);
+    }
+    throw new ToolError(`${provider.name} can't edit images with ${model}. Pick an image model that takes images as input (for example GPT Image or Gemini).`);
+  }
+}
+
+/**
+ * EditImage: changes an image artifact of the chat. The result becomes the artifact's next version, so the edit stays
+ * in the same artifact. With `use_markup`, the user's annotated copy goes along as a guide to where the changes go.
+ */
+export function editImageTool(
+  media: MediaService,
+  find: (id: string) => { versions: { content: string }[]; markup?: { url: string }; type: string; title: string } | undefined,
+  onEdited: (id: string, url: string, prompt: string, callId?: string) => void,
+): Tool<{ artifact_id: string; prompt: string; use_markup?: boolean }> {
+  return {
+    name: 'EditImage',
+    kind: 'read',
+    description:
+      'Edit an existing image artifact: describe the change (what to add, remove, recolor or restyle, and where). The result ' +
+      'replaces it as its next version. Set use_markup when the user marked up the image to show where the changes go.',
+    parameters: {
+      type: 'object',
+      properties: { artifact_id: { type: 'string' }, prompt: { type: 'string' }, use_markup: { type: 'boolean' } },
+      required: ['artifact_id', 'prompt'],
+    },
+    summarize: (a) => a.prompt?.slice(0, 80) ?? '',
+    async run(a, ctx) {
+      const artifact = find(String(a.artifact_id));
+      if (!artifact || artifact.type !== 'image') throw new ToolError(`No image artifact with id "${a.artifact_id}" in this chat.`);
+      const inputs = [media.load(artifact.versions.at(-1)!.content)];
+      let prompt = String(a.prompt);
+      if (a.use_markup && artifact.markup) {
+        inputs.push(media.load(artifact.markup.url));
+        prompt += '\n\nThe second image is the first one with the user\'s markings (drawn lines, arrows, boxes and notes) showing where and what to change. Apply the changes to the first image; the markings themselves must not appear in the result.';
+      }
+      const file = await media.editImage(prompt, inputs, ctx.signal);
+      onEdited(String(a.artifact_id), file.url, String(a.prompt), ctx.callId);
+      return `Edited "${artifact.title}"; the new version is shown to the user, so don't embed or link it again in your reply.\nMEDIA: ${file.url} ${file.mimeType}`;
+    },
+  };
 }
 
 const ASPECTS = ['1:1', '16:9', '9:16', '3:2', '2:3', '4:3', '3:4'];

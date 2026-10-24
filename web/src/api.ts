@@ -492,6 +492,7 @@ export const api = {
   outcomes: (q: { botId?: string; projectId?: string; chatId?: string; limit?: number } = {}) =>
     request<TaskOutcome[]>('GET', `/api/outcomes?${new URLSearchParams(Object.entries(q).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))}`),
 
+  saveArtifactImage: (id: string, dataUrl: string, as: 'version' | 'markup') => request<ArtifactWork>('POST', `/api/artifacts/${id}/image`, { dataUrl, as }),
   createArtifact: (body: { type: ArtifactType; title: string; content?: string; botId?: string; projectId?: string; language?: string }) =>
     request<ArtifactWork>('POST', '/api/artifacts', body),
   updateArtifact: (id: string, body: { title?: string; content?: string }) => request<ArtifactWork>('PATCH', `/api/artifacts/${id}`, body),

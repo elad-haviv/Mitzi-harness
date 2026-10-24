@@ -19,7 +19,7 @@ import { CommandDef, expandCommand, parseSlash } from './extensions/commands.js'
 import { Skills, skillTool } from './extensions/skills.js';
 import { artifactTool } from './tools.js';
 import { commentTool } from './workspace.js';
-import { MediaService, mediaTools } from './media.js';
+import { editImageTool, MediaService, mediaTools } from './media.js';
 import { delegateTool } from './team.js';
 import { KnowledgeIndex } from './knowledge.js';
 import { PythonSandbox, pythonTool } from './python.js';
@@ -468,6 +468,26 @@ export class ChatRunner {
     tools.push(...this.extraTools());
     if (bot.tools.browser !== false && !this.deps.browser.unavailable()) tools.push(browserTool(this.deps.browser, onBrowser));
     if (store.settings.computerUse && bot.tools.computer !== false && this.deps.computer) tools.push(computerTool(this.deps.computer));
+    if (bot.tools.media !== false && this.deps.media.available().image) {
+      // Edits to an image land in the same artifact, as its next version.
+      tools.push(
+        editImageTool(
+          this.deps.media,
+          (id) => {
+            const a = store.artifacts.get(id);
+            return a?.chatId === chat.id ? a : undefined;
+          },
+          (id, url, prompt, callId) => {
+            const a = store.artifacts.get(id);
+            if (!a) return;
+            a.versions.push({ content: url, author: 'assistant', note: prompt, createdAt: now(), callId });
+            a.updatedAt = now();
+            store.artifacts.put(a);
+            onArtifact(a);
+          },
+        ),
+      );
+    }
     if (bot.tools.media !== false) {
       // Generated media are kept as artifacts of the chat, so they show up in the gallery.
       tools.push(

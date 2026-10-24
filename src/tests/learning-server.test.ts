@@ -22,6 +22,9 @@ let reply: (body: any) => object[] = () => textChunks('Hello!');
 /** Replies to background jobs (titles, memory, learning), recognized by `background`. */
 let jobReply: (body: any) => object[] | undefined = () => undefined;
 const requests: any[] = [];
+const imageRequests: any[] = [];
+/** A 1×1 PNG. */
+const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const isMemoryJob = (body: any) => /Extract memories worth keeping|You maintain \\?"observations|reflective memory of/.test(JSON.stringify(body.messages?.[0] ?? ''));
 
 before(async () => {
@@ -36,6 +39,13 @@ before(async () => {
       }
       const body = JSON.parse(raw);
       requests.push(body);
+      // Image generation and editing (OpenRouter's image output) answer with JSON, not a stream.
+      if (body.modalities?.includes('image')) {
+        imageRequests.push(body);
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ choices: [{ message: { content: '', images: [{ type: 'image_url', image_url: { url: `data:image/png;base64,${PNG}` } }] } }] }));
+        return;
+      }
       let chunks: object[];
       try {
         chunks =
@@ -483,4 +493,40 @@ test('workspace: "create" while an artifact of that type is open fills it in, an
   await stream(page.chatId, { content: 'Make me a separate second version', focus: page.id });
   list = (await call('GET', '/api/artifacts')).data.filter((a: any) => a.chatId === page.chatId);
   assert.equal(list.length, 2);
+});
+
+test('images: the open image is edited in place, guided by the user\'s markup', async () => {
+  await call('PUT', '/api/settings', { media: { imageModel: 'test/image' } });
+  const chat = (await call('POST', '/api/chats', {})).data;
+  let turn = 0;
+  reply = () => (turn++ === 0 ? toolCallChunks('g1', 'GenerateImage', { prompt: 'a street with a red sign' }) : textChunks('Here it is.'));
+  const events = await stream(chat.id, { content: 'Draw a street with a sign' });
+  const image = events.find((e) => e.type === 'artifact').artifact;
+  assert.equal(image.type, 'image');
+
+  // The user marks it up and asks for a change from the image's workspace.
+  const marked = (await call('POST', `/api/artifacts/${image.id}/image`, { dataUrl: `data:image/png;base64,${PNG}`, as: 'markup' })).data;
+  assert.match(marked.markup.url, /^\/media\/[a-f0-9]{32}\.png$/);
+  assert.equal(marked.versions.length, 1);
+  turn = 0;
+  reply = (body) => {
+    if (turn++ === 0) {
+      assert.match(JSON.stringify(body.messages[0]), /use EditImage with artifact_id [\s\S]*use_markup true/);
+      return toolCallChunks('e1', 'EditImage', { artifact_id: image.id, prompt: 'Make the marked sign blue', use_markup: true });
+    }
+    return textChunks('The sign is blue now.');
+  };
+  imageRequests.length = 0;
+  await stream(chat.id, { content: 'Make this sign blue\n\n(I marked up the image to show where.)', focus: image.id });
+  const edit = imageRequests[0].messages[0].content;
+  assert.deepEqual(edit.map((p: any) => p.type), ['image_url', 'image_url', 'text']);
+  assert.match(edit[2].text, /Make the marked sign blue[\s\S]*second image is the first one with the user's markings/);
+  const after = (await call('GET', '/api/artifacts')).data.filter((a: any) => a.chatId === chat.id);
+  assert.equal(after.length, 1);
+  assert.deepEqual(after[0].versions.map((v: any) => [v.author, v.note]), [['assistant', 'a street with a red sign'], ['assistant', 'Make the marked sign blue']]);
+
+  // Saving the markup as a version keeps it as the user's.
+  const saved = (await call('POST', `/api/artifacts/${image.id}/image`, { dataUrl: `data:image/png;base64,${PNG}`, as: 'version' })).data;
+  assert.equal(saved.versions.at(-1).author, 'user');
+  assert.equal((await call('POST', `/api/artifacts/${image.id}/image`, { dataUrl: 'data:text/html;base64,PGI+', as: 'version' })).status, 400);
 });
