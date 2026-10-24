@@ -746,6 +746,38 @@ export interface Playbook {
   updatedAt: string;
 }
 
+// ---------- Evals ----------
+
+/** One of your past tasks replayed with one model. */
+export interface EvalItem {
+  outcomeId: string;
+  task: string;
+  model: string;
+  status: 'pending' | 'running' | 'done' | 'error' | 'skipped';
+  /** The project's checks on the replayed work. */
+  testsPassed?: boolean;
+  checkCommand?: string;
+  toolCalls?: number;
+  toolErrors?: number;
+  /** 1–5: how well it did the task, judged against the answer you accepted. */
+  score?: number;
+  notes?: string;
+  durationMs?: number;
+  cost?: number;
+  error?: string;
+}
+
+/** A head-to-head of models on your own tasks, each replayed from the repository state it started in. */
+export interface EvalRun {
+  id: string;
+  projectId: string;
+  models: string[];
+  status: 'running' | 'done' | 'stopped';
+  items: EvalItem[];
+  createdAt: string;
+  finishedAt?: string;
+}
+
 // ---------- Outcomes ----------
 
 /** How a failed tool call is to be read: the agent's mistake, the machine's, or the user saying no. */

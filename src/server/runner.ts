@@ -92,6 +92,17 @@ export type RunInput =
     }
   | { kind: 'regenerate' };
 
+export interface RunOnceOptions {
+  botId?: string;
+  model?: string;
+  prompt: string;
+  projectId?: string;
+  tools: boolean;
+  autoApprove: boolean;
+  note?: string;
+  signal?: AbortSignal;
+}
+
 export interface RunOptions {
   /** Nobody is watching (scheduled tasks): tools that would ask are allowed or declined automatically. */
   headless?: { autoApprove: boolean };
@@ -283,6 +294,16 @@ export class ChatRunner {
     return !!resolve;
   }
 
+  /** Chats working in another copy of their project's folder (eval replays in a git worktree). */
+  private readonly folderOverride = new Map<string, string>();
+
+  /** The chat's project, pointed at its replay folder when it has one. */
+  private projectOf(chat: Chat): Project | undefined {
+    const project = chat.projectId ? this.deps.store.projects.get(chat.projectId) : undefined;
+    const folder = this.folderOverride.get(chat.id);
+    return project && folder ? { ...project, folder } : project;
+  }
+
   /** The chat's bot; chats without one (or whose bot was deleted) use the default bot. */
   botFor(chat: Chat): Bot {
     const { store } = this.deps;
@@ -337,7 +358,7 @@ export class ChatRunner {
   /** The chat's project, bot, recalled memories and artifacts, as used to build its prompt. */
   setup(chat: Chat): ChatSetup {
     const { store } = this.deps;
-    const project = chat.projectId ? store.projects.get(chat.projectId) : undefined;
+    const project = this.projectOf(chat);
     const tools = this.tools(chat, () => {}).map((t) => t.name);
     const bot = this.botFor(chat);
     return {
@@ -394,7 +415,7 @@ export class ChatRunner {
 
   tools(chat: Chat, onArtifact: (a: Artifact) => void, onBrowser: (v: { url: string; title: string; screenshot?: string }) => void = () => {}): Tool[] {
     const { store, memory } = this.deps;
-    const project = chat.projectId ? store.projects.get(chat.projectId) : undefined;
+    const project = this.projectOf(chat);
     const bot = this.botFor(chat);
     const tools: Tool[] = project?.folder ? [...ALL_TOOLS] : bot.tools.web ? [webFetchTool] : [];
     // Working on an artifact in its workspace needs the artifact tools whatever the bot's settings.
@@ -455,11 +476,17 @@ export class ChatRunner {
    * Runs a bot on one prompt outside any chat (a workflow step). Tools that would ask for permission are declined
    * unless `autoApprove`. Resolves to the final answer.
    */
-  async runOnce(opts: { botId?: string; model?: string; prompt: string; projectId?: string; tools: boolean; autoApprove: boolean; note?: string; signal?: AbortSignal }): Promise<string> {
+  async runOnce(opts: RunOnceOptions): Promise<string> {
+    return (await this.runOnceDetailed(opts)).answer;
+  }
+
+  /** runOnce, also giving back the whole transcript. With `folder`, the project's tools and prompt work in that folder instead. */
+  async runOnceDetailed(opts: RunOnceOptions & { folder?: string }): Promise<{ answer: string; messages: Message[]; model: string }> {
     const { store, catalog } = this.deps;
     const bot = store.bots.get(opts.botId ?? DEFAULT_BOT_ID) ?? store.bots.get(DEFAULT_BOT_ID)!;
     const { model } = await this.pick(opts.model || bot.model || this.deps.config().model, { content: opts.prompt, working: opts.tools, planning: false });
-    const project = opts.projectId ? store.projects.get(opts.projectId) : undefined;
+    const stored = opts.projectId ? store.projects.get(opts.projectId) : undefined;
+    const project = stored && opts.folder ? { ...stored, folder: opts.folder } : stored;
     const chat: Chat = {
       id: `once-${newId()}`,
       title: 'Workflow step',
@@ -476,6 +503,7 @@ export class ChatRunner {
       createdAt: now(),
       updatedAt: now(),
     };
+    if (opts.folder) this.folderOverride.set(chat.id, opts.folder);
     const tools = opts.tools ? (await this.allTools(chat, () => {})).tools.filter((t) => !/^(Artifact|ArtifactComment|Workflow|Delegate)$/.test(t.name)) : [];
     const supportsTools = (await catalog.list().catch(() => [])).find((m) => m.id === model)?.tools ?? true;
     const permissions = new Permissions(project?.permissionMode ?? 'default', [], async () =>
@@ -492,9 +520,13 @@ export class ChatRunner {
       systemPrompt: () => `${systemPrompt({ ...this.setup(chat), toolNames: tools.map((t) => t.name), team: [] })}${opts.note ? `\n\n${opts.note}` : ''}`,
     });
     agent.messages = [{ role: 'user', content: opts.prompt }];
-    await agent.run(null, opts.signal);
+    try {
+      await agent.run(null, opts.signal);
+    } finally {
+      this.folderOverride.delete(chat.id);
+    }
     const last = agent.messages.findLast((m) => m.role === 'assistant' && typeof m.content === 'string' && m.content.trim());
-    return typeof last?.content === 'string' ? last.content : '';
+    return { answer: typeof last?.content === 'string' ? last.content : '', messages: agent.messages, model };
   }
 
   /** All tools for a turn, including connector (MCP) tools, which may need a moment to start. */

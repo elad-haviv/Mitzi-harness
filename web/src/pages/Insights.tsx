@@ -2,7 +2,8 @@
 // bots are learning from feedback loops (attempts needed and first-try ratings over time).
 import { BarChart3, Columns2, GraduationCap, Loader2, Sparkles, Trash2, Trophy } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { api, BudgetStatus, CompareInsights, FeedbackLoop, LearningCurve, LearningMetrics, UsageGroup, UsageReport } from '../api';
+import { api, BudgetStatus, CompareInsights, EvalRunView, FeedbackLoop, LearningCurve, LearningMetrics, TaskOutcome, UsageGroup, UsageReport } from '../api';
+import { ModelPicker } from '../components/ModelPicker';
 import { Breakdown, Chart, movingAverage } from '../components/Charts';
 import { Stars } from '../components/Feedback';
 import { Kpi, money } from '../components/Work';
@@ -573,6 +574,159 @@ function CompareInsightsView() {
           </table>
         )}
       </section>
+      <EvalsView />
     </div>
+  );
+}
+
+// ---------- Evals: your own tasks, replayed ----------
+
+function EvalsView() {
+  const { projects, toast, models } = useApp();
+  const coding = projects.filter((p) => p.folder);
+  const [projectId, setProjectId] = useState(coding[0]?.id ?? '');
+  const [candidates, setCandidates] = useState<TaskOutcome[]>([]);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [modelA, setModelA] = useState('');
+  const [modelB, setModelB] = useState('');
+  const [runs, setRuns] = useState<EvalRunView[]>([]);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!projectId) return;
+    api.evalCandidates(projectId).then((list) => {
+      setCandidates(list);
+      setPicked(list.slice(0, 5).map((o) => o.id));
+      if (!modelA && list[0]) setModelA(list[0].model);
+    }, (err) => toast(err.message));
+  }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const running = runs.some((r) => r.status === 'running');
+  useEffect(() => {
+    const load = () => api.evals().then(setRuns, () => {});
+    load();
+    if (!running) return;
+    const timer = setInterval(load, 3000);
+    return () => clearInterval(timer);
+  }, [running]);
+  const start = async () => {
+    setBusy(true);
+    try {
+      const run = await api.startEval({ projectId, outcomeIds: picked, models: [modelA, modelB].filter(Boolean) });
+      setRuns((r) => [run, ...r]);
+    } catch (err) {
+      toast((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const label = (id: string) => modelLabel(id, models);
+  return (
+    <section className="card">
+      <h2>{tr('Your own tasks, replayed')}</h2>
+      <p className="muted small">
+        {tr('Replays past tasks that went well with the models you pick, each from the commit it started on, in a throwaway copy of the repository. The copy runs unattended, so tools run without asking; your folder isn’t touched. Each replay is scored by the project’s checks, its mistakes, and how it compares with the answer you accepted.')}
+      </p>
+      {!coding.length ? (
+        <p className="muted">{tr('Open a folder as a project and do some work in it first.')}</p>
+      ) : (
+        <>
+          <div className="filters">
+            <select className="select" value={projectId} onChange={(e) => setProjectId(e.target.value)} aria-label={tr('Project')}>
+              {coding.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {!candidates.length ? (
+            <p className="muted small">{tr('No tasks to replay yet. Tasks qualify when they started on a clean commit and ended well: checks passing or a good rating, with no redo.')}</p>
+          ) : (
+            <>
+              <div className="eval-candidates">
+                {candidates.map((o) => (
+                  <label key={o.id} className="row small" style={{ gap: 8 }}>
+                    <input type="checkbox" checked={picked.includes(o.id)} onChange={(e) => setPicked(e.target.checked ? [...picked, o.id] : picked.filter((x) => x !== o.id))} />
+                    <span className="grow">{o.task}</span>
+                    <span className="muted">{label(o.model)}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                <ModelPicker value={modelA} onChange={setModelA} variant="input" direction="down" />
+                <span className="muted">{tr('vs')}</span>
+                <ModelPicker value={modelB} onChange={setModelB} variant="input" direction="down" allowEmpty={tr('(none)')} />
+                <button className="btn btn-primary" disabled={busy || !picked.length || !modelA} onClick={() => void start()}>
+                  {tr('Replay {0} task(s)', picked.length)}
+                </button>
+              </div>
+            </>
+          )}
+        </>
+      )}
+      {runs.map((run) => (
+        <div key={run.id} className="eval-run">
+          <div className="row" style={{ gap: 8 }}>
+            <strong className="grow">
+              {run.projectName ?? tr('Deleted project')} · {relativeTime(run.createdAt)}
+            </strong>
+            <span className="muted small">
+              {run.status === 'running'
+                ? tr('{0} of {1} replays done', run.items.filter((i) => i.status !== 'pending' && i.status !== 'running').length, run.items.length)
+                : run.status === 'stopped'
+                  ? tr('Stopped')
+                  : tr('Done')}
+            </span>
+            {run.status === 'running' ? (
+              <button className="btn btn-sm" onClick={() => void api.stopEval(run.id)}>
+                {tr('Stop')}
+              </button>
+            ) : (
+              <button className="icon-btn sm" aria-label={tr('Delete')} title={tr('Delete')} onClick={() => void api.deleteEval(run.id).then(() => setRuns((r) => r.filter((x) => x.id !== run.id)))}>
+                <Trash2 size={13} />
+              </button>
+            )}
+          </div>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>{tr('Model')}</th>
+                <th>{tr('Replays')}</th>
+                <th>{tr('Checks pass')}</th>
+                <th>{tr('Score')}</th>
+                <th>{tr('Mistakes')}</th>
+                <th>{tr('Cost')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {run.summary.map((m) => (
+                <tr key={m.model}>
+                  <td>{label(m.model)}</td>
+                  <td>{m.done}</td>
+                  <td>{pct(m.passRate)}</td>
+                  <td>{m.avgScore ? `${m.avgScore.toFixed(1)} / 5` : '–'}</td>
+                  <td>{m.avgToolErrors?.toFixed(1) ?? '–'}</td>
+                  <td>{money(m.cost)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <details className="small">
+            <summary className="muted">{tr('Each replay')}</summary>
+            <table className="data-table">
+              <tbody>
+                {run.items.map((i, n) => (
+                  <tr key={n}>
+                    <td>{i.task.slice(0, 80)}</td>
+                    <td>{label(i.model)}</td>
+                    <td>{i.status === 'done' ? (i.testsPassed === undefined ? '–' : i.testsPassed ? tr('pass') : tr('fail')) : i.status}</td>
+                    <td title={i.notes ?? i.error}>{i.score ?? '–'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </details>
+        </div>
+      ))}
+    </section>
   );
 }

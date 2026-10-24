@@ -26,6 +26,7 @@ import type {
   ArtifactType,
   Lesson,
   TaskOutcome,
+  EvalRun,
   Playbook,
   RetiredLesson,
   ProjectFact,
@@ -121,6 +122,16 @@ export interface LearningPoint {
   accepted: boolean;
   lesson?: string;
 }
+export interface EvalModelSummary {
+  model: string;
+  done: number;
+  passRate?: number;
+  avgScore?: number;
+  avgToolErrors?: number;
+  cost: number;
+  avgDurationMs?: number;
+}
+export type EvalRunView = EvalRun & { summary: EvalModelSummary[]; projectName?: string };
 export interface OutcomeRates {
   tasks: number;
   firstTryAccepted?: number;
@@ -288,6 +299,11 @@ export const api = {
   acceptLoop: (id: string) => request<FeedbackLoop>('POST', `/api/feedback/${id}/accept`, {}),
   feedbackLoops: (botId?: string) => request<(FeedbackLoop & { chatTitle?: string })[]>('GET', `/api/feedback${botId ? `?botId=${botId}` : ''}`),
   deleteLoop: (id: string) => request('DELETE', `/api/feedback/${id}`),
+  evalCandidates: (projectId: string) => request<TaskOutcome[]>('GET', `/api/evals/candidates?projectId=${projectId}`),
+  evals: () => request<EvalRunView[]>('GET', '/api/evals'),
+  startEval: (body: { projectId: string; outcomeIds: string[]; models: string[] }) => request<EvalRunView>('POST', '/api/evals', body),
+  stopEval: (id: string) => request<{ ok: boolean }>('POST', `/api/evals/${id}/stop`, {}),
+  deleteEval: (id: string) => request<{ ok: boolean }>('DELETE', `/api/evals/${id}`),
   modelHints: () => request<{ model: string; hints: { why: string; hint: string }[] }[]>('GET', '/api/insights/model-hints'),
   outcomeMetrics: (botId?: string, days = 90) => request<LearningMetrics>('GET', `/api/insights/outcomes?days=${days}${botId ? `&botId=${botId}` : ''}`),
   learning: (botId?: string) => request<LearningCurve>('GET', `/api/insights/learning${botId ? `?botId=${botId}` : ''}`),

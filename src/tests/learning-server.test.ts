@@ -2,7 +2,8 @@
 import assert from 'node:assert/strict';
 import { createServer, Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { tempDir, textChunks, toolCallChunks } from './helpers.js';
@@ -407,4 +408,47 @@ test('plan critique: a proposed plan is checked against the lessons before appro
   jobReply = () => undefined;
   assert.deepEqual(events.filter((e) => e.type === 'plan').at(-1).plan.notes, ['Step 1 edits config.ts without checking it exists (lesson 1).']);
   assert.deepEqual((await call('GET', `/api/chats/${chat.id}`)).data.plan.notes, ['Step 1 edits config.ts without checking it exists (lesson 1).']);
+});
+
+test('evals: a past task is replayed with another model in a throwaway worktree, checked and scored', { timeout: 60_000 }, async () => {
+  const { folder, project } = await codingProject('Evals');
+  const sh = (...args: string[]) => execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { cwd: folder, stdio: 'pipe' });
+  sh('init', '-q');
+  sh('add', '.');
+  sh('commit', '-qm', 'start');
+  const chat = (await call('POST', '/api/chats', { projectId: project.id })).data;
+  await call('PATCH', `/api/chats/${chat.id}`, { mode: 'work' });
+  let turn = 0;
+  reply = () => (turn++ === 0 ? toolCallChunks('w', 'Write', { file_path: 'ok.txt', content: 'fixed' }) : textChunks('Fixed: ok.txt now says fixed.'));
+  await stream(chat.id, { content: 'Make the checks pass by fixing ok.txt' });
+  const [candidate] = (await call('GET', `/api/evals/candidates?projectId=${project.id}`)).data;
+  assert.equal(candidate.task, 'Make the checks pass by fixing ok.txt');
+  assert.ok(candidate.gitHead);
+
+  // The replay: the model writes into the worktree, never the project's folder.
+  turn = 0;
+  reply = (body) => {
+    const system = JSON.stringify(body.messages[0]);
+    assert.match(system, /mitzi-eval-/);
+    return turn++ === 0 ? toolCallChunks('e', 'Write', { file_path: 'eval.txt', content: 'replayed' }) : turn === 2 ? toolCallChunks('f', 'Write', { file_path: 'ok.txt', content: 'fixed' }) : textChunks('Done in the copy.');
+  };
+  jobReply = (body) => {
+    const prompt = JSON.stringify(body.messages);
+    if (!/Score how well an AI coding assistant/.test(prompt)) return undefined;
+    assert.match(prompt, /Fixed: ok\.txt now says fixed\.[\s\S]*Done in the copy\.[\s\S]*eval\.txt[\s\S]*checks \(`npm test`\) passed/);
+    return textChunks('{"score": 4, "notes": "Fixed it, plus a stray file."}');
+  };
+  const started = (await call('POST', '/api/evals', { projectId: project.id, outcomeIds: [candidate.id], models: ['test/model'] })).data;
+  const run = await eventually(async () => {
+    const r = (await call('GET', `/api/evals/${started.id}`)).data;
+    return r.status === 'running' ? undefined : r;
+  }, 'the eval to finish');
+  jobReply = () => undefined;
+  assert.equal(run.status, 'done');
+  const [item] = run.items;
+  assert.deepEqual([item.status, item.testsPassed, item.score, item.toolCalls, item.checkCommand], ['done', true, 4, 2, 'npm test']);
+  assert.deepEqual(run.summary.map((m: any) => [m.model, m.done, m.passRate, m.avgScore]), [['test/model', 1, 1, 4]]);
+  assert.equal(existsSync(join(folder, 'eval.txt')), false);
+  assert.doesNotMatch(execFileSync('git', ['worktree', 'list'], { cwd: folder }).toString(), /mitzi-eval-/);
+  assert.equal((await call('GET', '/api/evals')).data[0].id, run.id);
 });

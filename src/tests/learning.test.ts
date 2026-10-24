@@ -15,6 +15,7 @@ import { LessonHygiene, scoreLessons } from '../server/lesson-hygiene.js';
 import { learningMetrics, lessonsAt, weekOf } from '../server/metrics.js';
 import { cleanRun, similarity } from '../server/playbooks.js';
 import { modelHints } from '../server/adaptation.js';
+import { evalCandidates, parseScore, summarizeEval } from '../server/evals.js';
 import { tempDir } from './helpers.js';
 
 const call = (id: string, name: string, args: object) => ({ id, type: 'function' as const, function: { name, arguments: JSON.stringify(args) } });
@@ -270,4 +271,25 @@ test('per-model adaptation: notes appear only with enough evidence, and say what
   assert.match(hints[0].why, /Only 33% of its checked work passed/);
   assert.deepEqual(modelHints('strong', all), []);
   assert.deepEqual(modelHints('weak', all.slice(0, 5)), []);
+});
+
+test('evals: replayable tasks are accepted ones on a clean commit; results add up per model', () => {
+  const ok = outcome({ projectId: 'p', gitHead: 'abc', testsPassed: true, filesTouched: ['a'], task: 'Fix it' });
+  const list = evalCandidates([ok, { ...ok, id: 'dup' }, { ...ok, id: 'r', task: 'Other', redone: true }, { ...ok, id: 'g', task: 'No head', gitHead: undefined }, { ...ok, id: 'q', task: 'Questions', filesTouched: [] }]);
+  assert.deepEqual(list.map((o) => o.task), ['Fix it']);
+  const run = {
+    id: 'e',
+    projectId: 'p',
+    models: ['a', 'b'],
+    status: 'done' as const,
+    createdAt: '',
+    items: [
+      { outcomeId: '1', task: '', model: 'a', status: 'done' as const, testsPassed: true, score: 5, toolErrors: 0, cost: 0.1 },
+      { outcomeId: '2', task: '', model: 'a', status: 'done' as const, testsPassed: false, score: 3, toolErrors: 2, cost: 0.1 },
+      { outcomeId: '1', task: '', model: 'b', status: 'error' as const },
+    ],
+  };
+  assert.deepEqual(summarizeEval(run).map((m) => [m.model, m.done, m.passRate, m.avgScore, m.avgToolErrors]), [['a', 2, 0.5, 4, 1], ['b', 0, undefined, undefined, undefined]]);
+  assert.deepEqual(parseScore('{"score": 4.4, "notes": "ok"}'), { score: 4, notes: 'ok' });
+  assert.deepEqual(parseScore('{"score": 9}'), { score: undefined, notes: undefined });
 });

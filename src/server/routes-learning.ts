@@ -6,6 +6,7 @@ import type { LessonHygiene } from './lesson-hygiene.js';
 import { learningMetrics } from './metrics.js';
 import type { Playbooks } from './playbooks.js';
 import type { ModelAdaptation } from './adaptation.js';
+import { EvalService, summarizeEval } from './evals.js';
 import type { Store } from './store.js';
 import { fail, HttpError, Route, str } from './util.js';
 
@@ -17,10 +18,11 @@ export interface LearningDeps {
   hygiene: LessonHygiene;
   playbooks: Playbooks;
   adaptation: ModelAdaptation;
+  evals: EvalService;
 }
 
 export function registerLearningRoutes(route: Route, deps: LearningDeps): void {
-  const { store, outcomes, learner, projectKnowledge, hygiene, playbooks, adaptation } = deps;
+  const { store, outcomes, learner, projectKnowledge, hygiene, playbooks, adaptation, evals } = deps;
   const getBot = (id: string) => store.bots.get(id) ?? fail(404, 'Bot not found');
   const getProject = (id: string) => store.projects.get(id) ?? fail(404, 'Project not found');
 
@@ -96,4 +98,31 @@ export function registerLearningRoutes(route: Route, deps: LearningDeps): void {
 
   route('GET', '/api/projects/:id/playbooks', ({ params }) => playbooks.list(getProject(params.id).id));
   route('DELETE', '/api/playbooks/:id', ({ params }) => ({ ok: playbooks.remove(params.id) }));
+
+  // ---- Evals: your own tasks replayed with other models --------------------------------------
+
+  route('GET', '/api/evals/candidates', ({ query }) => evals.candidates(query.get('projectId') || undefined));
+  route('GET', '/api/evals', () =>
+    store.evals
+      .all()
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((run) => ({ ...run, summary: summarizeEval(run), projectName: store.projects.get(run.projectId)?.name })),
+  );
+  route('POST', '/api/evals', ({ body }) => {
+    try {
+      const run = evals.start(str(body?.projectId), Array.isArray(body?.outcomeIds) ? body.outcomeIds.map(String) : [], Array.isArray(body?.models) ? body.models.map(String) : []);
+      return { ...run, summary: summarizeEval(run) };
+    } catch (err) {
+      throw new HttpError(400, (err as Error).message);
+    }
+  });
+  route('GET', '/api/evals/:id', ({ params }) => {
+    const run = store.evals.get(params.id) ?? fail(404, 'Eval not found');
+    return { ...run, summary: summarizeEval(run) };
+  });
+  route('POST', '/api/evals/:id/stop', ({ params }) => ({ ok: evals.stop(params.id) }));
+  route('DELETE', '/api/evals/:id', ({ params }) => {
+    evals.stop(params.id);
+    return { ok: store.evals.delete(params.id) };
+  });
 }

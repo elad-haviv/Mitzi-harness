@@ -133,3 +133,8 @@
   failing, failed edits, redos, over-broad changes, user fix-ups) into prompt notes, only after `MIN_TASKS` outcomes and
   compared with the other models. `ModelAdaptation` caches them for 5 minutes; the runner adds them for the answering
   model (and teammates'), and Insights → Learning lists them per model.
+- Evals (`src/server/evals.ts`, Insights → Compare): `evalCandidates` picks past outcomes that started on a clean commit
+  (`gitHead`, recorded by the runner only when `git status` is clean) and ended well. `EvalService` replays each with
+  each chosen model through `ChatRunner.runOnceDetailed({ folder })` in a `git worktree` at that commit (the runner's
+  `folderOverride` points the project's tools and prompt there), runs the project's checks, and has the fast model
+  score it against the accepted answer. Worktrees are always removed. Runs live in `store.evals`.
