@@ -10,6 +10,7 @@ import { Store } from '../server/store.js';
 import type { TaskOutcome } from '../shared/types.js';
 import { lineDiff, meaningfulEdit } from '../server/edits.js';
 import { factsFromOutcome, looksLikeCorrection, MD_START, proposeInstructions } from '../server/project-knowledge.js';
+import { changesFromMessages, parseCritique } from '../server/critique.js';
 import { tempDir } from './helpers.js';
 
 const call = (id: string, name: string, args: object) => ({ id, type: 'function' as const, function: { name, arguments: JSON.stringify(args) } });
@@ -163,4 +164,17 @@ test('project knowledge: proposed instructions add only what the file lacks, in 
   const second = proposeInstructions(first.content, [fact('Relative imports end in `.js`.', 'convention'), fact('Tests need `tsc` first.', 'gotcha')]);
   assert.equal(second.content.split(MD_START).length, 2);
   assert.match(second.content, /### Gotchas on this machine\n- Tests need `tsc` first\./);
+});
+
+test('self-review: changes are read from the transcript; an unreadable verdict never blocks', () => {
+  const changes = changesFromMessages([
+    { role: 'assistant', content: null, tool_calls: [call('a', 'Edit', { file_path: 'a.ts', old_string: 'x + 1', new_string: 'x - 1' }), call('b', 'Write', { file_path: 'b.ts', content: 'oops' })] },
+    { role: 'tool', tool_call_id: 'a', content: 'Edited a.ts' },
+    { role: 'tool', tool_call_id: 'b', content: 'Error: must Read first' },
+  ]);
+  assert.match(changes, /### Edited a\.ts\n--- before\nx \+ 1\n\+\+\+ after\nx - 1/);
+  assert.doesNotMatch(changes, /b\.ts/);
+  assert.deepEqual(parseCritique('{"ok": false, "issues": ["a.ts: subtracts instead of adding"]}'), { ok: false, issues: ['a.ts: subtracts instead of adding'] });
+  assert.equal(parseCritique('{"ok": false, "issues": []}').ok, true);
+  assert.equal(parseCritique('looks fine').ok, true);
 });

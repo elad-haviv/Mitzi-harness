@@ -998,6 +998,7 @@ function applyBot(bot: Bot, body: any, creating: boolean): Bot {
     const t = Number(body.temperature);
     bot.temperature = body.temperature === null || body.temperature === '' || Number.isNaN(t) ? undefined : clamp(t, 0, 2);
   }
+  if (typeof body?.selfReview === 'boolean') bot.selfReview = body.selfReview || undefined;
   const tools: Partial<BotTools> = body?.tools ?? {};
   bot.tools = {
     artifacts: tools.artifacts ?? bot.tools?.artifacts ?? true,

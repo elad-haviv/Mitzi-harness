@@ -314,3 +314,37 @@ test('teammates debrief: their outcomes join the ledger, and what they learn ser
   await stream(chat.id, { content: 'Thanks' });
   await call('DELETE', `/api/bots/${mate.id}`);
 });
+
+test('self-review: a bot that reviews its own changes goes back to fix what the review found', async () => {
+  const { project } = await codingProject('Review');
+  await call('PATCH', `/api/projects/${project.id}`, { verify: { enabled: false } });
+  const bot = (await call('POST', '/api/bots', { name: 'Careful', emoji: '🧐', systemPrompt: 'Be careful.', selfReview: true })).data;
+  assert.equal(bot.selfReview, true);
+  const chat = (await call('POST', '/api/chats', { projectId: project.id, botId: bot.id })).data;
+  await call('PATCH', `/api/chats/${chat.id}`, { mode: 'work' });
+  let turn = 0;
+  let reviews = 0;
+  jobReply = (body) => {
+    const prompt = JSON.stringify(body.messages);
+    if (!/review an AI coding assistant's changes/.test(prompt)) return undefined;
+    reviews++;
+    assert.match(prompt, /### Wrote add\.js/);
+    return textChunks(reviews === 1 ? '{"ok": false, "issues": ["add.js subtracts instead of adding"]}' : '{"ok": true, "issues": []}');
+  };
+  reply = (body) => {
+    turn++;
+    if (turn === 1) return toolCallChunks('w1', 'Write', { file_path: 'add.js', content: 'const add = (a, b) => a - b;' });
+    if (turn === 2) return textChunks('Done.');
+    if (turn === 3) {
+      assert.match(JSON.stringify(body.messages.at(-1)), /add\.js subtracts instead of adding/);
+      return toolCallChunks('w2', 'Write', { file_path: 'add.js', content: 'const add = (a, b) => a + b;' });
+    }
+    return textChunks('Fixed the sign.');
+  };
+  await stream(chat.id, { content: 'Write add' });
+  jobReply = () => undefined;
+  const saved = (await call('GET', `/api/chats/${chat.id}`)).data;
+  assert.deepEqual(saved.messages.map((m: any) => m.auto ?? m.role), ['user', 'assistant', 'tool', 'assistant', 'critique', 'assistant', 'tool', 'assistant']);
+  // One review round only: the fix isn't reviewed again.
+  assert.equal(reviews, 1);
+});

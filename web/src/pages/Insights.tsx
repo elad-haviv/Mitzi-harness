@@ -19,6 +19,8 @@ const KIND_LABEL: Record<string, string> = {
   goal: tr('Goal checks'),
   btw: tr('Side questions (/btw)'),
   learning: tr('Learning from feedback'),
+  review: tr('Self-reviews before finishing'),
+  eval: tr('Replaying your tasks (evals)'),
   other: tr('Other'),
 };
 

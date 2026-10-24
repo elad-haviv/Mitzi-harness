@@ -285,6 +285,8 @@ export interface Bot {
   memory: BankProfile;
   /** What the bot learned from the user's ratings, newest last. */
   lessons?: Lesson[];
+  /** In work mode, have the fast model review changed files before finishing (costs a little time). */
+  selfReview?: boolean;
   starters: string[];
   createdAt: string;
   updatedAt: string;
@@ -537,7 +539,7 @@ export interface BudgetStatus {
 
 // ---------- Usage ----------
 
-export type UsageKind = 'chat' | 'title' | 'memory' | 'workflow' | 'task' | 'btw' | 'goal' | 'learning' | 'other';
+export type UsageKind = 'chat' | 'title' | 'memory' | 'workflow' | 'task' | 'btw' | 'goal' | 'learning' | 'review' | 'eval' | 'other';
 
 /** One model call. */
 export interface UsageEvent {

@@ -35,6 +35,7 @@ import { askTool, AskAnswers, Asker } from './ask.js';
 import { bashTool } from '../tools/bash.js';
 import { OutcomeLog, summarizeRun } from './outcomes.js';
 import type { EditMiner } from './edits.js';
+import { changesFromMessages, critiqueMessage, critiquePrompt, parseCritique } from './critique.js';
 import { ProjectKnowledge, projectNoteTool } from './project-knowledge.js';
 import { lessonsInPrompt } from './lessons.js';
 import { git } from './git.js';
@@ -961,6 +962,7 @@ export class ChatRunner {
         chat.goal.status = 'paused';
         emit({ type: 'goal', goal: chat.goal });
       }
+      if (working && !planRequest && bot.selfReview) await this.selfReview(project, bot, agent, before, firstText, model, emit, signal);
       if (working && !planRequest) await this.verifyWork(project, agent, before, permissions, emit, signal, verifications);
     } catch (err: any) {
       if (!signal.aborted) emit({ type: 'error', message: err?.message ?? String(err) });
@@ -1056,6 +1058,29 @@ export class ChatRunner {
       durationMs: r.durationMs,
       cost: r.cost,
     });
+  }
+
+  /** Pre-final self-review: the fast model looks over the changes; real findings send the bot back to work once. */
+  private async selfReview(project: Project | undefined, bot: Bot, agent: Agent, before: number, task: string, model: string, emit: (e: StreamEvent) => void, signal: AbortSignal): Promise<void> {
+    if (signal.aborted || agent.messages.at(-1)?.role !== 'assistant') return;
+    const added = agent.messages.slice(before);
+    const changes = changesFromMessages(added);
+    if (!changes) return;
+    emit({ type: 'status', message: 'Reviewing the changes before finishing…' });
+    const summary = added.filter((m) => m.role === 'assistant' && typeof m.content === 'string').map((m) => m.content as string).join('\n');
+    const facts = project?.folder ? (this.projectKnowledge?.core(project.id) ?? []).map((f) => f.text) : [];
+    const prompt = critiquePrompt(task, lessonsInPrompt(bot).map((l) => l.text), facts, changes, summary);
+    let verdict: { ok: boolean; issues: string[] };
+    try {
+      const res = await withUsage({ kind: 'review' }, () => this.deps.client().chat({ model: this.deps.config().smallModel ?? model, messages: [{ role: 'user', content: prompt }], maxTokens: 600, signal }));
+      verdict = parseCritique(res.content);
+    } catch (err: any) {
+      if (!signal.aborted) emit({ type: 'warn', message: `The self-review didn't run: ${err.message}` });
+      return;
+    }
+    if (verdict.ok || signal.aborted) return;
+    agent.messages.push({ role: 'user', content: critiqueMessage(verdict.issues), auto: 'critique' } as ChatMessage as Message);
+    await agent.run(null, signal);
   }
 
   /**

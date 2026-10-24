@@ -112,3 +112,6 @@
 - Teammate debriefs: `runTeammate` records each Delegate/subagent assignment as an outcome with `source: 'teammate'`
   under the teammate's bot (`leadBotId` names the lead). Lessons distilled only from teammate outcomes get
   `source: 'teammate'` and show in the prompt of every bot on the team ("Team lessons").
+- Self-review (`src/server/critique.ts`): bots with `selfReview` get one fast-model review of their Write/Edit changes
+  (against the task, lessons and project facts) before a work-mode turn ends; findings come back as an
+  `auto: 'critique'` message and the bot works once more. Runs before the verification habit, tagged usage kind `review`.

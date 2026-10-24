@@ -109,6 +109,7 @@ function BotEditor({ bot, onClose, onSaved }: { bot?: Bot; onClose(): void; onSa
     systemPrompt: bot?.systemPrompt ?? '',
     model: bot?.model ?? '',
     temperature: bot?.temperature,
+    selfReview: !!bot?.selfReview,
     tools: { media: true, ...(bot?.tools ?? { artifacts: true, web: true, memory: true, skills: true, connectors: true }) },
     starters: bot?.starters.length ? bot.starters : [''],
     memory: bot?.memory ?? ({ mission: '', disposition: { skepticism: 3, literalism: 3, empathy: 3 }, autoRetain: true } as BankProfile),
@@ -179,6 +180,13 @@ function BotEditor({ bot, onClose, onSaved }: { bot?: Bot; onClose(): void; onSa
       <div className="field">
         <span className="field-label">{tr('Model')}</span>
         <ModelPicker value={form.model} onChange={(m) => set('model', m)} variant="input" direction="down" allowEmpty={tr('Default model (from Settings)')} auto />
+      </div>
+      <div className="field">
+        <span className="field-label row" style={{ justifyContent: 'space-between' }}>
+          {tr('Review its own changes before finishing')}
+          <Toggle label={tr('Review its own changes before finishing')} on={form.selfReview} onChange={(v) => set('selfReview', v)} />
+        </span>
+        <span className="field-hint">{tr('In Work mode, a quick second look at changed files catches mistakes before the bot says it’s done. Helps most with smaller models; adds a few seconds.')}</span>
       </div>
       <div className="field">
         <span className="field-label row" style={{ justifyContent: 'space-between' }}>

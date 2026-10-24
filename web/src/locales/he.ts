@@ -1667,4 +1667,8 @@ export const he: Record<string, string> = {
   'These aren’t in {0} yet. They go in a “Learned by Mitzi” section you can edit.': 'הפריטים האלה עדיין לא נמצאים ב־{0}. הם ייכנסו לסעיף ״Learned by Mitzi״ שאפשר לערוך.',
   '{0} doesn’t exist yet; it will be created with these.': '{0} עדיין לא קיים; הוא ייווצר עם הפריטים האלה.',
   'Everything Mitzi learned is already in the file.': 'כל מה שמיצי למדה כבר נמצא בקובץ.',
+  'Review its own changes before finishing': 'לבדוק את השינויים שלו לפני סיום',
+  'In Work mode, a quick second look at changed files catches mistakes before the bot says it’s done. Helps most with smaller models; adds a few seconds.': 'במצב עבודה, מבט שני ומהיר על קבצים שהשתנו תופס טעויות לפני שהבוט מודיע שסיים. עוזר בעיקר עם מודלים קטנים; מוסיף כמה שניות.',
+  'Self-reviews before finishing': 'בדיקות עצמיות לפני סיום',
+  'Replaying your tasks (evals)': 'הרצה חוזרת של המשימות שלך (הערכות)',
 };
