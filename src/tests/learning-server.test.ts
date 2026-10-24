@@ -285,3 +285,32 @@ test('project knowledge: learned from what works and from corrections, kept in e
   assert.equal(facts[0].source, 'consolidated');
   jobReply = () => undefined;
 });
+
+test('teammates debrief: their outcomes join the ledger, and what they learn serves the whole team', async () => {
+  const mate = (await call('POST', '/api/bots', { name: 'Fixer', emoji: '🔧', description: 'Fixes files', systemPrompt: 'You fix files.' })).data;
+  let mateTurn = 0;
+  let leadTurn = 0;
+  reply = (body) => {
+    const system = JSON.stringify(body.messages[0]);
+    if (/You fix files/.test(system)) return mateTurn++ === 0 ? toolCallChunks('m1', 'WebFetch', {}) : textChunks('Could not fetch.');
+    return leadTurn++ === 0 ? toolCallChunks('d1', 'Delegate', { assignments: [{ bot: 'fixer', task: 'Fetch the page' }] }) : textChunks('My teammate tried.');
+  };
+  const chat = (await call('POST', '/api/chats', {})).data;
+  await stream(chat.id, { content: 'Get the page' });
+  const outcomes = (await call('GET', `/api/outcomes?chatId=${chat.id}`)).data;
+  const debrief = outcomes.find((o: any) => o.source === 'teammate');
+  assert.deepEqual([debrief.botId, debrief.leadBotId, debrief.task, debrief.toolErrors], [mate.id, 'mitzi', 'Fetch the page', 1]);
+  assert.ok(outcomes.some((o: any) => o.source === 'run' && o.botId === 'mitzi'));
+
+  jobReply = (body) => (/distill what it should do/.test(JSON.stringify(body.messages)) ? textChunks('{"lessons": ["Pass a url when fetching a page."]}') : undefined);
+  assert.deepEqual((await call('POST', `/api/bots/${mate.id}/learn`)).data.lessons, ['Pass a url when fetching a page.']);
+  jobReply = () => undefined;
+  const [lesson] = (await call('GET', `/api/bots/${mate.id}/lessons`)).data;
+  assert.equal(lesson.source, 'teammate');
+  reply = (body) => {
+    assert.match(JSON.stringify(body.messages[0]), /# Team lessons[\s\S]*\(Fixer\) Pass a url when fetching a page\./);
+    return textChunks('Noted.');
+  };
+  await stream(chat.id, { content: 'Thanks' });
+  await call('DELETE', `/api/bots/${mate.id}`);
+});

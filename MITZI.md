@@ -109,3 +109,6 @@
   page. `core()` facts go into every prompt for the project, query-free. Consolidation merges them with the fast model.
   `proposal()` turns them into a "Learned by Mitzi" section (between `MD_START`/`MD_END` markers) of the folder's
   MITZI.md/AGENTS.md/CLAUDE.md; the file is only written when the user accepts.
+- Teammate debriefs: `runTeammate` records each Delegate/subagent assignment as an outcome with `source: 'teammate'`
+  under the teammate's bot (`leadBotId` names the lead). Lessons distilled only from teammate outcomes get
+  `source: 'teammate'` and show in the prompt of every bot on the team ("Team lessons").

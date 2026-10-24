@@ -544,12 +544,20 @@ export class ChatRunner {
             `The user won't see your reply directly: ${lead.name} will use it. Do the task and reply with the finished result, without small talk.`),
     });
     agent.messages = [{ role: 'user', content: task }];
+    const started = Date.now();
+    // A teammate's experience doesn't vanish with it: its outcome joins the ledger, under its own bot.
+    const debrief = () => {
+      if (run.signal?.aborted) return;
+      this.recordOutcome({ chat: virtual, bot: mate, model, task, working: true, added: agent.messages, verifications: [], lessonIds: lessonsInPrompt(mate).map((l) => l.id), durationMs: Date.now() - started, cost: agent.usage.cost, source: 'teammate', leadBotId: lead.id });
+    };
     try {
       await agent.run(null, run.signal);
     } catch (err: any) {
       send('error', err?.message ?? String(err));
+      debrief();
       throw err;
     }
+    debrief();
     const last = agent.messages.findLast((m) => m.role === 'assistant' && typeof m.content === 'string' && m.content.trim());
     const answer = typeof last?.content === 'string' ? last.content : '';
     send('done', '');
@@ -974,7 +982,7 @@ export class ChatRunner {
         if (input.kind === 'message' && input.feedbackLoopId) last.feedbackLoopId = input.feedbackLoopId;
         if (verifications.length) last.verify = verifications;
         if (!signal.aborted && !planRequest) {
-          const outcome = this.recordOutcome({ chat, bot, model, input, task: firstText, working, added, verifications, lessonIds, gitHead, durationMs: stats.durationMs, cost: stats.cost });
+          const outcome = this.recordOutcome({ chat, bot, model, feedbackLoopId: input.kind === 'message' ? input.feedbackLoopId : undefined, task: firstText, working, added, verifications, lessonIds, gitHead, durationMs: stats.durationMs, cost: stats.cost });
           if (outcome) last.outcomeId = outcome.id;
           if (project?.folder && outcome?.filesTouched.length) this.edits?.rememberWrites(chat.id, project.folder, outcome.filesTouched);
         }
@@ -1003,7 +1011,7 @@ export class ChatRunner {
     chat: Chat;
     bot: Bot;
     model: string;
-    input: RunInput;
+    feedbackLoopId?: string;
     task: string;
     working: boolean;
     added: Message[];
@@ -1019,7 +1027,7 @@ export class ChatRunner {
     if (!log) return undefined;
     const run = summarizeRun(r.added);
     if (!run.toolCalls && !r.working) return undefined;
-    const loop = r.input.kind === 'message' && r.input.feedbackLoopId ? this.deps.store.feedback.get(r.input.feedbackLoopId) : undefined;
+    const loop = r.feedbackLoopId ? this.deps.store.feedback.get(r.feedbackLoopId) : undefined;
     const lastCheck = r.verifications.at(-1);
     return log.record({
       id: newId(),
@@ -1033,7 +1041,7 @@ export class ChatRunner {
       source: r.source ?? 'run',
       ...(r.leadBotId ? { leadBotId: r.leadBotId } : {}),
       attempts: loop ? loop.iterations.length + 1 : 1,
-      ...(r.chat.goal && r.chat.goal.turns ? { goalTurns: r.chat.goal.turns } : {}),
+      ...(r.source !== 'teammate' && r.chat.goal?.turns ? { goalTurns: r.chat.goal.turns } : {}),
       toolCalls: run.toolCalls,
       toolErrors: run.toolErrors,
       errors: run.errors,

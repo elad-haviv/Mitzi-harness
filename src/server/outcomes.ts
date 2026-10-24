@@ -28,7 +28,7 @@ const ENVIRONMENT = [
 const AGENT = [
   /old_string (was )?not found|not unique|must (be )?Read|Read (it|the file) first|has been modified since/i,
   /no such file|File not found|does not exist|ENOENT/i,
-  /not valid JSON|Invalid JSON|unknown tool|is required|must be/i,
+  /not valid JSON|Invalid (JSON|URL|argument|path|value|regex|pattern)|unknown tool|is required|must be/i,
   /error TS\d+|SyntaxError|TypeError|ReferenceError|NameError|AttributeError|ImportError|ModuleNotFoundError|IndentationError/i,
   /AssertionError|assert(ion)? failed|\bFAIL(ED)?\b|\d+ failing|tests? failed|not ok \d+/i,
   /cannot find (module|name|symbol)|undefined (reference|variable)|is not defined|unresolved import/i,

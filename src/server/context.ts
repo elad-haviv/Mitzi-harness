@@ -158,6 +158,16 @@ export function promptSections(setup: ChatSetup): PromptSection[] {
     });
   }
 
+  // Lessons teammates learned from their own work serve the whole team.
+  const teamLessons = (setup.team ?? []).flatMap((b) => (b.lessons ?? []).filter((l) => l.source === 'teammate').map((l) => ({ bot: b, l }))).slice(-6);
+  if (teamLessons.length) {
+    sections.push({
+      label: `Team lessons (${teamLessons.length})`,
+      kind: 'memory',
+      text: '# Team lessons\nYour teammates learned these from their own work. Keep them in mind, and when handing work over:\n' + teamLessons.map(({ bot: b, l }) => `- (${b.name}) ${l.text}`).join('\n'),
+    });
+  }
+
   if (setup.focus) {
     sections.push({ label: `Open artifact: ${setup.focus.title}`, kind: 'project', text: focusPrompt(setup.focus) });
   }
