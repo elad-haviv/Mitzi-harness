@@ -21,11 +21,10 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api, Artifact, ArtifactComment, ArtifactListItem, ArtifactType, ArtifactWork, DEFAULT_BOT_ID, TEXT_ARTIFACT_TYPES } from '../api';
-import { artifactDocument, ArtifactIcon, download, HighlightedCode, isMedia, MediaView, SlidesView, TYPE_LABEL } from '../components/Artifacts';
+import { artifactDocument, ArtifactIcon, ArtifactThumb, download, HighlightedCode, isMedia, MediaView, SlidesView, TYPE_LABEL } from '../components/Artifacts';
 import { Markdown } from '../components/Markdown';
 import { Empty, Modal, useConfirm } from '../components/ui';
 import { href, navigate } from '../router';
-import { stripMarkdown } from '../speech';
 import { relativeTime, useApp } from '../state';
 import { ChatView } from './ChatView';
 import { tr } from '../i18n';
@@ -96,7 +95,7 @@ export function ArtifactsPage() {
             {shown.map((a) => {
               const latest = a.versions.at(-1)?.content ?? '';
               return (
-                <a key={a.id} className={`tile artifact-tile${a.type === 'image' ? ' has-thumb' : ''}`} href={href({ page: 'artifact', id: a.id })}>
+                <a key={a.id} className="tile artifact-tile has-thumb" href={href({ page: 'artifact', id: a.id })}>
                   <div className="tile-actions">
                     <button
                       className="icon-btn sm"
@@ -111,15 +110,10 @@ export function ArtifactsPage() {
                       <Trash2 size={14} />
                     </button>
                   </div>
-                  {a.type === 'image' ? (
-                    <img className="tile-thumb" src={latest} alt="" loading="lazy" />
-                  ) : (
-                    <div className="artifact-icon">
-                      <ArtifactIcon type={a.type} />
-                    </div>
-                  )}
-                  <div className="tile-title">{a.title}</div>
-                  {TEXT_ARTIFACT_TYPES.includes(a.type) && latest.trim() && <div className="tile-excerpt">{excerpt(a.type, latest)}</div>}
+                  <ArtifactThumb type={a.type} content={latest} language={a.language} />
+                  <div className="tile-title">
+                    <ArtifactIcon type={a.type} size={14} /> {a.title}
+                  </div>
                   <div className="tile-desc">{a.chatTitle ? tr('In “{0}”', a.chatTitle) : tr('Chat deleted')}</div>
                   <div className="tile-foot">
                     <span className="badge">{TYPE_LABEL[a.type]}</span>
@@ -658,10 +652,9 @@ function VersionsPanel({ artifact, onRestore }: { artifact: Artifact; onRestore(
   );
 }
 
-/** A short plain-text glimpse of an artifact for its gallery tile. */
-function excerpt(type: ArtifactType, content: string): string {
-  if (type === 'markdown' || type === 'slides') return stripMarkdown(content.replace(/^\s*---\s*$/gm, ' · ')).replace(/\s+/g, ' ').slice(0, 200);
-  return content.replace(/\s+/g, ' ').slice(0, 160);
+/** The chat keeps a usable width, and leaves the document room for its toolbar and text. */
+function clampChat(w: number, room = document.querySelector('.doc-layout')?.clientWidth ?? window.innerWidth): number {
+  return Math.round(Math.max(300, Math.min(w, room - 420)));
 }
 
 function hash(t: string): string {

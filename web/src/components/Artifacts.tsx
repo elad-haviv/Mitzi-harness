@@ -195,6 +195,71 @@ function languageExt(lang: string): string {
   return map[lang.toLowerCase()] ?? lang.toLowerCase();
 }
 
+/** A small preview of an artifact for the Library: the picture, the page, the first slide, the start of the text. */
+export function ArtifactThumb({ type, content, language }: { type: ArtifactType; content: string; language?: string }) {
+  const empty = !content.trim();
+  let inner: React.ReactNode;
+  if (empty) {
+    inner = (
+      <div className="thumb-empty">
+        <ArtifactIcon type={type} size={26} />
+      </div>
+    );
+  } else if (type === 'image') {
+    inner = <img src={content} alt="" loading="lazy" />;
+  } else if (type === 'video') {
+    inner = <video src={`${content}#t=0.1`} preload="metadata" muted playsInline />;
+  } else if (type === 'audio') {
+    inner = (
+      <div className="thumb-empty audio">
+        <Music size={26} />
+        <span className="thumb-wave" aria-hidden>
+          {Array.from({ length: 24 }, (_, i) => (
+            <i key={i} style={{ height: `${20 + Math.abs(Math.sin(i * 1.7)) * 70}%` }} />
+          ))}
+        </span>
+      </div>
+    );
+  } else if (type === 'svg') {
+    // As an image, the graphic can't run scripts.
+    inner = <img src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(content)}`} alt="" loading="lazy" className="contain" />;
+  } else if (type === 'html' || type === 'react' || type === 'mermaid') {
+    const doc = artifactDocument(type, content);
+    inner = (
+      <div className="thumb-scale">
+        <iframe title="" tabIndex={-1} sandbox="allow-scripts" srcDoc={doc} loading="lazy" />
+      </div>
+    );
+  } else if (type === 'slides') {
+    inner = (
+      <div className="thumb-scale">
+        <div className="slide title-slide">
+          <Markdown text={splitSlides(content)[0] ?? ''} />
+        </div>
+      </div>
+    );
+  } else if (type === 'code') {
+    inner = (
+      <div className="thumb-code">
+        <HighlightedCode code={content.split('\n').slice(0, 18).join('\n')} language={language} />
+      </div>
+    );
+  } else {
+    inner = (
+      <div className="thumb-scale">
+        <div className="doc-paper">
+          <Markdown text={content.slice(0, 1500)} />
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className={`tile-thumb thumb-${type}`} aria-hidden>
+      {inner}
+    </div>
+  );
+}
+
 export function HighlightedCode({ code, language }: { code: string; language?: string }) {
   const html = useMemo(() => {
     try {
