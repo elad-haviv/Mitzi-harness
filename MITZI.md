@@ -138,3 +138,6 @@
   each chosen model through `ChatRunner.runOnceDetailed({ folder })` in a `git worktree` at that commit (the runner's
   `folderOverride` points the project's tools and prompt there), runs the project's checks, and has the fast model
   score it against the accepted answer. Worktrees are always removed. Runs live in `store.evals`.
+- Learned routing (`src/server/learned-routing.ts`, `settings.routing.learned`): when Auto picks the strong tier,
+  `learnedPick` may switch to the model with the best share of tasks that went well in that category (work/chat), from
+  outcomes and eval replays, only with `MIN_SAMPLES` on both models and a `MARGIN` lead. Stats are cached 5 minutes.

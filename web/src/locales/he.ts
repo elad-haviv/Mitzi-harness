@@ -1729,4 +1729,6 @@ export const he: Record<string, string> = {
   'Each replay': 'כל הרצה',
   'pass': 'עבר',
   'fail': 'נכשל',
+  'Learn which model does each kind of work best': 'ללמוד איזה מודל עושה כל סוג עבודה הכי טוב',
+  'When Auto would use the strong model, use the model whose tasks here measurably went best instead (from how tasks went and from replays on Insights → Compare). It only switches with enough data and a clear lead.': 'כש־Auto היה משתמש במודל החזק, להשתמש במקומו במודל שהמשימות שלו כאן הצליחו הכי טוב באופן מדיד (לפי איך שהמשימות עברו ולפי ההרצות החוזרות בתובנות ← השוואה). המעבר קורה רק כשיש מספיק נתונים ויתרון ברור.',
 };

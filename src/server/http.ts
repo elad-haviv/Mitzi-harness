@@ -236,7 +236,7 @@ export function createApp(opts: AppOptions) {
     }
     if (update.routing && typeof update.routing === 'object') {
       const model = (v: unknown) => (typeof v === 'string' && v.trim() !== AUTO_MODEL ? v.trim() : '');
-      ui.routing = { fast: model(update.routing.fast), strong: model(update.routing.strong), newChats: update.routing.newChats === true };
+      ui.routing = { fast: model(update.routing.fast), strong: model(update.routing.strong), newChats: update.routing.newChats === true, learned: update.routing.learned === true };
     }
     if (APPROVAL_LEVELS.includes(update.approval as never)) ui.approval = update.approval;
     store.updateSettings(ui);

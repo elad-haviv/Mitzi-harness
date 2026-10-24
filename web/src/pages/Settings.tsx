@@ -418,6 +418,13 @@ function AutoSettings() {
         </div>
         <Toggle label={tr('Start new chats on Auto')} on={routing.newChats} onChange={(v) => update({ newChats: v })} />
       </div>
+      <div className="tool-toggle" style={{ padding: 0, border: 0, marginTop: 10 }}>
+        <div className="grow">
+          <div className="t">{tr('Learn which model does each kind of work best')}</div>
+          <div className="s">{tr('When Auto would use the strong model, use the model whose tasks here measurably went best instead (from how tasks went and from replays on Insights → Compare). It only switches with enough data and a clear lead.')}</div>
+        </div>
+        <Toggle label={tr('Learn which model does each kind of work best')} on={!!routing.learned} onChange={(v) => update({ learned: v })} />
+      </div>
     </section>
   );
 }

@@ -16,6 +16,7 @@ import { learningMetrics, lessonsAt, weekOf } from '../server/metrics.js';
 import { cleanRun, similarity } from '../server/playbooks.js';
 import { modelHints } from '../server/adaptation.js';
 import { evalCandidates, parseScore, summarizeEval } from '../server/evals.js';
+import { learnedPick, routeStats } from '../server/learned-routing.js';
 import { tempDir } from './helpers.js';
 
 const call = (id: string, name: string, args: object) => ({ id, type: 'function' as const, function: { name, arguments: JSON.stringify(args) } });
@@ -292,4 +293,21 @@ test('evals: replayable tasks are accepted ones on a clean commit; results add u
   assert.deepEqual(summarizeEval(run).map((m) => [m.model, m.done, m.passRate, m.avgScore, m.avgToolErrors]), [['a', 2, 0.5, 4, 1], ['b', 0, undefined, undefined, undefined]]);
   assert.deepEqual(parseScore('{"score": 4.4, "notes": "ok"}'), { score: 4, notes: 'ok' });
   assert.deepEqual(parseScore('{"score": 9}'), { score: undefined, notes: undefined });
+});
+
+test('learned routing: switches only with enough data on both models and a clear lead', () => {
+  const tasks = (model: string, good: number, bad: number, mode: 'work' | 'chat' = 'work') => [
+    ...Array.from({ length: good }, () => outcome({ model, mode })),
+    ...Array.from({ length: bad }, () => outcome({ model, mode, redone: true })),
+  ];
+  const evalRun = { id: 'e', projectId: 'p', models: ['c'], status: 'done' as const, createdAt: '', items: Array.from({ length: 6 }, () => ({ outcomeId: '', task: '', model: 'c', status: 'done' as const, testsPassed: true, score: 5 })) };
+  const stats = routeStats([...tasks('strong', 4, 4), ...tasks('better', 7, 1), ...tasks('few', 3, 0), ...tasks('chatty', 9, 0, 'chat')], [evalRun]);
+  // c's replays all passed: 100% beats better's 88% and strong's 50%.
+  assert.match(learnedPick('work', 'strong', stats)!.reason, /^Learned: does multi-step work best here \(100% went well vs 50%\)/);
+  assert.equal(learnedPick('work', 'strong', stats)!.model, 'c');
+  assert.equal(learnedPick('work', 'strong', stats, new Set(['strong', 'better']))!.model, 'better');
+  // Not enough on the current model, no clear lead, or nothing in the category: Auto's choice stands.
+  assert.equal(learnedPick('work', 'few', stats), undefined);
+  assert.equal(learnedPick('work', 'better', stats, new Set(['better', 'strong'])), undefined);
+  assert.equal(learnedPick('chat', 'chatty', stats), undefined);
 });

@@ -147,6 +147,8 @@ export interface RoutingSettings {
   strong: string;
   /** Start new chats on Auto. */
   newChats: boolean;
+  /** Instead of the strong model, use the model that measurably does that kind of work best (from outcomes and evals). */
+  learned?: boolean;
 }
 
 /** How Auto routed one message. */

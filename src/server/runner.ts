@@ -39,6 +39,7 @@ import { changesFromMessages, critiqueMessage, critiquePrompt, parseCritique, pl
 import { ProjectKnowledge, projectNoteTool } from './project-knowledge.js';
 import type { Playbooks } from './playbooks.js';
 import type { ModelAdaptation } from './adaptation.js';
+import { CategoryStats, learnedPick, RouteCategory, routeStats } from './learned-routing.js';
 import { lessonsInPrompt } from './lessons.js';
 import { git } from './git.js';
 import { MAX_VERIFY_ROUNDS, touchedFiles, verifyCommandFor, verifyMessage, verifyOutcome } from './verify.js';
@@ -351,8 +352,25 @@ export class ChatRunner {
   /** The model to answer with: `model` itself, or Auto's pick for this input. */
   private async pick(model: string, input: RouteInput): Promise<{ model: string; route?: RouteChoice }> {
     if (model !== AUTO_MODEL) return { model };
-    const choice = route(input, this.routeModels(), await this.deps.catalog.list().catch(() => []));
+    const catalog = await this.deps.catalog.list().catch(() => []);
+    let choice = route(input, this.routeModels(), catalog);
+    // Learned routing: work that deserves the strong model goes to whichever model measurably does it best here.
+    if (choice.tier === 'strong' && this.deps.store.settings.routing?.learned) {
+      const category: RouteCategory = input.working || input.planning ? 'work' : 'chat';
+      const better = learnedPick(category, choice.model, this.routeStatsCached(), catalog.length ? new Set(catalog.map((m) => m.id)) : undefined);
+      if (better) choice = { ...choice, model: better.model, reason: better.reason };
+    }
     return { model: choice.model, route: choice };
+  }
+
+  private routeCache?: { at: number; stats: Map<string, Record<RouteCategory, CategoryStats>> };
+
+  /** Per-model success rates for learned routing, recomputed every few minutes. */
+  private routeStatsCached(): Map<string, Record<RouteCategory, CategoryStats>> {
+    if (this.routeCache && Date.now() - this.routeCache.at < 300_000) return this.routeCache.stats;
+    const stats = routeStats(this.deps.outcomes?.all() ?? [], this.deps.store.evals.all());
+    this.routeCache = { at: Date.now(), stats };
+    return stats;
   }
 
   /** The chat's project, bot, recalled memories and artifacts, as used to build its prompt. */
