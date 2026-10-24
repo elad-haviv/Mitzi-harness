@@ -60,7 +60,7 @@ export function ArtifactsPage() {
       <div className="page-inner">
         <div className="page-header">
           <div>
-            <h1 className="page-title">{tr('Artifacts')}</h1>
+            <h1 className="page-title">{tr('Library')}</h1>
             <p className="page-subtitle">{tr('Documents, presentations, web pages, apps, code, diagrams, images, video and audio. Open one to edit it with the bot, comment and see its versions.')}</p>
           </div>
           <button className="btn btn-primary" onClick={() => setCreating(true)}>

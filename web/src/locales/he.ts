@@ -1699,4 +1699,7 @@ export const he: Record<string, string> = {
   'Lessons in the prompt at the end of each week': 'לקחים בהנחיה בסוף כל שבוע',
   'Right first try': 'נכון בניסיון ראשון',
   'From your reviews': 'מהביקורות שלך',
+  'Library': 'ספרייה',
+  'Show fewer': 'להציג פחות',
+  'Show more: Scheduled, Workflows, Memory, Insights': 'להציג עוד: מתוזמנות, תהליכי עבודה, זיכרון, תובנות',
 };

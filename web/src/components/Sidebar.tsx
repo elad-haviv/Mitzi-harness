@@ -1,4 +1,4 @@
-import { ArrowUpCircle, BarChart3, Wallet, Bot, Brain, CalendarClock, Check, ChevronDown, ChevronRight, FolderOpen, GitBranch, KeyRound, Layers, ListTree, MoreHorizontal, PanelLeftClose, Pencil, Pin, PinOff, Plug, Plus, Puzzle, Search, Settings, SquarePen, Trash2, WandSparkles, Workflow as WorkflowIcon, X } from 'lucide-react';
+import { ArrowUpCircle, BarChart3, Wallet, Bot, Brain, CalendarClock, Check, ChevronDown, ChevronRight, ChevronUp, FolderOpen, GitBranch, KeyRound, Layers, ListTree, MoreHorizontal, PanelLeftClose, Pencil, Pin, PinOff, Plug, Plus, Puzzle, Search, Settings, SquarePen, Trash2, WandSparkles, Workflow as WorkflowIcon, X } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ChatListItem } from '../api';
 import { href, navigate, Route } from '../router';
@@ -66,6 +66,8 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
   const [groupMenu, setGroupMenu] = useState(false);
   const [renaming, setRenaming] = useState<string>();
   const [confirmNode, confirm] = useConfirm();
+  const [showMore, setShowMore] = useStored('mitzi.navMore', false);
+  const [showExtend, setShowExtend] = useStored('mitzi.navExtend', false);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -146,7 +148,10 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
   const nav = [
     { route: { page: 'projects' } as Route, icon: <FolderOpen size={17} />, label: tr('Projects'), count: projects.length, match: ['projects', 'project'] },
     { route: { page: 'bots' } as Route, icon: <Bot size={17} />, label: tr('Bots'), count: bots.length, match: ['bots'] },
-    { route: { page: 'artifacts' } as Route, icon: <Layers size={17} />, label: tr('Artifacts'), match: ['artifacts', 'artifact'] },
+    { route: { page: 'artifacts' } as Route, icon: <Layers size={17} />, label: tr('Library'), match: ['artifacts', 'artifact'] },
+  ];
+  // Used less often: shown when the menu is expanded, or while one of them is open.
+  const more = [
     { route: { page: 'tasks' } as Route, icon: <CalendarClock size={17} />, label: tr('Scheduled'), match: ['tasks'], badge: unseen },
     { route: { page: 'workflows' } as Route, icon: <WorkflowIcon size={17} />, label: tr('Workflows'), match: ['workflows', 'workflow'], badge: approvals },
     { route: { page: 'memory' } as Route, icon: <Brain size={17} />, label: tr('Memory'), match: ['memory'] },
@@ -169,28 +174,6 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
         </button>
       </div>
       <div className="sidebar-section">
-        <a className="btn new-chat-btn" href={href({ page: 'new' })}>
-          <SquarePen size={16} /> {tr('New chat')}
-        </a>
-        {nav.map((n) => (
-          <a key={n.label} className={`nav-item${n.match.includes(route.page) ? ' active' : ''}`} href={href(n.route)}>
-            {n.icon}
-            {n.label}
-            {!!n.count && <span className="count">{n.count}</span>}
-            {!!(n as { badge?: number }).badge && (
-              <span className="badge-dot" title={tr('{0} new result(s)', (n as { badge?: number }).badge)}>
-                {(n as { badge?: number }).badge}
-              </span>
-            )}
-          </a>
-        ))}
-        <div className="nav-label">{tr('Extend')}</div>
-        {extend.map((n) => (
-          <a key={n.label} className={`nav-item${n.match.includes(route.page) ? ' active' : ''}`} href={href(n.route)}>
-            {n.icon}
-            {n.label}
-          </a>
-        ))}
         <div className="sidebar-search">
           <Search size={14} />
           <input
@@ -208,6 +191,25 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
             {/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K'}
           </kbd>
         </div>
+        <a className={`nav-item${route.page === 'new' ? ' active' : ''}`} href={href({ page: 'new' })}>
+          <SquarePen size={17} />
+          {tr('New chat')}
+        </a>
+        {nav.map((n) => (
+          <NavItem key={n.label} item={n} active={n.match.includes(route.page)} />
+        ))}
+        {more.map((n) => (showMore || n.match.includes(route.page) ? <NavItem key={n.label} item={n} active={n.match.includes(route.page)} /> : null))}
+        <button className="nav-more" onClick={() => setShowMore(!showMore)} aria-expanded={showMore} title={showMore ? tr('Show fewer') : tr('Show more: Scheduled, Workflows, Memory, Insights')}>
+          <span className="nav-more-line" />
+          {showMore ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          {!showMore && unseen + approvals > 0 && <span className="badge-dot" title={tr('{0} new result(s)', unseen + approvals)}>{unseen + approvals}</span>}
+          <span className="nav-more-line" />
+        </button>
+        <button className="nav-label nav-label-toggle" onClick={() => setShowExtend(!showExtend)} aria-expanded={showExtend}>
+          {showExtend ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          {tr('Extend')}
+        </button>
+        {extend.map((n) => (showExtend || n.match.includes(route.page) ? <NavItem key={n.label} item={n} active={n.match.includes(route.page)} /> : null))}
       </div>
       <div className="chat-list-head">
         <span>{tr('Chats')}</span>
@@ -392,5 +394,20 @@ function PopupMenu({ at, onClose, className, children }: { at?: { x: number; y: 
     <div ref={ref} className={`menu${at ? ' menu-fixed' : ''}${className ? ` ${className}` : ''}`} role="menu" style={pos ? { left: pos.x, top: pos.y } : undefined}>
       {children}
     </div>
+  );
+}
+
+function NavItem({ item, active }: { item: { route: Route; icon: ReactNode; label: string; count?: number; badge?: number }; active: boolean }) {
+  return (
+    <a className={`nav-item${active ? ' active' : ''}`} href={href(item.route)}>
+      {item.icon}
+      {item.label}
+      {!!item.count && <span className="count">{item.count}</span>}
+      {!!item.badge && (
+        <span className="badge-dot" title={tr('{0} new result(s)', item.badge)}>
+          {item.badge}
+        </span>
+      )}
+    </a>
   );
 }
