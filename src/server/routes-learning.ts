@@ -3,6 +3,7 @@ import type { ProjectFactKind, TaskOutcome } from '../shared/types.js';
 import type { OutcomeLearner, OutcomeLog } from './outcomes.js';
 import type { ProjectKnowledge } from './project-knowledge.js';
 import type { LessonHygiene } from './lesson-hygiene.js';
+import { learningMetrics } from './metrics.js';
 import type { Store } from './store.js';
 import { fail, HttpError, Route, str } from './util.js';
 
@@ -25,6 +26,19 @@ export function registerLearningRoutes(route: Route, deps: LearningDeps): void {
     const filter = (o: TaskOutcome) =>
       (!query.get('botId') || o.botId === query.get('botId')) && (!query.get('projectId') || o.projectId === query.get('projectId')) && (!query.get('chatId') || o.chatId === query.get('chatId'));
     return outcomes.all(filter).reverse().slice(0, limit);
+  });
+
+  /** Learning metrics from the ledger: rates overall, week by week and per model, and lessons in effect. */
+  route('GET', '/api/insights/outcomes', ({ query }) => {
+    const botId = query.get('botId');
+    const days = Math.min(365, Math.max(1, Number(query.get('days')) || 90));
+    const since = Date.now() - days * 86_400_000;
+    const bots = store.bots.all().filter((b) => !botId || b.id === botId);
+    return learningMetrics(
+      outcomes.all((o) => o.ts >= since && (!botId || o.botId === botId)),
+      bots.flatMap((b) => b.lessons ?? []),
+      bots.flatMap((b) => b.retiredLessons ?? []),
+    );
   });
 
   /** Distills lessons from a bot's outcomes now instead of waiting for the background job. */

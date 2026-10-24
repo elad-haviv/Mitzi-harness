@@ -119,3 +119,6 @@
   the prompt against the bot's tasks without it. After `MIN_USES`, lessons more than `RETIRE_MARGIN` below the baseline
   retire to `bot.retiredLessons` (restorable). Past `TIDY_AT` lessons, the fast model merges duplicates and drops vague or
   contradicted ones. Runs after each outcome distillation and on the learner's hourly pass.
+- Learning metrics (`src/server/metrics.ts`, `GET /api/insights/outcomes`): first-try acceptance, finished-on-green
+  (first harness check passed), final check pass rate, agent and environment errors per task, week by week with the
+  lessons in effect (`lessonsAt`), and per model. Shown on Insights → Learning above the feedback-loop charts.

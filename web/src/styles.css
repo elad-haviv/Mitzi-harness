@@ -7460,3 +7460,8 @@ input:not([type='checkbox']):not([type='radio']):not([type='range']) {
 img.zoomable {
   cursor: zoom-in;
 }
+
+.section-heading {
+  font-size: 15px;
+  margin: 18px 0 8px;
+}

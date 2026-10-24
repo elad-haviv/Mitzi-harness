@@ -120,6 +120,24 @@ export interface LearningPoint {
   accepted: boolean;
   lesson?: string;
 }
+export interface OutcomeRates {
+  tasks: number;
+  firstTryAccepted?: number;
+  redoRate?: number;
+  checksPassed?: number;
+  firstCheckPassed?: number;
+  agentErrors: number;
+  environmentErrors: number;
+  wentWell?: number;
+  rating?: number;
+}
+export interface LearningMetrics {
+  overall: OutcomeRates;
+  weekly: (OutcomeRates & { week: string; lessons: number })[];
+  byModel: (OutcomeRates & { model: string })[];
+  bySource: { source: string; count: number }[];
+  lessonsBySource: Record<string, number>;
+}
 export interface LearningCurve {
   points: LearningPoint[];
   summary: { loops: number; accepted: number; lessons: number; avgAttempts: number; avgFirstRating: number; earlyFirstRating: number; lateFirstRating: number };
@@ -269,6 +287,7 @@ export const api = {
   acceptLoop: (id: string) => request<FeedbackLoop>('POST', `/api/feedback/${id}/accept`, {}),
   feedbackLoops: (botId?: string) => request<(FeedbackLoop & { chatTitle?: string })[]>('GET', `/api/feedback${botId ? `?botId=${botId}` : ''}`),
   deleteLoop: (id: string) => request('DELETE', `/api/feedback/${id}`),
+  outcomeMetrics: (botId?: string, days = 90) => request<LearningMetrics>('GET', `/api/insights/outcomes?days=${days}${botId ? `&botId=${botId}` : ''}`),
   learning: (botId?: string) => request<LearningCurve>('GET', `/api/insights/learning${botId ? `?botId=${botId}` : ''}`),
   /** /compare: pick the winner (A or B) or skip. */
   comparePick: (chatId: string, choice: 'A' | 'B' | 'skip') => request('POST', `/api/chats/${chatId}/compare/pick`, { choice }),

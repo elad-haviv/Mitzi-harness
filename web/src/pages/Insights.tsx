@@ -2,12 +2,12 @@
 // bots are learning from feedback loops (attempts needed and first-try ratings over time).
 import { BarChart3, Columns2, GraduationCap, Loader2, Sparkles, Trash2, Trophy } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { api, BudgetStatus, CompareInsights, FeedbackLoop, LearningCurve, UsageGroup, UsageReport } from '../api';
+import { api, BudgetStatus, CompareInsights, FeedbackLoop, LearningCurve, LearningMetrics, UsageGroup, UsageReport } from '../api';
 import { Breakdown, Chart, movingAverage } from '../components/Charts';
 import { Stars } from '../components/Feedback';
 import { Kpi, money } from '../components/Work';
 import { href } from '../router';
-import { formatTokens, relativeTime, useApp } from '../state';
+import { formatTokens, modelLabel, relativeTime, useApp } from '../state';
 import { plural, tr } from '../i18n';
 
 const KIND_LABEL: Record<string, string> = {
@@ -185,6 +185,87 @@ export function UsageView({ projectId: fixedProject, compact }: { projectId?: st
 
 // ---------- Learning ----------
 
+const pct = (v?: number) => (v === undefined ? '–' : `${Math.round(v * 100)}%`);
+
+/** What the outcome ledger says: is Mitzi getting things right on the first try, and finishing on green? */
+function OutcomeMetrics({ botId }: { botId?: string }) {
+  const { toast, models } = useApp();
+  const [data, setData] = useState<LearningMetrics>();
+  useEffect(() => {
+    api.outcomeMetrics(botId).then(setData, (err) => toast(err.message));
+  }, [botId, toast]);
+  if (!data) return <Loader2 size={18} className="spin muted" />;
+  const o = data.overall;
+  if (!o.tasks) {
+    return (
+      <div className="card empty-learning">
+        <GraduationCap size={28} className="muted" />
+        <p>{tr('No tasks recorded yet. Every task that uses tools is recorded with how it went (errors, checks, redos, your edits), and Mitzi learns from them without you rating anything.')}</p>
+      </div>
+    );
+  }
+  const week = (w: string) => new Date(`${w}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const lessons = Object.values(data.lessonsBySource).reduce((a, b) => a + b, 0);
+  return (
+    <>
+      <h2 className="section-heading">{tr('From how tasks went')}</h2>
+      <div className="kpis">
+        <Kpi label={tr('Tasks recorded')} value={String(o.tasks)} hint={tr('Last 90 days')} />
+        <Kpi label={tr('Right on the first try')} value={pct(o.firstTryAccepted)} hint={tr('First attempts that weren’t sent back for a redo')} />
+        <Kpi label={tr('Finished on green')} value={pct(o.firstCheckPassed)} hint={tr('Checked work that passed the project’s checks the first time, before Mitzi had to send it back')} />
+        <Kpi label={tr('Checks pass in the end')} value={pct(o.checksPassed)} />
+        <Kpi label={tr('Mistakes per task')} value={o.agentErrors.toFixed(1)} hint={tr('Failed tool calls that were the bot’s fault; {0} per task were the computer’s', o.environmentErrors.toFixed(1))} />
+        <Kpi label={tr('Lessons in effect')} value={String(lessons)} />
+      </div>
+      {data.weekly.length >= 2 && (
+        <div className="breakdowns two">
+          <section className="card chart-card">
+            <h2>{tr('Tasks that went well, by week')}</h2>
+            <Chart
+              title={tr('Share of tasks without redos, failing checks, mistakes or low ratings, per week')}
+              points={data.weekly.map((w) => ({ label: week(w.week), value: (w.wentWell ?? 0) * 100, tip: tr('{0}% of {1} tasks', Math.round((w.wentWell ?? 0) * 100), w.tasks) }))}
+              format={(v) => `${Math.round(v)}%`}
+              domain={[0, 100]}
+              dots
+            />
+          </section>
+          <section className="card chart-card">
+            <h2>{tr('Lessons in effect, by week')}</h2>
+            <Chart title={tr('Lessons in the prompt at the end of each week')} points={data.weekly.map((w) => ({ label: week(w.week), value: w.lessons, tip: String(w.lessons) }))} dots />
+          </section>
+        </div>
+      )}
+      {data.byModel.length > 0 && (
+        <section className="card">
+          <h2>{tr('By model')}</h2>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>{tr('Model')}</th>
+                <th>{tr('Tasks')}</th>
+                <th>{tr('Right first try')}</th>
+                <th>{tr('Finished on green')}</th>
+                <th>{tr('Mistakes per task')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.byModel.map((m) => (
+                <tr key={m.model}>
+                  <td>{modelLabel(m.model, models)}</td>
+                  <td>{m.tasks}</td>
+                  <td>{pct(m.firstTryAccepted)}</td>
+                  <td>{pct(m.firstCheckPassed)}</td>
+                  <td>{m.agentErrors.toFixed(1)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+    </>
+  );
+}
+
 function LearningView() {
   const { bots, toast } = useApp();
   const [botId, setBotId] = useState('');
@@ -213,6 +294,8 @@ function LearningView() {
           ))}
         </select>
       </div>
+      <OutcomeMetrics botId={botId || undefined} />
+      <h2 className="section-heading">{tr('From your reviews')}</h2>
       {!pts.length ? (
         <div className="card empty-learning">
           <GraduationCap size={28} className="muted" />

@@ -52,7 +52,11 @@ export function Chart({ points, height = 180, format = (v) => String(Math.round(
     const all = [...points.map((p) => p.value), ...(line?.values.filter((v): v is number => v !== null) ?? [])];
     return [0, niceMax(Math.max(0, ...all))];
   }, [points, line, domain]);
-  const ticks = domain ? Array.from({ length: domain[1] - domain[0] + 1 }, (_, i) => domain[0] + i) : [0, max / 4, max / 2, (3 * max) / 4, max];
+  // Small fixed ranges (ratings) get a tick per step; anything else, five.
+  const ticks =
+    domain && domain[1] - domain[0] <= 10
+      ? Array.from({ length: domain[1] - domain[0] + 1 }, (_, i) => domain[0] + i)
+      : [0, 0.25, 0.5, 0.75, 1].map((f) => min + f * (max - min));
   const y = (v: number) => pad.t + plotH - ((v - min) / (max - min || 1)) * plotH;
   const band = plotW / Math.max(1, points.length);
   const cx = (i: number) => pad.l + band * i + band / 2;

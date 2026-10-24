@@ -12,6 +12,7 @@ import { lineDiff, meaningfulEdit } from '../server/edits.js';
 import { factsFromOutcome, looksLikeCorrection, MD_START, proposeInstructions } from '../server/project-knowledge.js';
 import { changesFromMessages, parseCritique } from '../server/critique.js';
 import { LessonHygiene, scoreLessons } from '../server/lesson-hygiene.js';
+import { learningMetrics, lessonsAt, weekOf } from '../server/metrics.js';
 import { tempDir } from './helpers.js';
 
 const call = (id: string, name: string, args: object) => ({ id, type: 'function' as const, function: { name, arguments: JSON.stringify(args) } });
@@ -219,4 +220,27 @@ test('lesson hygiene: tidying merges duplicates and drops what is vague, keeping
   assert.deepEqual(bot.lessons!.map((l) => l.text), ['Read a file before editing it.', 'Run tests after changes.']);
   assert.equal(bot.lessons![1].id, '4');
   assert.deepEqual(bot.retiredLessons!.map((l) => l.reason), ['Merged into: Read a file before editing it.', 'Merged into: Read a file before editing it.', 'Too vague']);
+});
+
+test('learning metrics: rates over outcomes, week by week, with the lessons in effect', () => {
+  const day = 86_400_000;
+  const monday = new Date(2026, 9, 19, 10).getTime();
+  const list = [
+    outcome({ ts: monday, redone: true, firstCheckPassed: false, testsPassed: true, errors: [{ tool: 'Edit', kind: 'agent', text: '' }], model: 'a' }),
+    outcome({ ts: monday + day, firstCheckPassed: true, testsPassed: true, model: 'a' }),
+    outcome({ ts: monday + 7 * day, model: 'b', rating: 5 }),
+    outcome({ ts: monday + 8 * day, model: 'b', attempts: 2 }),
+  ];
+  const lessons = [{ id: 'l1', text: '', value: -1 as const, chatId: '', createdAt: new Date(monday + 2 * day).toISOString(), source: 'outcome' as const }];
+  const retired = [{ ...lessons[0], id: 'l0', createdAt: new Date(monday - day).toISOString(), retiredAt: new Date(monday + 3 * day).toISOString(), reason: '' }];
+  const m = learningMetrics(list, lessons, retired);
+  assert.equal(m.overall.tasks, 4);
+  assert.equal(m.overall.firstTryAccepted, 2 / 3);
+  assert.equal(m.overall.firstCheckPassed, 0.5);
+  assert.equal(m.overall.agentErrors, 0.25);
+  assert.deepEqual(m.weekly.map((w) => [w.week, w.tasks, w.lessons]), [[weekOf(monday), 2, 1], [weekOf(monday + 7 * day), 2, 1]]);
+  assert.deepEqual(m.byModel.map((x) => [x.model, x.tasks]), [['a', 2], ['b', 2]]);
+  assert.equal(lessonsAt(monday, lessons, retired), 1);
+  assert.equal(lessonsAt(monday + 2.5 * day, lessons, retired), 2);
+  assert.deepEqual(m.lessonsBySource, { outcome: 1 });
 });
