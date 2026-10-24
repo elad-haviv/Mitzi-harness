@@ -76,3 +76,24 @@ test('hand-edited files block updates instead of being overwritten', async () =>
   assert.equal((await checkForUpdates()).supported, true);
   assert.ok(existsSync(join(app, '.git')));
 });
+
+test('a lockfile rewritten by npm install doesn\'t block updates, and changed files are named', async () => {
+  // The project starts tracking its lockfile.
+  writeFileSync(join(upstream, '.gitignore'), 'built.txt\nnode_modules\n');
+  writeFileSync(join(upstream, 'package-lock.json'), '{"lockfileVersion": 3}\n');
+  sh(['add', '.'], upstream);
+  sh(['commit', '-qm', 'Track the lockfile'], upstream);
+  assert.equal(await applyUpdate(() => {}), true);
+  // npm on this computer rewrote it, as it does.
+  writeFileSync(join(app, 'package-lock.json'), '{"lockfileVersion": 3, "rewritten": true}\n');
+  publish('1.4.0', BUILD_OK, 'Another release');
+  assert.equal((await checkForUpdates()).supported, true);
+  assert.equal(await applyUpdate(() => {}), true);
+  assert.equal(readFileSync(join(app, 'built.txt'), 'utf8'), '1.4.0');
+  assert.equal(sh(['status', '--porcelain', '--untracked-files=no'], app).trim(), '');
+  // Real changes still block, and say which files.
+  publish('1.5.0', BUILD_OK, 'Yet another');
+  writeFileSync(join(app, '.gitignore'), 'mine\n');
+  assert.match((await checkForUpdates()).reason!, /changed by hand \(\.gitignore\)/);
+  sh(['checkout', '.'], app);
+});

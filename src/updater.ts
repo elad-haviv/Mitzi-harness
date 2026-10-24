@@ -60,6 +60,24 @@ const run = (cmd: string, args: string[], onLog: (s: string) => void, timeoutMs 
     });
   });
 
+/** Files `npm install` rewrites by itself (on Windows especially); changes to them are never the user's. */
+const INSTALL_FILES = ['package-lock.json'];
+
+/** Tracked files changed in the checkout, besides the ones npm install rewrites. */
+async function changedByHand(): Promise<string[]> {
+  const status = await git(['status', '--porcelain', '--untracked-files=no'], ROOT);
+  return status
+    .split('\n')
+    .filter((l) => l.trim())
+    .map((l) => l.slice(3).replace(/^"|"$/g, '').split(' -> ').pop()!)
+    .filter((f) => !INSTALL_FILES.includes(f));
+}
+
+/** Puts back the files npm install rewrote, so the checkout stays clean for the next update. */
+async function restoreInstallFiles(): Promise<void> {
+  for (const f of INSTALL_FILES) await git(['checkout', '--', f], ROOT).catch(() => '');
+}
+
 let checking: Promise<UpdateInfo> | undefined;
 let busy = false;
 
@@ -99,8 +117,11 @@ export async function checkForUpdates(): Promise<UpdateInfo> {
       }
       const info: UpdateInfo = { ...base, supported: true, behind, commits, latest: { version: latestVersion, commit: latestHead[0], date: latestHead[1] } };
       // Changes made by hand would be overwritten or block the update.
-      const dirty = (await git(['status', '--porcelain', '--untracked-files=no'], ROOT)).trim();
-      if (behind && dirty) return { ...info, supported: false, reason: `Files in ${ROOT} were changed by hand, so Mitzi won’t overwrite them. Undo the changes (git checkout .) or update with the installer.` };
+      const dirty = await changedByHand();
+      if (behind && dirty.length) {
+        const names = dirty.length > 5 ? `${dirty.slice(0, 5).join(', ')} and ${dirty.length - 5} more` : dirty.join(', ');
+        return { ...info, supported: false, reason: `Files in ${ROOT} were changed by hand (${names}), so Mitzi won’t overwrite them. Undo the changes (git checkout .) or update with the installer.` };
+      }
       if (behind && ahead) return { ...info, supported: false, reason: 'This copy has its own commits, so it can’t be updated automatically. Update it with git.' };
       return info;
     } catch (err) {
@@ -127,6 +148,8 @@ export async function applyUpdate(emit: (e: UpdateEvent) => void): Promise<boole
       return false;
     }
     before = (await git(['rev-parse', 'HEAD'], ROOT)).trim();
+    // A lockfile npm rewrote would stop the fast-forward; the new version brings its own.
+    await restoreInstallFiles();
 
     emit({ type: 'step', step: 'download', status: 'running' });
     await git(['merge', '--ff-only', `origin/${info.branch}`], ROOT, { timeoutMs: 120_000 });
@@ -137,6 +160,7 @@ export async function applyUpdate(emit: (e: UpdateEvent) => void): Promise<boole
       emit({ type: 'step', step: 'install', status: 'running' });
       // Not `npm ci`: it deletes node_modules, and on Windows the open window's Electron files are locked.
       await run('npm', ['install', '--no-audit', '--no-fund'], log);
+      await restoreInstallFiles();
       emit({ type: 'step', step: 'install', status: 'done' });
     } else {
       emit({ type: 'step', step: 'install', status: 'skipped' });
