@@ -638,11 +638,17 @@ export function ChatView({
       }
       placeholder={placeholder ?? (customBot ? tr('Message {0}…', customBot.name) : project ? tr('Message Mitzi in {0}…', project.name) : undefined)}
       autoFocus
-      extra={
+      footer={
         <>
+          <ModeSwitch mode={mode} onChange={setMode} compact />
+          <div style={{ flex: 1 }} />
           {chat && chat.messages.length > 0 && !embedded && (
             <ContextButton chatId={chat.id} used={chat.lastPromptTokens} total={contextLength} refreshKey={contextVersion} onDetails={() => setPanel({ tab: 'context' })} />
           )}
+        </>
+      }
+      extra={
+        <>
           <button className="icon-btn" title={tr('Live conversation: talk and listen hands-free')} aria-label={tr('Start live conversation')} onClick={() => void startLive()} disabled={running}>
             <AudioLines size={18} />
           </button>
@@ -694,7 +700,6 @@ export function ChatView({
         </span>
       )}
       <div className="header-spacer" />
-      {chat && !isEmpty && <ModeSwitch mode={mode} onChange={setMode} compact />}
       {artifacts.length > 0 && (
         <button className={`pill-btn${panel?.tab === 'artifacts' ? ' on' : ''}`} onClick={() => togglePanel('artifacts')}>
           <Layers size={15} />
@@ -789,7 +794,6 @@ export function ChatView({
             </span>
           </div>
         )}
-        <ModeSwitch mode={mode} onChange={setMode} />
         {composerNode}
         {mode === 'work' && (
           <p className="muted small mode-hint">
