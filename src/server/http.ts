@@ -391,6 +391,8 @@ export function createApp(opts: AppOptions) {
     if (typeof body.title === 'string' && body.title.trim()) chat.title = body.title.trim().slice(0, 120);
     if (typeof body.model === 'string' && body.model.trim()) chat.model = body.model.trim();
     if (typeof body.pinned === 'boolean') chat.pinned = body.pinned;
+    if (body.archived === true) chat.archivedAt = now();
+    if (body.archived === false) delete chat.archivedAt;
     if (typeof body.webSearch === 'boolean') chat.webSearch = body.webSearch;
     if (body.mode === 'chat' || body.mode === 'work') chat.mode = body.mode;
     if (APPROVAL_LEVELS.includes(body.approval)) chat.approval = body.approval;
@@ -438,6 +440,12 @@ export function createApp(opts: AppOptions) {
     const editIndex = typeof r.body?.editIndex === 'number' ? r.body.editIndex : undefined;
     const auto = ['redo', 'plan', 'goal'].includes(str(r.body?.auto)) ? (str(r.body.auto) as 'redo' | 'plan' | 'goal') : undefined;
     const feedbackLoopId = str(r.body?.feedbackLoopId) || undefined;
+    // Writing in an archived chat means it's in use again.
+    const chat = getChat(r.params.id);
+    if (chat.archivedAt) {
+      delete chat.archivedAt;
+      store.chats.put(chat);
+    }
     return stream(r.params.id, { kind: 'message', content, attachments, editIndex, focus: str(r.body?.focus) || undefined, auto, feedbackLoopId })(r);
   });
   /** Starts a realtime voice conversation in the chat: a short-lived key and the call address for the browser. */
@@ -591,6 +599,8 @@ export function createApp(opts: AppOptions) {
     if (typeof body.name === 'string' && body.name.trim()) p.name = body.name.trim();
     if (typeof body.description === 'string') p.description = body.description;
     if (typeof body.instructions === 'string') p.instructions = body.instructions;
+    if (body.archived === true) p.archivedAt = now();
+    if (body.archived === false) delete p.archivedAt;
     if (typeof body.permissionMode === 'string') {
       if (!PERMISSION_MODES.includes(body.permissionMode)) throw new HttpError(400, 'Unknown permission mode');
       p.permissionMode = body.permissionMode as PermissionMode;

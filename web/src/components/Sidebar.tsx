@@ -1,4 +1,4 @@
-import { ArrowUpCircle, BarChart3, Wallet, Bot, Brain, CalendarClock, Check, ChevronDown, ChevronRight, ChevronUp, FolderOpen, GitBranch, KeyRound, Layers, ListTree, MoreHorizontal, PanelLeftClose, Pencil, Pin, PinOff, Plug, Plus, Puzzle, Search, Settings, SquarePen, Trash2, WandSparkles, Workflow as WorkflowIcon, X } from 'lucide-react';
+import { Archive, ArrowUpCircle, BarChart3, Wallet, Bot, Brain, CalendarClock, Check, ChevronDown, ChevronRight, ChevronUp, FolderOpen, GitBranch, KeyRound, Layers, ListTree, MoreHorizontal, PanelLeftClose, Pencil, Pin, PinOff, Plug, Plus, Puzzle, Search, Settings, SquarePen, Trash2, WandSparkles, Workflow as WorkflowIcon, X } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ChatListItem } from '../api';
 import { href, navigate, Route } from '../router';
@@ -69,10 +69,15 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
   const [showMore, setShowMore] = useStored('mitzi.navMore', false);
   const [showExtend, setShowExtend] = useStored('mitzi.navExtend', false);
 
+  // Archived chats, and the chats of archived projects, are put away (they're on the Archived page).
+  const archivedProjectIds = useMemo(() => new Set(projects.filter((p) => p.archivedAt).map((p) => p.id)), [projects]);
+  const isArchived = (c: ChatListItem) => !!c.archivedAt || (!!c.projectId && archivedProjectIds.has(c.projectId));
+  const archivedCount = chats.filter((c) => c.archivedAt).length + archivedProjectIds.size;
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? chats.filter((c) => c.title.toLowerCase().includes(q)) : chats;
-  }, [chats, query]);
+    const live = chats.filter((c) => !isArchived(c));
+    return q ? live.filter((c) => c.title.toLowerCase().includes(q)) : live;
+  }, [chats, query, archivedProjectIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isDefaultBot = (c: ChatListItem) => !c.botId || !!bots.find((b) => b.id === c.botId)?.builtIn;
   const groups = useMemo(() => {
@@ -146,7 +151,7 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
   };
 
   const nav = [
-    { route: { page: 'projects' } as Route, icon: <FolderOpen size={17} />, label: tr('Projects'), count: projects.length, match: ['projects', 'project'] },
+    { route: { page: 'projects' } as Route, icon: <FolderOpen size={17} />, label: tr('Projects'), count: projects.filter((p) => !p.archivedAt).length, match: ['projects', 'project'] },
     { route: { page: 'bots' } as Route, icon: <Bot size={17} />, label: tr('Bots'), count: bots.length, match: ['bots'] },
     { route: { page: 'artifacts' } as Route, icon: <Layers size={17} />, label: tr('Library'), match: ['artifacts', 'artifact'] },
   ];
@@ -310,6 +315,11 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
         })}
         {query && !filtered.length && <div className="muted small" style={{ padding: '12px 10px' }}>{tr('No chats match “{0}”.', query)}</div>}
         {!query && !groups.length && <div className="muted small" style={{ padding: '12px 10px' }}>{tr('Your conversations will appear here.')}</div>}
+        {archivedCount > 0 && (
+          <a className={`archived-link${route.page === 'archived' ? ' active' : ''}`} href={href({ page: 'archived' })}>
+            <Archive size={13} /> {tr('Archived ({0})', archivedCount)}
+          </a>
+        )}
       </div>
       {menu && (
         <PopupMenu onClose={() => setMenu(undefined)} at={{ x: menu.x, y: menu.y }}>
@@ -319,9 +329,9 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
           <button onClick={() => (setMenu(undefined), void updateChat(menu.chat.id, { pinned: !menu.chat.pinned }))}>
             {menu.chat.pinned ? <PinOff size={15} /> : <Pin size={15} />} {menu.chat.pinned ? tr('Unpin') : tr('Pin')}
           </button>
-          {projects.filter((p) => p.id !== menu.chat.projectId).length > 0 && <hr />}
+          {projects.filter((p) => p.id !== menu.chat.projectId && !p.archivedAt).length > 0 && <hr />}
           {projects
-            .filter((p) => p.id !== menu.chat.projectId)
+            .filter((p) => p.id !== menu.chat.projectId && !p.archivedAt)
             .slice(0, 6)
             .map((p) => (
               <button key={p.id} onClick={() => (setMenu(undefined), void updateChat(menu.chat.id, { projectId: p.id }))}>
@@ -334,6 +344,16 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
             </button>
           )}
           <hr />
+          <button
+            onClick={() => {
+              setMenu(undefined);
+              void updateChat(menu.chat.id, { archived: true });
+              toast(tr('Archived “{0}”. Find it under Archived.', menu.chat.title), 'info');
+              if (route.page === 'chat' && route.id === menu.chat.id) navigate({ page: 'new' });
+            }}
+          >
+            <Archive size={15} /> {tr('Archive')}
+          </button>
           <button className="danger" onClick={() => (setMenu(undefined), void deleteChat(menu.chat))}>
             <Trash2 size={15} /> {tr('Delete')}
           </button>

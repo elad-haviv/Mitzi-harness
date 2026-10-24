@@ -1,5 +1,6 @@
 import { SearchDialog } from './components/SearchDialog';
 import { InsightsPage } from './pages/Insights';
+import { ArchivePage } from './pages/Archive';
 import { WorkflowEditor, WorkflowsPage } from './pages/Workflows';
 import { KeyRound, PanelLeft, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -139,6 +140,9 @@ export function App() {
       break;
     case 'insights':
       page = <InsightsPage tab={route.tab} />;
+      break;
+    case 'archived':
+      page = <ArchivePage />;
       break;
   }
 

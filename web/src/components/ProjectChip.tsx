@@ -18,7 +18,7 @@ export function ProjectChip({ projectId, onChange }: { projectId?: string; onCha
   const { projects, refreshProjects, toast } = useApp();
   const [dialog, setDialog] = useState<'folder' | 'repo' | null>(null);
   const project = projects.find((p) => p.id === projectId);
-  const sorted = [...projects].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 10);
+  const sorted = [...projects].filter((p) => !p.archivedAt || p.id === projectId).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 10);
 
   const chosen = async (p: ProjectView) => {
     await refreshProjects();

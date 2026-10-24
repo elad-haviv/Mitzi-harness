@@ -16,6 +16,7 @@ export type Route =
   | { page: 'workflows' }
   | { page: 'workflow'; id: string }
   | { page: 'insights'; tab?: string }
+  | { page: 'archived' }
   | { page: 'settings'; section?: string };
 
 export function parseRoute(hash: string): Route {
@@ -40,6 +41,8 @@ export function parseRoute(hash: string): Route {
       return { page: 'settings', section: parts[1] };
     case 'tasks':
       return { page: 'tasks' };
+    case 'archived':
+      return { page: 'archived' };
     case 'workflows':
       return parts[1] ? { page: 'workflow', id: parts[1] } : { page: 'workflows' };
     case 'insights':

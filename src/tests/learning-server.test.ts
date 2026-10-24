@@ -530,3 +530,16 @@ test('images: the open image is edited in place, guided by the user\'s markup', 
   assert.equal(saved.versions.at(-1).author, 'user');
   assert.equal((await call('POST', `/api/artifacts/${image.id}/image`, { dataUrl: 'data:text/html;base64,PGI+', as: 'version' })).status, 400);
 });
+
+test('archiving: chats and projects can be put away and restored; writing in an archived chat brings it back', async () => {
+  const project = (await call('POST', '/api/projects', { name: 'Old stuff' })).data;
+  assert.ok((await call('PATCH', `/api/projects/${project.id}`, { archived: true })).data.archivedAt);
+  assert.equal((await call('PATCH', `/api/projects/${project.id}`, { archived: false })).data.archivedAt, undefined);
+  const chat = (await call('POST', '/api/chats', {})).data;
+  const archived = (await call('PATCH', `/api/chats/${chat.id}`, { archived: true })).data;
+  assert.ok(archived.archivedAt);
+  assert.ok((await call('GET', '/api/chats')).data.find((c: any) => c.id === chat.id).archivedAt);
+  reply = () => textChunks('Back again.');
+  await stream(chat.id, { content: 'Hello again' });
+  assert.equal((await call('GET', `/api/chats/${chat.id}`)).data.archivedAt, undefined);
+});

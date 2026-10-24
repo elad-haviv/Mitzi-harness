@@ -63,6 +63,7 @@ import { LOGO, relativeTime, useApp } from '../state';
 import { applyDelegateEvent, TeamProgress } from '../components/Team';
 import { applyCompareEvent, CompareState, CompareView } from '../components/Compare';
 import { lang, plural, rtl, tr } from '../i18n';
+import { ArchivedBanner } from './Archive';
 import { withoutShownMedia } from '../../../src/shared/mediaText';
 
 type LiveBlock =
@@ -1145,6 +1146,7 @@ export function ChatView({
       {!expanded && (
         <div className="chat-col">
           {header}
+          {chat?.archivedAt && !embedded && <ArchivedBanner what="chat" onRestore={() => void updateChat({ archived: false }).then(() => app.refreshChats())} />}
           {isEmpty ? welcome : conversation}
         </div>
       )}

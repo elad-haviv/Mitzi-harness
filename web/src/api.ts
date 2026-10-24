@@ -270,7 +270,7 @@ export const api = {
   chats: (projectId?: string) => request<ChatListItem[]>('GET', `/api/chats${projectId ? `?projectId=${projectId}` : ''}`),
   chat: (id: string) => request<Chat & { running: boolean }>('GET', `/api/chats/${id}`),
   createChat: (body: { projectId?: string; botId?: string; model?: string; mode?: ChatMode; approval?: ApprovalLevel }) => request<Chat>('POST', '/api/chats', body),
-  updateChat: (id: string, body: Partial<{ title: string; model: string; pinned: boolean; webSearch: boolean; projectId: string | null; mode: ChatMode; approval: ApprovalLevel }>) =>
+  updateChat: (id: string, body: Partial<{ title: string; model: string; pinned: boolean; webSearch: boolean; projectId: string | null; mode: ChatMode; approval: ApprovalLevel; archived: boolean }>) =>
     request<ChatSummary>('PATCH', `/api/chats/${id}`, body),
   deleteChat: (id: string) => request('DELETE', `/api/chats/${id}`),
   send: (
@@ -351,7 +351,7 @@ export const api = {
   projects: () => request<ProjectView[]>('GET', '/api/projects'),
   project: (id: string) => request<ProjectView>('GET', `/api/projects/${id}`),
   createProject: (body: { name: string; description?: string }) => request<ProjectView>('POST', '/api/projects', body),
-  updateProject: (id: string, body: Partial<{ name: string; description: string; instructions: string; folder: string | null; permissionMode: string; knowledgeFolders: string[]; verify: { enabled: boolean; command?: string } }>) =>
+  updateProject: (id: string, body: Partial<{ name: string; description: string; instructions: string; folder: string | null; permissionMode: string; knowledgeFolders: string[]; verify: { enabled: boolean; command?: string }; archived: boolean }>) =>
     request<ProjectView>('PATCH', `/api/projects/${id}`, body),
   deleteProject: (id: string, deleteChats = false) => request('DELETE', `/api/projects/${id}${deleteChats ? '?chats=delete' : ''}`),
   addProjectFile: (id: string, name: string, content: string) => request<ProjectView>('POST', `/api/projects/${id}/files`, { name, content }),

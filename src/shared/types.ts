@@ -199,6 +199,8 @@ export interface Project {
   folder?: string;
   /** Set when the folder was cloned from a remote repository. */
   repo?: { url: string; branch?: string };
+  /** Set while the project is archived: it and its chats are out of the way, but kept. */
+  archivedAt?: string;
   permissionMode: PermissionMode;
   /** How work in the folder is checked before a work-mode turn ends (detected from the manifests unless set). */
   verify?: { enabled?: boolean; command?: string };
@@ -425,6 +427,8 @@ export interface Chat {
   allowedRules: string[];
   usage: UsageTotals;
   lastPromptTokens: number;
+  /** Set while the chat is archived: hidden from the chat list, but kept and searchable. */
+  archivedAt?: string;
   /** Set on chats branched off another chat. */
   branchedFrom?: { chatId: string; title: string };
   /** The artifact the user last worked on in its workspace; the next turn focuses on it. */

@@ -1,6 +1,7 @@
 import { extractText, isDocument } from '../documents';
 import { ProjectUsage } from './Insights';
-import { BadgeCheck, BookOpen, ListOrdered, Brain, FilePlus2, X, FileText, FolderGit2, FolderOpen, FolderSearch, GitBranch, Loader2, RefreshCw, Layers, MessageSquare, MoreHorizontal, Pencil, Plus, ShieldCheck, SquarePen, Terminal, Trash2, Upload } from 'lucide-react';
+import { ArchivedBanner } from './Archive';
+import { Archive, ArchiveRestore, BadgeCheck, BookOpen, ListOrdered, Brain, FilePlus2, X, FileText, FolderGit2, FolderOpen, FolderSearch, GitBranch, Loader2, RefreshCw, Layers, MessageSquare, MoreHorizontal, Pencil, Plus, ShieldCheck, SquarePen, Terminal, Trash2, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { api, ArtifactListItem, ChatListItem, PermissionMode, Playbook, ProjectFact, ProjectView, RepoStatus } from '../api';
 import { CloneRepoModal, FolderPicker } from '../components/Folders';
@@ -72,7 +73,7 @@ export function ProjectsPage() {
           </Empty>
         ) : (
           <div className="grid">
-            {projects.map((p) => (
+            {projects.filter((p) => !p.archivedAt).map((p) => (
               <a key={p.id} className="tile" href={href({ page: 'project', id: p.id })}>
                 <div className="tile-actions">
                   <button
@@ -109,6 +110,11 @@ export function ProjectsPage() {
               </a>
             ))}
           </div>
+        )}
+        {projects.some((p) => p.archivedAt) && (
+          <a className="small muted archived-projects-link" href={href({ page: 'archived' })}>
+            {plural(projects.filter((p) => p.archivedAt).length, '1 archived project', '{0} archived projects')} →
+          </a>
         )}
       </div>
       {creating && (
@@ -261,6 +267,9 @@ export function ProjectPage({ id }: { id: string }) {
                 <button onClick={() => (close(), setEditing(true))}>
                   <Pencil size={15} /> {tr('Edit details')}
                 </button>
+                <button onClick={() => (close(), void update({ archived: !project.archivedAt }).then(() => refreshChats()))}>
+                  {project.archivedAt ? <ArchiveRestore size={15} /> : <Archive size={15} />} {project.archivedAt ? tr('Restore project') : tr('Archive project')}
+                </button>
                 <hr />
                 <button className="danger" onClick={() => (close(), setDeleting(true))}>
                   <Trash2 size={15} /> {tr('Delete project')}
@@ -270,6 +279,7 @@ export function ProjectPage({ id }: { id: string }) {
           </Menu>
         </div>
 
+        {project.archivedAt && <ArchivedBanner what="project" onRestore={() => void update({ archived: false }).then(() => refreshChats())} />}
         <div className="project-layout">
           <div>
             <a className="big-composer-link" href={href({ page: 'new', projectId: project.id })}>
