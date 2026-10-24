@@ -56,9 +56,13 @@ export function ModelPicker({
   const [open, setOpen] = useState(false);
   // Opens toward whichever side of the screen has room.
   const [side, setSide] = useState(direction);
+  const [alignEnd, setAlignEnd] = useState(false);
   const toggle = () => {
     const rect = wrap.current?.getBoundingClientRect();
     if (rect) {
+      // Near the right edge (left in right-to-left), the menu lines up with the picker's far side instead.
+      const width = Math.min(460, window.innerWidth - 24);
+      setAlignEnd(document.dir === 'rtl' ? rect.right - width < 0 : rect.left + width > window.innerWidth);
       const below = window.innerHeight - rect.bottom;
       const preferred = direction === 'down' ? below >= 360 || below >= rect.top : rect.top < 360 && below > rect.top;
       setSide(preferred ? 'down' : 'up');
@@ -133,7 +137,7 @@ export function ModelPicker({
         </button>
       )}
       {open && (
-        <div className="picker" style={side === 'up' ? { bottom: 'calc(100% + 6px)', left: 0 } : { top: 'calc(100% + 6px)', left: 0 }}>
+        <div className="picker" style={{ ...(side === 'up' ? { bottom: 'calc(100% + 6px)' } : { top: 'calc(100% + 6px)' }), ...(alignEnd ? { insetInlineEnd: 0 } : { insetInlineStart: 0 }) }}>
           <div className="picker-search">
             <input
               autoFocus

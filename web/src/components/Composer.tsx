@@ -33,8 +33,10 @@ interface Props {
   extra?: ReactNode;
   /** Shown after the search button, e.g. the project picker. */
   leading?: ReactNode;
-  /** Shown under the message box, e.g. the mode switch and context usage. */
+  /** Shown under the message box on the left, e.g. the autonomy level. */
   footer?: ReactNode;
+  /** Shown under the message box on the right, after the model picker, e.g. the context usage. */
+  footerEnd?: ReactNode;
   /** Shift+Tab in the message box (switches the approval level). */
   onShiftTab?(): void;
   /** While the bot works, messages are queued; `now` interrupts it to send right away (Ctrl/⌘+Enter). */
@@ -181,9 +183,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
             <AttachmentChips attachments={attachments} onRemove={(i) => setAttachments((list) => list.filter((_, j) => j !== i))} />
           </div>
         )}
-        <div className="composer-top">
-          <ModelPicker value={props.model} onChange={props.onModelChange} auto />
-        </div>
         <textarea
           ref={ref}
           rows={1}
@@ -267,7 +266,12 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
           )}
         </div>
       </div>
-      {props.footer && <div className="composer-footer">{props.footer}</div>}
+      <div className="composer-footer">
+        {props.footer}
+        <div style={{ flex: 1 }} />
+        <ModelPicker value={props.model} onChange={props.onModelChange} auto />
+        {props.footerEnd}
+      </div>
     </div>
   );
 });

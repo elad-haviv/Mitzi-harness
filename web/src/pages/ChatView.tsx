@@ -640,7 +640,10 @@ export function ChatView({
       footer={
         <>
           <ApprovalPicker level={approval} onChange={setApproval} planOnly={project?.permissionMode === 'plan'} />
-          <div style={{ flex: 1 }} />
+        </>
+      }
+      footerEnd={
+        <>
           {chat && chat.messages.length > 0 && !embedded && (
             <ContextButton chatId={chat.id} used={chat.lastPromptTokens} total={contextLength} refreshKey={contextVersion} onDetails={() => setPanel({ tab: 'context' })} />
           )}

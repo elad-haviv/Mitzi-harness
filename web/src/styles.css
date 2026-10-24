@@ -1752,12 +1752,6 @@ button.memory-chip:hover {
   place-items: center;
   padding: 0;
 }
-.composer-top {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 10px 0;
-}
 .composer-footer {
   max-width: 780px;
   margin: 6px auto 0;
