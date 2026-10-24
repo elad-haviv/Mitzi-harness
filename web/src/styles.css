@@ -6808,6 +6808,28 @@ button.todo-check:not(:disabled):hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  cursor: text;
+}
+.queue-edit {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 5px 8px;
+  font: inherit;
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+}
+.queue-edit:focus {
+  border-color: var(--accent);
 }
 .queue-item .link-btn {
   display: inline-flex;
@@ -7870,4 +7892,97 @@ img.zoomable {
 .archived-projects-link {
   display: inline-block;
   margin-top: 16px;
+}
+
+/* ---------- Editable task list ---------- */
+.todo-editor {
+  width: 100%;
+  text-align: start;
+}
+.todo-list.editable {
+  gap: 2px;
+}
+.todo-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 3px 4px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  transition: transform 0.15s ease;
+  background: var(--bg);
+}
+.todo-row:hover,
+.todo-row:focus-within {
+  background: var(--surface-2);
+}
+.todo-list.dragging .todo-row.lifted {
+  transition: none;
+  position: relative;
+  z-index: 2;
+  box-shadow: var(--shadow);
+}
+.todo-row.new {
+  align-items: center;
+}
+.todo-grip {
+  border: 0;
+  background: none;
+  padding: 2px 0;
+  color: var(--muted);
+  cursor: grab;
+  opacity: 0;
+  touch-action: none;
+}
+.todo-row:hover .todo-grip,
+.todo-grip:focus-visible {
+  opacity: 1;
+}
+.todo-list.dragging .todo-grip {
+  cursor: grabbing;
+}
+button.todo-check {
+  cursor: pointer;
+}
+button.todo-check:hover {
+  color: var(--accent);
+}
+.todo-text {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  cursor: text;
+}
+.todo-row.completed .todo-text {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.todo-row.in_progress .todo-text {
+  font-weight: 560;
+}
+.todo-act {
+  opacity: 0;
+}
+.todo-row:hover .todo-act,
+.todo-act:focus-visible {
+  opacity: 1;
+}
+.todo-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 0 4px;
+}
+@media (hover: none) {
+  .todo-grip,
+  .todo-act {
+    opacity: 1;
+  }
 }

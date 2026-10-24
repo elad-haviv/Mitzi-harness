@@ -1002,6 +1002,13 @@ export function ChatView({
             }}
             onSendNow={(id) => void api.sendQueuedNow(chat.id, id).then((r) => setChat((c) => c && { ...c, queue: r.queue }), (err) => toast(err.message))}
             onRemove={(id) => void api.unqueue(chat.id, id).then((r) => setChat((c) => c && { ...c, queue: r.queue }), (err) => toast(err.message))}
+            onEdit={(id, content) => {
+              setChat((c) => c && { ...c, queue: c.queue?.map((q) => (q.id === id ? { ...q, content } : q)) });
+              void api.editQueued(chat.id, id, content).then(
+                (r) => setChat((c) => c && { ...c, queue: r.queue }),
+                (err) => toast(err.message),
+              );
+            }}
           />
         )}
         {chat?.goal && <GoalBar goal={chat.goal} onCommand={(t) => void runCommand(t)} onOpen={() => setPanel({ tab: 'tasks' })} />}
@@ -1053,7 +1060,23 @@ export function ChatView({
       <div className="panel-body muted small">{tr('Send a message to see the context window.')}</div>
     );
   } else if (panel?.tab === 'tasks') {
-    panelBody = <TasksPanel chat={chat} running={running} onCommand={(t) => void runCommand(t)} onApprove={() => void approvePlan()} onRevise={revisePlan} />;
+    panelBody = (
+      <TasksPanel
+        chat={chat}
+        running={running}
+        onCommand={(t) => void runCommand(t)}
+        onApprove={() => void approvePlan()}
+        onRevise={revisePlan}
+        onTodos={(todos) => {
+          if (!chat) return;
+          setChat((c) => c && { ...c, todos });
+          void api.setTodos(chat.id, todos).then(
+            (r) => setChat((c) => c && { ...c, todos: r.todos }),
+            (err) => toast(err.message),
+          );
+        }}
+      />
+    );
   } else if (panel?.tab === 'browser') {
     panelBody = <BrowserPanel view={browserViews.at(-1)} history={browserViews} />;
   } else if (panel?.tab === 'usage') {

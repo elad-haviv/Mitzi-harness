@@ -1,104 +1,38 @@
 // Messages waiting for the current response to finish. Drag one by its grip (mouse or touch) to change the
-// order; with the keyboard, focus the grip and use the up and down arrows.
-import { GripVertical, X, Zap } from 'lucide-react';
+// order; with the keyboard, focus the grip and use the up and down arrows. Click a message (or its pencil) to edit it.
+import { GripVertical, Pencil, X, Zap } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { QueuedMessage } from '../api';
 import { tr } from '../i18n';
+import { moved, useSortable } from './sortable';
 
-interface Drag {
-  id: string;
-  /** Where the pointer started, and how far it has moved. */
-  startY: number;
-  dy: number;
-  /** The index the item would land at. */
-  target: number;
-}
-
-export function QueueList({ queue, onReorder, onSendNow, onRemove }: { queue: QueuedMessage[]; onReorder(order: string[]): void; onSendNow(id: string): void; onRemove(id: string): void }) {
-  const [drag, setDrag] = useState<Drag>();
-  const list = useRef<HTMLDivElement>(null);
-  // Moving an item with the keyboard keeps focus on its grip.
-  const refocus = useRef<string>(undefined);
-  useEffect(() => {
-    if (!refocus.current) return;
-    list.current?.querySelector<HTMLElement>(`[data-qid="${refocus.current}"]`)?.focus();
-    refocus.current = undefined;
-  }, [queue]);
-
-  const move = (from: number, to: number) => {
-    if (from === to || to < 0 || to >= queue.length) return;
-    const ids = queue.map((q) => q.id);
-    const [id] = ids.splice(from, 1);
-    ids.splice(to, 0, id);
-    onReorder(ids);
-  };
-
-  /** The index the dragged item would take, from the middles of the other items. */
-  const targetAt = (y: number, id: string): number => {
-    const items = [...(list.current?.querySelectorAll<HTMLElement>('.queue-item') ?? [])];
-    let target = 0;
-    items.forEach((el, i) => {
-      if (queue[i]?.id === id) return;
-      const r = el.getBoundingClientRect();
-      if (y > r.top + r.height / 2) target++;
-    });
-    return target;
-  };
-
-  const start = (e: React.PointerEvent, id: string) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    setDrag({ id, startY: e.clientY, dy: 0, target: queue.findIndex((q) => q.id === id) });
-  };
-  const moveTo = (e: React.PointerEvent) => {
-    if (!drag) return;
-    setDrag({ ...drag, dy: e.clientY - drag.startY, target: targetAt(e.clientY, drag.id) });
-  };
-  const end = () => {
-    if (!drag) return;
-    move(
-      queue.findIndex((q) => q.id === drag.id),
-      drag.target,
-    );
-    setDrag(undefined);
-  };
-
-  // While dragging, the others make room where the item would land.
-  const from = drag ? queue.findIndex((q) => q.id === drag.id) : -1;
-  const shift = (i: number): number => {
-    if (!drag || i === from) return 0;
-    if (from < drag.target && i > from && i <= drag.target) return -1;
-    if (from > drag.target && i >= drag.target && i < from) return 1;
-    return 0;
-  };
-  const rowHeight = (list.current?.querySelector<HTMLElement>('.queue-item')?.offsetHeight ?? 34) + 4;
+export function QueueList({
+  queue,
+  onReorder,
+  onSendNow,
+  onRemove,
+  onEdit,
+}: {
+  queue: QueuedMessage[];
+  onReorder(order: string[]): void;
+  onSendNow(id: string): void;
+  onRemove(id: string): void;
+  onEdit(id: string, content: string): void;
+}) {
+  const ids = queue.map((q) => q.id);
+  const { listRef, dragging, gripProps, rowStyle } = useSortable(ids, (from, to) => onReorder(moved(ids, from, to)), '.queue-item');
+  const [editing, setEditing] = useState<string>();
 
   return (
-    <div className={`queue-list${drag ? ' dragging' : ''}`} aria-label={tr('Queued messages')} ref={list}>
+    <div className={`queue-list${dragging ? ' dragging' : ''}`} aria-label={tr('Queued messages')} ref={listRef}>
       {queue.map((q, i) => (
-        <div
-          key={q.id}
-          className={`queue-item${drag?.id === q.id ? ' lifted' : ''}`}
-          style={drag ? { transform: `translateY(${drag.id === q.id ? drag.dy : shift(i) * rowHeight}px)` } : undefined}
-        >
-          {queue.length > 1 ? (
+        <div key={q.id} className={`queue-item${dragging === q.id ? ' lifted' : ''}${editing === q.id ? ' editing' : ''}`} style={rowStyle(q.id, i)}>
+          {queue.length > 1 && editing !== q.id ? (
             <button
               className="queue-grip"
-              data-qid={q.id}
               aria-label={tr('Move “{0}” (position {1} of {2}); drag, or use the arrow keys', q.content.slice(0, 40), i + 1, queue.length)}
               title={tr('Drag to reorder')}
-              onPointerDown={(e) => start(e, q.id)}
-              onPointerMove={moveTo}
-              onPointerUp={end}
-              onPointerCancel={() => setDrag(undefined)}
-              onKeyDown={(e) => {
-                if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                  e.preventDefault();
-                  refocus.current = q.id;
-                  move(i, e.key === 'ArrowUp' ? i - 1 : i + 1);
-                }
-              }}
+              {...gripProps(q.id, i)}
             >
               <GripVertical size={14} />
             </button>
@@ -107,17 +41,79 @@ export function QueueList({ queue, onReorder, onSendNow, onRemove }: { queue: Qu
               <GripVertical size={14} />
             </span>
           )}
-          <span className="queue-text" dir="auto" title={q.content}>
-            <span className="muted small">{i === 0 ? tr('Next') : `${i + 1}.`}</span> {q.content || q.attachments?.map((a) => a.name).join(', ')}
-          </span>
-          <button className="link-btn small" onClick={() => onSendNow(q.id)}>
-            <Zap size={12} /> {tr('Send now')}
-          </button>
-          <button className="icon-btn sm" aria-label={tr('Remove from the queue')} title={tr('Remove')} onClick={() => onRemove(q.id)}>
-            <X size={13} />
-          </button>
+          {editing === q.id ? (
+            <QueueEditor
+              initial={q.content}
+              onDone={(text) => {
+                setEditing(undefined);
+                if (text !== undefined && text !== q.content) onEdit(q.id, text);
+              }}
+            />
+          ) : (
+            <button className="queue-text" dir="auto" title={tr('Click to edit')} onClick={() => setEditing(q.id)}>
+              <span className="muted small">{i === 0 ? tr('Next') : `${i + 1}.`}</span> {q.content || q.attachments?.map((a) => a.name).join(', ')}
+            </button>
+          )}
+          {editing !== q.id && (
+            <>
+              <button className="icon-btn sm" aria-label={tr('Edit this message')} title={tr('Edit')} onClick={() => setEditing(q.id)}>
+                <Pencil size={13} />
+              </button>
+              <button className="link-btn small" onClick={() => onSendNow(q.id)}>
+                <Zap size={12} /> {tr('Send now')}
+              </button>
+              <button className="icon-btn sm" aria-label={tr('Remove from the queue')} title={tr('Remove')} onClick={() => onRemove(q.id)}>
+                <X size={13} />
+              </button>
+            </>
+          )}
         </div>
       ))}
     </div>
+  );
+}
+
+/** Edits a queued message in place: Enter saves, Shift+Enter starts a new line, Escape cancels. */
+function QueueEditor({ initial, onDone }: { initial: string; onDone(text?: string): void }) {
+  const [text, setText] = useState(initial);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const done = useRef(false);
+  const finish = (value?: string) => {
+    if (done.current) return;
+    done.current = true;
+    onDone(value);
+  };
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, []);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  }, [text]);
+  return (
+    <textarea
+      ref={ref}
+      className="queue-edit"
+      dir="auto"
+      rows={1}
+      value={text}
+      aria-label={tr('Queued message')}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => finish(text)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+          e.preventDefault();
+          finish(text);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          finish();
+        }
+      }}
+    />
   );
 }

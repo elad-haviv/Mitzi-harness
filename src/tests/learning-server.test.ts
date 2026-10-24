@@ -543,3 +543,26 @@ test('archiving: chats and projects can be put away and restored; writing in an 
   await stream(chat.id, { content: 'Hello again' });
   assert.equal((await call('GET', `/api/chats/${chat.id}`)).data.archivedAt, undefined);
 });
+
+test('task list: the user reorders, rewords, adds and removes tasks, and the bot works from their list', async () => {
+  const chat = (await call('POST', '/api/chats', { mode: 'work' })).data;
+  const todos = [
+    { content: 'Write the tests', status: 'pending' },
+    { content: 'Fix the parser', status: 'in_progress' },
+    { content: '  ', status: 'pending' },
+    { content: 'Ship it', status: 'weird' },
+  ];
+  const saved = (await call('PUT', `/api/chats/${chat.id}/todos`, { todos })).data.todos;
+  assert.deepEqual(saved, [
+    { content: 'Write the tests', status: 'pending' },
+    { content: 'Fix the parser', status: 'in_progress' },
+    { content: 'Ship it', status: 'pending' },
+  ]);
+  assert.equal((await call('PUT', `/api/chats/${chat.id}/todos`, { todos: 'nope' })).status, 400);
+  reply = (body) => {
+    assert.match(JSON.stringify(body.messages[0]), /The user can edit it too[\s\S]*- \[ \] Write the tests\\n- \[~\] Fix the parser\\n- \[ \] Ship it/);
+    return textChunks('On it.');
+  };
+  await stream(chat.id, { content: 'Carry on' });
+  assert.deepEqual((await call('GET', `/api/chats/${chat.id}`)).data.todos.map((t: any) => t.content), ['Write the tests', 'Fix the parser', 'Ship it']);
+});

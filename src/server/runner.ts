@@ -742,6 +742,28 @@ export class ChatRunner {
     return chat.queue;
   }
 
+  /** Replaces the chat's task list with the user's edit; a running turn sees it in its next request. */
+  setTodos(chatId: string, todos: Todo[]): Todo[] {
+    const chat = this.deps.store.chats.get(chatId);
+    if (!chat) throw new Error('Chat not found');
+    chat.todos = todos;
+    this.deps.store.chats.put(chat);
+    this.active.get(chatId)?.emit?.({ type: 'todos', todos });
+    return todos;
+  }
+
+  /** Changes the text of a queued message. Returns undefined when it already went out. */
+  editQueued(chatId: string, id: string, content: string): QueuedMessage[] | undefined {
+    const chat = this.deps.store.chats.get(chatId);
+    if (!chat) throw new Error('Chat not found');
+    const item = chat.queue?.find((q) => q.id === id);
+    if (!item) return undefined;
+    item.content = content;
+    this.deps.store.chats.put(chat);
+    this.active.get(chatId)?.emit?.({ type: 'queue', queue: chat.queue! });
+    return chat.queue;
+  }
+
   /** Puts queued messages in the given order; ids no longer queued (already sent) are skipped, unknown ones keep their place at the end. */
   reorderQueue(chatId: string, order: string[]): QueuedMessage[] {
     const chat = this.deps.store.chats.get(chatId);

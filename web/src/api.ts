@@ -287,6 +287,8 @@ export const api = {
   /** Queues a message while the chat responds; `now` stops the response and sends it right away. */
   queueMessage: (id: string, content: string, attachments: Attachment[], now = false) =>
     request<{ queue: QueuedMessage[] }>('POST', `/api/chats/${id}/queue`, { content, attachments, now }),
+  setTodos: (id: string, todos: Todo[]) => request<{ todos: Todo[] }>('PUT', `/api/chats/${id}/todos`, { todos }),
+  editQueued: (id: string, qid: string, content: string) => request<{ queue: QueuedMessage[] }>('PATCH', `/api/chats/${id}/queue/${qid}`, { content }),
   reorderQueue: (id: string, order: string[]) => request<{ queue: QueuedMessage[] }>('PUT', `/api/chats/${id}/queue`, { order }),
   unqueue: (id: string, qid: string) => request<{ queue: QueuedMessage[] }>('DELETE', `/api/chats/${id}/queue/${qid}`),
   sendQueuedNow: (id: string, qid: string) => request<{ queue: QueuedMessage[] }>('POST', `/api/chats/${id}/queue/${qid}/now`),

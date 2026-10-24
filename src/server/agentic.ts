@@ -63,7 +63,7 @@ export function goalPrompt(goal: Goal): string {
 export function todosPrompt(chat: Chat): string | undefined {
   if (!chat.todos?.length) return undefined;
   const mark = { pending: ' ', in_progress: '~', completed: 'x' } as const;
-  return `# Task list\nYour current task list (update it with TodoWrite):\n${chat.todos.map((t) => `- [${mark[t.status]}] ${t.content}`).join('\n')}`;
+  return `# Task list\nYour current task list (update it with TodoWrite). The user can edit it too (reorder, reword, add or remove tasks); follow the list as it is now:\n${chat.todos.map((t) => `- [${mark[t.status]}] ${t.content}`).join('\n')}`;
 }
 
 /** SubmitPlan: how the bot hands over a plan in plan mode. */

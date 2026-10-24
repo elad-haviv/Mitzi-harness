@@ -493,6 +493,24 @@ export function createApp(opts: AppOptions) {
     if (!Array.isArray(body?.order) || !body.order.every((id: unknown) => typeof id === 'string')) throw new HttpError(400, 'order must be a list of queued message ids');
     return { queue: runner.reorderQueue(params.id, body.order) };
   });
+  /** The user's edit of the task list: reordered, reworded, added to or trimmed. */
+  route('PUT', '/api/chats/:id/todos', ({ params, body }) => {
+    getChat(params.id);
+    if (!Array.isArray(body?.todos) || body.todos.length > 100) throw new HttpError(400, 'todos must be a list of up to 100 tasks');
+    const todos = body.todos
+      .filter((t: any) => typeof t?.content === 'string' && t.content.trim())
+      .map((t: any) => ({ content: t.content.trim().slice(0, 500), status: ['pending', 'in_progress', 'completed'].includes(t.status) ? t.status : 'pending' }));
+    return { todos: runner.setTodos(params.id, todos) };
+  });
+  route('PATCH', '/api/chats/:id/queue/:qid', ({ params, body }) => {
+    getChat(params.id);
+    const content = str(body?.content);
+    const queue = runner.editQueued(params.id, params.qid, content);
+    if (!queue) throw new HttpError(409, 'That message was already sent');
+    // An emptied message (without attachments) leaves the queue.
+    if (!content.trim() && !queue.find((q) => q.id === params.qid)?.attachments?.length) return { queue: runner.dequeue(params.id, params.qid) };
+    return { queue };
+  });
   route('DELETE', '/api/chats/:id/queue/:qid', ({ params }) => ({ queue: runner.dequeue(params.id, params.qid) }));
   route('POST', '/api/chats/:id/queue/:qid/now', ({ params }) => ({ queue: runner.dequeue(params.id, params.qid, true) }));
   /** Follows a running chat: what it streamed so far, then live events until it's done. */

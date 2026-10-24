@@ -12,6 +12,7 @@ import {
   Gauge,
   Globe,
   GraduationCap,
+  GripVertical,
   Layers,
   ListChecks,
   Loader2,
@@ -25,7 +26,8 @@ import {
   Workflow as WorkflowIcon,
   X,
 } from 'lucide-react';
-import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
+import { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
+import { useSortable } from './sortable';
 import type { Chat, ChatMode, FeedbackLoop, Goal, Plan, ResponseStats, Todo, VerifyResult } from '../api';
 import { href, navigate } from '../router';
 import { formatTokens, useApp } from '../state';
@@ -190,7 +192,22 @@ export function SideTabs({ tab, onTab, onClose, counts }: { tab: SideTab; onTab(
 
 const GOAL_STATUS: Record<Goal['status'], string> = { active: tr('Working'), paused: tr('Paused'), complete: tr('Achieved'), budget: tr('Out of turns') };
 
-export function TasksPanel({ chat, running, onCommand, onApprove, onRevise }: { chat?: Chat; running: boolean; onCommand(text: string): void; onApprove(): void; onRevise(): void }) {
+export function TasksPanel({
+  chat,
+  running,
+  onCommand,
+  onApprove,
+  onRevise,
+  onTodos,
+}: {
+  chat?: Chat;
+  running: boolean;
+  onCommand(text: string): void;
+  onApprove(): void;
+  onRevise(): void;
+  /** The user edited the task list. */
+  onTodos?(todos: Todo[]): void;
+}) {
   const goal = chat?.goal;
   const plan = chat?.plan;
   const todos = chat?.todos ?? [];
@@ -198,6 +215,7 @@ export function TasksPanel({ chat, running, onCommand, onApprove, onRevise }: { 
   if (!goal && !plan && !todos.length) {
     return (
       <div className="panel-body tasks-empty">
+        {chat && onTodos && <TodoEditor todos={[]} running={running} onChange={onTodos} />}
         <ClipboardList size={28} className="muted" />
         <p>
           <strong>{tr('No tasks yet.')}</strong> {tr('In Work mode, Mitzi keeps its task list here while it works.')}
@@ -313,10 +331,140 @@ export function TasksPanel({ chat, running, onCommand, onApprove, onRevise }: { 
           <div className="progress">
             <div style={{ width: `${(done / todos.length) * 100}%` }} />
           </div>
-          <TodoItems todos={todos} running={running} />
+          {onTodos ? <TodoEditor todos={todos} running={running} onChange={onTodos} /> : <TodoItems todos={todos} running={running} />}
         </section>
       )}
     </div>
+  );
+}
+
+/**
+ * The task list, editable: drag a task by its grip (or arrow keys on the grip) to reorder, click its text to reword it,
+ * its circle to tick it off, + to add one below it, × to remove it; a box at the end adds one there.
+ */
+export function TodoEditor({ todos, running, onChange }: { todos: Todo[]; running?: boolean; onChange(todos: Todo[]): void }) {
+  // Rows need stable ids for dragging; tasks are plain text, so ids follow their positions.
+  const ids = todos.map((_, i) => String(i));
+  const { listRef, dragging, gripProps, rowStyle } = useSortable(
+    ids,
+    (from, to) => {
+      const next = [...todos];
+      const [t] = next.splice(from, 1);
+      next.splice(to, 0, t);
+      onChange(next);
+    },
+    '.todo-row',
+  );
+  const [editing, setEditing] = useState<number>();
+  /** Where a new task is being typed: after this index (-1: at the top), or undefined for the box at the end. */
+  const [inserting, setInserting] = useState<number>();
+  const [draft, setDraft] = useState('');
+  const set = (i: number, patch: Partial<Todo>) => onChange(todos.map((t, j) => (j === i ? { ...t, ...patch } : t)));
+  const insert = (at: number, content: string) => {
+    if (!content.trim()) return;
+    const next = [...todos];
+    next.splice(at, 0, { content: content.trim(), status: 'pending' });
+    onChange(next);
+  };
+  const cycle = (s: Todo['status']): Todo['status'] => (s === 'completed' ? 'pending' : 'completed');
+  return (
+    <div className="todo-editor">
+      <div className={`todo-list editable${dragging ? ' dragging' : ''}`} ref={listRef}>
+        {todos.map((t, i) => (
+          <div key={i}>
+            <div className={`todo-row ${t.status}${dragging === String(i) ? ' lifted' : ''}`} style={rowStyle(String(i), i)}>
+              <button className="todo-grip" aria-label={tr('Move “{0}” (task {1} of {2}); drag, or use the arrow keys', t.content.slice(0, 40), i + 1, todos.length)} title={tr('Drag to reorder')} {...gripProps(String(i), i)}>
+                <GripVertical size={13} />
+              </button>
+              <button
+                className="todo-check"
+                title={t.status === 'completed' ? tr('Mark as not done') : tr('Mark as done')}
+                aria-label={t.status === 'completed' ? tr('Mark “{0}” as not done', t.content) : tr('Mark “{0}” as done', t.content)}
+                onClick={() => set(i, { status: cycle(t.status) })}
+              >
+                {t.status === 'completed' ? <CheckCircle2 size={16} /> : t.status === 'in_progress' ? running ? <Loader2 size={16} className="spin" /> : <CircleDot size={16} /> : <Circle size={16} />}
+              </button>
+              {editing === i ? (
+                <TaskInput
+                  initial={t.content}
+                  onDone={(text) => {
+                    setEditing(undefined);
+                    if (text === undefined || text === t.content) return;
+                    if (text.trim()) set(i, { content: text.trim() });
+                    else onChange(todos.filter((_, j) => j !== i));
+                  }}
+                />
+              ) : (
+                <button className="todo-text" title={tr('Click to edit')} onClick={() => setEditing(i)}>
+                  {t.content}
+                </button>
+              )}
+              <button className="icon-btn sm todo-act" title={tr('Add a task below')} aria-label={tr('Add a task below “{0}”', t.content)} onClick={() => setInserting(i)}>
+                <Plus size={13} />
+              </button>
+              <button className="icon-btn sm todo-act" title={tr('Remove')} aria-label={tr('Remove “{0}”', t.content)} onClick={() => onChange(todos.filter((_, j) => j !== i))}>
+                <X size={13} />
+              </button>
+            </div>
+            {inserting === i && (
+              <div className="todo-row new">
+                <Circle size={16} className="muted" />
+                <TaskInput
+                  initial=""
+                  placeholder={tr('New task')}
+                  onDone={(text) => {
+                    setInserting(undefined);
+                    if (text) insert(i + 1, text);
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      <form
+        className="todo-add"
+        onSubmit={(e) => {
+          e.preventDefault();
+          insert(todos.length, draft);
+          setDraft('');
+        }}
+      >
+        <Plus size={14} className="muted" />
+        <input className="input input-sm grow" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={tr('Add a task')} aria-label={tr('Add a task')} />
+      </form>
+    </div>
+  );
+}
+
+/** Types or edits one task: Enter saves, Escape cancels; leaving the box saves. */
+function TaskInput({ initial, placeholder, onDone }: { initial: string; placeholder?: string; onDone(text?: string): void }) {
+  const [text, setText] = useState(initial);
+  const finished = useRef(false);
+  const finish = (v?: string) => {
+    if (finished.current) return;
+    finished.current = true;
+    onDone(v);
+  };
+  return (
+    <input
+      className="input input-sm grow"
+      autoFocus
+      value={text}
+      placeholder={placeholder}
+      aria-label={placeholder ?? tr('Task')}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => finish(text)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+          e.preventDefault();
+          finish(text);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          finish();
+        }
+      }}
+    />
   );
 }
 

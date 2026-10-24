@@ -907,10 +907,14 @@ test('messages sent while the bot works are queued and sent in order; "now" inte
     const ids = (await call('GET', `/api/chats/${chat.id}`)).data.queue.map((q: any) => q.id);
     const reordered = (await call('PUT', `/api/chats/${chat.id}/queue`, { order: [ids[2], ids[0], ids[1], 'gone'] })).data.queue;
     assert.deepEqual(reordered.map((q: any) => q.content), ['C', 'A', 'B']);
+    // And edited before they go; emptied ones leave the queue.
+    assert.deepEqual((await call('PATCH', `/api/chats/${chat.id}/queue/${ids[0]}`, { content: 'A, but shorter' })).data.queue.map((q: any) => q.content), ['C', 'A, but shorter', 'B']);
+    assert.deepEqual((await call('PATCH', `/api/chats/${chat.id}/queue/${ids[1]}`, { content: '  ' })).data.queue.map((q: any) => q.content), ['C', 'A, but shorter']);
+    assert.equal((await call('PATCH', `/api/chats/${chat.id}/queue/gone`, { content: 'x' })).status, 409);
     assert.equal((await call('PUT', `/api/chats/${chat.id}/queue`, { order: 'C' })).status, 400);
     await fourth;
     const sent = (await idle(chat.id)).messages.filter((m: any) => m.role === 'user').map((m: any) => m.content).slice(-3);
-    assert.deepEqual(sent, ['C', 'A', 'B']);
+    assert.deepEqual(sent, ['First', 'C', 'A, but shorter']);
   } finally {
     chunkDelay = 0;
   }
