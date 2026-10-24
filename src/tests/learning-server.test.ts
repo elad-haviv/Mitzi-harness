@@ -10,6 +10,7 @@ import { tempDir, textChunks, toolCallChunks } from './helpers.js';
 process.env.MITZI_HOME = tempDir();
 process.env.OPENROUTER_API_KEY = 'test-key';
 process.env.CLAUDE_CONFIG_DIR = tempDir();
+process.env.MITZI_EDIT_LEARN_DELAY_MS = '20';
 
 const TOKEN = 'b'.repeat(48);
 let base = '';
@@ -180,4 +181,52 @@ test('outcomes are recorded for tasks, amended by reviews, and distilled into le
   await stream(chat.id, { content: 'What does it say?' });
   const latest = (await call('GET', `/api/outcomes?chatId=${chat.id}`)).data[0];
   assert.ok(latest.lessonIds.includes(lessons.at(-1).id));
+});
+
+/** Polls until `check` returns something truthy. */
+async function eventually<T>(check: () => Promise<T | undefined | false>, what: string): Promise<T> {
+  for (let i = 0; i < 100; i++) {
+    const v = await check();
+    if (v) return v;
+    await new Promise((r) => setTimeout(r, 30));
+  }
+  throw new Error(`Timed out waiting for ${what}`);
+}
+
+test('the user silently rewriting the bot\'s work becomes a style lesson', async () => {
+  const bot = (await call('POST', '/api/bots', { name: 'Editor', emoji: '✏️', systemPrompt: 'Write.' })).data;
+  const chat = (await call('POST', '/api/chats', { botId: bot.id })).data;
+  let turn = 0;
+  reply = () => (turn++ === 0 ? toolCallChunks('a1', 'Artifact', { command: 'create', type: 'markdown', title: 'Memo', content: 'The report was written by the team.\nIt was reviewed by me.' }) : textChunks('Here it is.'));
+  const events = await stream(chat.id, { content: 'Write a memo' });
+  const artifact = events.find((e) => e.type === 'artifact').artifact;
+  jobReply = (body) => {
+    const prompt = JSON.stringify(body.messages);
+    if (!/edited it themselves/.test(prompt)) return undefined;
+    assert.match(prompt, /- The report was written by the team\.[\s\S]*\+ The team wrote the report\./);
+    return textChunks('Write in the active voice.');
+  };
+  // Whitespace alone teaches nothing; a real rewrite does.
+  await call('PATCH', `/api/artifacts/${artifact.id}`, { content: 'The team wrote the report.\nI reviewed it.' });
+  const lessons = await eventually(async () => {
+    const list = (await call('GET', `/api/bots/${bot.id}/lessons`)).data;
+    return list.length ? list : undefined;
+  }, 'an edit lesson');
+  assert.deepEqual(lessons.map((l: any) => [l.text, l.source]), [['Write in the active voice.', 'edit']]);
+
+  // Files the bot wrote in a project folder count too: the change is noticed on the next turn.
+  const { folder, project } = await codingProject('Edits');
+  await call('PATCH', `/api/projects/${project.id}`, { verify: { enabled: false } });
+  const code = (await call('POST', '/api/chats', { projectId: project.id, botId: bot.id })).data;
+  turn = 0;
+  reply = () => (turn++ === 0 ? toolCallChunks('w1', 'Write', { file_path: 'util.js', content: 'function f(x) {\n  if (x) {\n    return 1;\n  } else {\n    return 2;\n  }\n}\n' }) : textChunks('Wrote it.'));
+  await stream(code.id, { content: 'Write f' });
+  writeFileSync(join(folder, 'util.js'), 'function f(x) {\n  if (x) return 1;\n  return 2;\n}\n');
+  jobReply = (body) => (/edited it themselves/.test(JSON.stringify(body.messages)) ? textChunks('Use early returns instead of else branches.') : undefined);
+  reply = () => textChunks('Okay.');
+  await stream(code.id, { content: 'Thanks' });
+  await eventually(async () => (await call('GET', `/api/bots/${bot.id}/lessons`)).data.find((l: any) => /early returns/.test(l.text)), 'a code edit lesson');
+  const [o] = (await call('GET', `/api/outcomes?chatId=${code.id}`)).data;
+  assert.equal(o.editsAfter, 1);
+  jobReply = () => undefined;
 });

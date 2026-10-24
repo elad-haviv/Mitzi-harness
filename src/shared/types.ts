@@ -757,6 +757,8 @@ export interface ArtifactVersion {
   note?: string;
   /** Tool call that produced this version, so chat messages can link to it. */
   callId?: string;
+  /** A user version the bot already took a style lesson from. */
+  learned?: boolean;
 }
 
 export interface Artifact {

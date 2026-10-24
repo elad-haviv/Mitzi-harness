@@ -8,6 +8,7 @@ import { detectVerifyCommand, touchedFiles, verifyCommandFor, verifyOutcome } fr
 import { backfillOutcomes, classifyError, describeOutcomes, hasSignal, OutcomeLog, parseLessons, summarizeRun } from '../server/outcomes.js';
 import { Store } from '../server/store.js';
 import type { TaskOutcome } from '../shared/types.js';
+import { lineDiff, meaningfulEdit } from '../server/edits.js';
 import { tempDir } from './helpers.js';
 
 const call = (id: string, name: string, args: object) => ({ id, type: 'function' as const, function: { name, arguments: JSON.stringify(args) } });
@@ -126,4 +127,11 @@ test('outcomes: the distillation prompt keeps environment problems apart; lesson
   assert.match(text.environment, /No working bash found/);
   assert.deepEqual(parseLessons('Sure: {"lessons": ["Read files before editing them.", ""]}'), ['Read files before editing them.']);
   assert.deepEqual(parseLessons('nothing'), []);
+});
+
+test('edits: a readable line diff, and whitespace-only edits are ignored', () => {
+  assert.equal(lineDiff('a\nb\nc\nd', 'a\nB\nc\nd'), '  a\n- b\n+ B\n  c');
+  assert.equal(lineDiff('x\ny', 'x\ny\nz'), '  y\n+ z');
+  assert.equal(meaningfulEdit('a  b\n', 'a b'), false);
+  assert.equal(meaningfulEdit('a b', 'a c'), true);
 });

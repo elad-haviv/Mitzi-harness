@@ -5,6 +5,7 @@ import { Artifact, ArtifactType, Chat, ChatMessage, DEFAULT_BOT_ID, TEXT_ARTIFAC
 import { newComment, userEdit } from './workspace.js';
 import { addLessons } from './lessons.js';
 import { outcomeIdFor } from './outcomes.js';
+import type { EditMiner } from './edits.js';
 import { MediaService } from './media.js';
 import type { MemoryService } from './memory/index.js';
 import { ChatRunner, summarizeChat } from './runner.js';
@@ -23,6 +24,8 @@ export interface FeatureDeps {
   /** Creates an empty chat (the same as POST /api/chats). */
   newChat: (fields: Partial<Chat>) => Chat;
   workflows: WorkflowEngine;
+  /** Learns from the user's edits to the bot's artifacts. */
+  edits?: EditMiner;
 }
 
 function messageText(m: ChatMessage | undefined): string {
@@ -205,7 +208,9 @@ export function registerFeatureRoutes(route: Route, deps: FeatureDeps): { schedu
     const title = typeof body?.title === 'string' && body.title.trim() ? body.title.trim().slice(0, 200) : undefined;
     const content = typeof body?.content === 'string' ? body.content : (a.versions.at(-1)?.content ?? '');
     userEdit(a, content, title);
-    return artifactView(store.artifacts.put(a));
+    store.artifacts.put(a);
+    deps.edits?.artifactEdited(a);
+    return artifactView(a);
   });
   route('POST', '/api/artifacts/:id/comments', ({ params, body }) => {
     const a = getArtifact(params.id);

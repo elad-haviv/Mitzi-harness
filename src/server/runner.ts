@@ -34,6 +34,7 @@ import { ComputerService, computerTool } from './computer.js';
 import { askTool, AskAnswers, Asker } from './ask.js';
 import { bashTool } from '../tools/bash.js';
 import { OutcomeLog, summarizeRun } from './outcomes.js';
+import type { EditMiner } from './edits.js';
 import { lessonsInPrompt } from './lessons.js';
 import { git } from './git.js';
 import { MAX_VERIFY_ROUNDS, touchedFiles, verifyCommandFor, verifyMessage, verifyOutcome } from './verify.js';
@@ -212,6 +213,8 @@ export class ChatRunner {
   private readonly active = new Map<string, ActiveRun>();
   /** Tools added from outside (the Workflow tool, set once workflows exist). */
   extraTools: () => Tool[] = () => [];
+  /** Learns from the user's edits to files the bot wrote (set once it exists). */
+  edits?: EditMiner;
 
   constructor(private readonly deps: RunnerDeps) {}
 
@@ -731,6 +734,8 @@ export class ChatRunner {
       chat.contextStart = chat.messages.length;
       if (!chat.contextStart) chat.summary = undefined;
     }
+    // Did the user change what the bot wrote last turn? That's a silent correction to learn from.
+    if (project?.folder) this.edits?.checkWrites(chat);
     const isFirstTurn = chat.messages.length === 0;
     const working = chat.mode === 'work' || chat.goal?.status === 'active';
 
@@ -964,6 +969,7 @@ export class ChatRunner {
         if (!signal.aborted && !planRequest) {
           const outcome = this.recordOutcome({ chat, bot, model, input, task: firstText, working, added, verifications, lessonIds, gitHead, durationMs: stats.durationMs, cost: stats.cost });
           if (outcome) last.outcomeId = outcome.id;
+          if (project?.folder && outcome?.filesTouched.length) this.edits?.rememberWrites(chat.id, project.folder, outcome.filesTouched);
         }
       }
       emit({ type: 'stats', stats });

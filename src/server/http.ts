@@ -40,6 +40,7 @@ import { registerWorkRoutes } from './routes-work.js';
 import { detectVerifyCommand } from './verify.js';
 import { backfillOutcomes, OutcomeLearner, OutcomeLog } from './outcomes.js';
 import { registerLearningRoutes } from './routes-learning.js';
+import { EditMiner } from './edits.js';
 import { registerWorkflowRoutes } from './routes-workflows.js';
 import { WorkflowEngine, workflowTool } from './workflows.js';
 import { clamp, fail, Handler, HttpError, Req, STREAMED, str } from './util.js';
@@ -146,6 +147,8 @@ export function createApp(opts: AppOptions) {
   const outcomes = new OutcomeLog(join(opts.dataDir, 'outcomes'));
   const runner = new ChatRunner({ store, config, client, catalog, memory, mcp, skills, commands, media, usage, browser, compareInsights, knowledge, python, computer, outcomes });
   const learner = new OutcomeLearner({ store, log: outcomes, client, config });
+  const edits = new EditMiner({ store, client, config, botFor: (chat) => runner.botFor(chat), outcomes, delayMs: Number(process.env.MITZI_EDIT_LEARN_DELAY_MS) || undefined });
+  runner.edits = edits;
   const starters = new StarterService({ store, memory, client, config, memoryOn: (bot) => runner.memoryOn(bot) });
   seedBots(store, opts.dataDir);
   ensureDefaultBot(store);
@@ -742,7 +745,7 @@ export function createApp(opts: AppOptions) {
   const triggers = new WorkflowTriggers(store, workflows);
   triggers.start();
   registerWorkflowRoutes(route, { store, engine: workflows, client, config, triggers, validateFolder });
-  const { scheduler } = registerFeatureRoutes(route, { store, runner, client, config, memory, media, newChat, workflows });
+  const { scheduler } = registerFeatureRoutes(route, { store, runner, client, config, memory, media, newChat, workflows, edits });
 
   // ---- Messaging (Telegram, Discord, Slack, WhatsApp, email) --------------------------------
   const channels = new Channels({ store, runner, media, workflows, newChat }, { apiBase: { telegram: process.env.MITZI_TELEGRAM_API, discord: process.env.MITZI_DISCORD_API, slack: process.env.MITZI_SLACK_API, whatsapp: process.env.MITZI_WHATSAPP_API } });
@@ -853,6 +856,7 @@ export function createApp(opts: AppOptions) {
     dispose: () => {
       scheduler.stop();
       learner.stop();
+      edits.stop();
       triggers.stop();
       channels.stop();
       void browser.close();

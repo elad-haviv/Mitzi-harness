@@ -98,3 +98,7 @@
   distills lessons from outcomes with a signal (`hasSignal`) after `BATCH` new ones per bot and hourly; environment errors
   are shown to the model separately and never become lessons. Lessons go through `addLessons` (`src/server/lessons.ts`)
   and carry a `source`.
+- Edit mining (`src/server/edits.ts`): `EditMiner` learns style lessons (`source: 'edit'`) from silent corrections. An
+  artifact the user edits after the bot is diffed (`lineDiff`) against the bot's last version once the user pauses
+  (`MITZI_EDIT_LEARN_DELAY_MS`, default 90s); files the bot wrote in a project folder are snapshotted after the run and
+  compared at the start of the next turn. Each edit also bumps `editsAfter` on the chat's latest outcome.
