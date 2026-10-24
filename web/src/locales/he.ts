@@ -1671,4 +1671,12 @@ export const he: Record<string, string> = {
   'In Work mode, a quick second look at changed files catches mistakes before the bot says it’s done. Helps most with smaller models; adds a few seconds.': 'במצב עבודה, מבט שני ומהיר על קבצים שהשתנו תופס טעויות לפני שהבוט מודיע שסיים. עוזר בעיקר עם מודלים קטנים; מוסיף כמה שניות.',
   'Self-reviews before finishing': 'בדיקות עצמיות לפני סיום',
   'Replaying your tasks (evals)': 'הרצה חוזרת של המשימות שלך (הערכות)',
+  'Tidied: {0} merged or dropped, {1} retired': 'סודר: {0} אוחדו או הוסרו, {1} הוצאו משימוש',
+  'Merge duplicates and retire lessons that don’t help': 'איחוד כפילויות והוצאת לקחים שלא עוזרים',
+  'Tidy': 'סידור',
+  'Tasks went well {0} of the time with this lesson, {1} without ({2} tasks)': 'משימות הצליחו ב־{0} מהפעמים עם הלקח הזה וב־{1} בלעדיו ({2} משימות)',
+  'helping': 'עוזר',
+  'not helping': 'לא עוזר',
+  'no clear effect': 'אין השפעה ברורה',
+  'Retired lessons ({0})': 'לקחים שהוצאו משימוש ({0})',
 };

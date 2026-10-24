@@ -330,41 +330,67 @@ const SOURCE_INFO: Record<LessonSource, { label: string; icon: React.ReactNode }
 function LessonsField({ botId }: { botId: string }) {
   const { toast } = useApp();
   const [lessons, setLessons] = useState<Lesson[]>();
-  const [learning, setLearning] = useState(false);
+  const [health, setHealth] = useState<Awaited<ReturnType<typeof api.lessonHealth>>>();
+  const [busy, setBusy] = useState<'learn' | 'tidy'>();
+  const reload = async () => {
+    setLessons(await api.lessons(botId).catch(() => []));
+    setHealth(await api.lessonHealth(botId).catch(() => undefined));
+  };
   useEffect(() => {
-    api.lessons(botId).then(setLessons, () => setLessons([]));
-  }, [botId]);
-  const learn = async () => {
-    setLearning(true);
+    void reload();
+  }, [botId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const act = async (kind: 'learn' | 'tidy') => {
+    setBusy(kind);
     try {
-      const res = await api.learnNow(botId);
-      toast(res.lessons.length ? tr('Learned {0} new lesson(s)', res.lessons.length) : tr('Nothing new to learn yet'), 'info');
-      setLessons(await api.lessons(botId));
+      if (kind === 'learn') {
+        const res = await api.learnNow(botId);
+        toast(res.lessons.length ? tr('Learned {0} new lesson(s)', res.lessons.length) : tr('Nothing new to learn yet'), 'info');
+      } else {
+        const res = await api.tidyLessons(botId);
+        toast(tr('Tidied: {0} merged or dropped, {1} retired', res.merged, res.retired), 'info');
+      }
+      await reload();
     } catch (e) {
       toast((e as Error).message);
     } finally {
-      setLearning(false);
+      setBusy(undefined);
     }
   };
   if (!lessons) return null;
+  const score = (id: string) => health?.scores.find((s) => s.lessonId === id);
+  const pct = (n?: number) => (n === undefined ? '–' : `${Math.round(n * 100)}%`);
   return (
     <div className="field">
       <span className="field-label row" style={{ gap: 8 }}>
         <span className="grow">{tr('Lessons')}</span>
-        <button className="btn btn-ghost btn-sm" type="button" onClick={() => void learn()} disabled={learning} title={tr('Distill lessons from recent task outcomes now')}>
-          {learning ? <Loader2 size={13} className="spin" /> : <GraduationCap size={13} />} {tr('Learn now')}
+        {lessons.length > 1 && (
+          <button className="btn btn-ghost btn-sm" type="button" onClick={() => void act('tidy')} disabled={!!busy} title={tr('Merge duplicates and retire lessons that don’t help')}>
+            {busy === 'tidy' ? <Loader2 size={13} className="spin" /> : <WandSparkles size={13} />} {tr('Tidy')}
+          </button>
+        )}
+        <button className="btn btn-ghost btn-sm" type="button" onClick={() => void act('learn')} disabled={!!busy} title={tr('Distill lessons from recent task outcomes now')}>
+          {busy === 'learn' ? <Loader2 size={13} className="spin" /> : <GraduationCap size={13} />} {tr('Learn now')}
         </button>
       </span>
       {lessons.length > 0 && (
         <div className="card" style={{ padding: 8, boxShadow: 'none' }}>
           {[...lessons].reverse().map((l) => {
             const source = l.source && l.source !== 'rating' ? SOURCE_INFO[l.source] : undefined;
+            const s = score(l.id);
             return (
               <div key={l.id} className="row small" style={{ gap: 8, padding: '4px 6px' }}>
                 <span title={source?.label ?? SOURCE_INFO.rating.label} className="row muted">
                   {source ? source.icon : l.value > 0 ? <ThumbsUp size={13} color="var(--ok)" /> : <ThumbsDown size={13} color="var(--danger)" />}
                 </span>
                 <span className="grow">{l.text}</span>
+                {s && s.verdict !== 'unproven' && (
+                  <span
+                    className={`lesson-health ${s.verdict}`}
+                    title={tr('Tasks went well {0} of the time with this lesson, {1} without ({2} tasks)', pct(s.successRate), pct(s.baseline), s.uses)}
+                  >
+                    {s.verdict === 'helping' ? tr('helping') : s.verdict === 'hurting' ? tr('not helping') : tr('no clear effect')}
+                  </span>
+                )}
                 <button className="icon-btn sm" aria-label={tr('Forget this lesson')} title={tr('Forget')} onClick={() => void api.deleteLesson(botId, l.id).then(setLessons, (e) => toast(e.message))}>
                   <X size={13} />
                 </button>
@@ -374,6 +400,21 @@ function LessonsField({ botId }: { botId: string }) {
         </div>
       )}
       <span className="field-hint">{tr('Lessons come from your ratings and redos, and from how the bot’s tasks went: errors it made, checks that failed, and your edits to its work.')}</span>
+      {!!health?.retired.length && (
+        <details className="small" style={{ marginTop: 6 }}>
+          <summary className="muted">{tr('Retired lessons ({0})', health.retired.length)}</summary>
+          {health.retired.map((l) => (
+            <div key={`${l.id}-${l.retiredAt}`} className="row" style={{ gap: 8, padding: '4px 6px' }}>
+              <span className="grow">
+                <s>{l.text}</s> <span className="muted">— {l.reason}</span>
+              </span>
+              <button className="btn btn-ghost btn-sm" type="button" onClick={() => void api.restoreLesson(botId, l.id).then(() => reload(), (e) => toast(e.message))}>
+                {tr('Restore')}
+              </button>
+            </div>
+          ))}
+        </details>
+      )}
     </div>
   );
 }

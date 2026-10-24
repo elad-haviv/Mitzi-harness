@@ -41,6 +41,7 @@ import { detectVerifyCommand } from './verify.js';
 import { backfillOutcomes, OutcomeLearner, OutcomeLog } from './outcomes.js';
 import { registerLearningRoutes } from './routes-learning.js';
 import { EditMiner } from './edits.js';
+import { LessonHygiene } from './lesson-hygiene.js';
 import { ProjectKnowledge } from './project-knowledge.js';
 import { registerWorkflowRoutes } from './routes-workflows.js';
 import { WorkflowEngine, workflowTool } from './workflows.js';
@@ -147,7 +148,8 @@ export function createApp(opts: AppOptions) {
   const computer = new ComputerService(systemBackend(), (bytes, mime) => media.save(bytes, mime));
   const outcomes = new OutcomeLog(join(opts.dataDir, 'outcomes'));
   const runner = new ChatRunner({ store, config, client, catalog, memory, mcp, skills, commands, media, usage, browser, compareInsights, knowledge, python, computer, outcomes });
-  const learner = new OutcomeLearner({ store, log: outcomes, client, config });
+  const hygiene = new LessonHygiene({ store, log: outcomes, client, config });
+  const learner = new OutcomeLearner({ store, log: outcomes, client, config, afterLearn: (botId) => hygiene.tidy(botId) });
   const edits = new EditMiner({ store, client, config, botFor: (chat) => runner.botFor(chat), outcomes, delayMs: Number(process.env.MITZI_EDIT_LEARN_DELAY_MS) || undefined });
   runner.edits = edits;
   const projectKnowledge = new ProjectKnowledge({ store, client, config, outcomes });
@@ -769,7 +771,7 @@ export function createApp(opts: AppOptions) {
     return hub.view();
   });
   registerWorkRoutes(route, { store, runner, client, config, memory, usage });
-  registerLearningRoutes(route, { store, outcomes, learner, projectKnowledge });
+  registerLearningRoutes(route, { store, outcomes, learner, projectKnowledge, hygiene });
 
   // Search across chats, artifacts and memories.
   const search = new SearchIndex(join(opts.dataDir, 'search'), store, memory, () => {

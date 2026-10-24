@@ -11,6 +11,7 @@ import type { TaskOutcome } from '../shared/types.js';
 import { lineDiff, meaningfulEdit } from '../server/edits.js';
 import { factsFromOutcome, looksLikeCorrection, MD_START, proposeInstructions } from '../server/project-knowledge.js';
 import { changesFromMessages, parseCritique } from '../server/critique.js';
+import { LessonHygiene, scoreLessons } from '../server/lesson-hygiene.js';
 import { tempDir } from './helpers.js';
 
 const call = (id: string, name: string, args: object) => ({ id, type: 'function' as const, function: { name, arguments: JSON.stringify(args) } });
@@ -177,4 +178,45 @@ test('self-review: changes are read from the transcript; an unreadable verdict n
   assert.deepEqual(parseCritique('{"ok": false, "issues": ["a.ts: subtracts instead of adding"]}'), { ok: false, issues: ['a.ts: subtracts instead of adding'] });
   assert.equal(parseCritique('{"ok": false, "issues": []}').ok, true);
   assert.equal(parseCritique('looks fine').ok, true);
+});
+
+/** A model that answers every request with `reply`. */
+const fakeClient = (reply: (prompt: string) => string) => ({ chat: async (req: any) => ({ content: reply(JSON.stringify(req.messages)), toolCalls: [] }) }) as any;
+
+test('lesson hygiene: lessons are scored against outcomes; ones that hurt retire, and can be restored', async () => {
+  const lesson = (id: string, text: string) => ({ id, text, value: -1 as const, chatId: '', createdAt: '', source: 'outcome' as const });
+  const good = (ids: string[]) => outcome({ lessonIds: ids });
+  const bad = (ids: string[]) => outcome({ lessonIds: ids, redone: true });
+  // With "bad": 2 of 8 went well; without it: 8 of 10.
+  const outcomes = [...Array.from({ length: 2 }, () => good(['bad', 'ok'])), ...Array.from({ length: 6 }, () => bad(['bad', 'ok'])), ...Array.from({ length: 8 }, () => good(['ok'])), bad([]), bad([])];
+  const scores = scoreLessons([lesson('bad', 'Always rewrite whole files.'), lesson('ok', 'Read before editing.'), lesson('new', 'Fresh.')], outcomes);
+  assert.deepEqual(scores.map((s) => [s.lessonId, s.uses, s.verdict]), [['bad', 8, 'hurting'], ['ok', 16, 'helping'], ['new', 0, 'unproven']]);
+
+  const store = new Store(tempDir());
+  const log = new OutcomeLog(tempDir());
+  for (const o of outcomes) log.record(o);
+  store.bots.put({ id: 'mitzi', name: 'Mitzi', emoji: '🐱', description: '', systemPrompt: '', tools: {} as any, memory: {} as any, starters: [], createdAt: '', updatedAt: '', lessons: [lesson('bad', 'Always rewrite whole files.'), lesson('ok', 'Read before editing.')] });
+  const hygiene = new LessonHygiene({ store, log, client: () => fakeClient(() => '{"lessons": []}'), config: () => ({ model: 'm' }) as any });
+  assert.deepEqual(await hygiene.tidy('mitzi'), { retired: 1, merged: 0 });
+  assert.deepEqual(store.bots.get('mitzi')!.lessons!.map((l) => l.id), ['ok']);
+  assert.match(store.bots.get('mitzi')!.retiredLessons![0].reason, /25% of the time with it, 80% without/);
+  hygiene.restore('mitzi', 'bad');
+  assert.deepEqual(store.bots.get('mitzi')!.lessons!.map((l) => l.id), ['ok', 'bad']);
+});
+
+test('lesson hygiene: tidying merges duplicates and drops what is vague, keeping the rest', async () => {
+  const store = new Store(tempDir());
+  const lesson = (id: string, text: string) => ({ id, text, value: -1 as const, chatId: '', createdAt: '', source: 'outcome' as const });
+  store.bots.put({ id: 'b', name: 'B', emoji: '', description: '', systemPrompt: '', tools: {} as any, memory: {} as any, starters: [], createdAt: '', updatedAt: '', lessons: [lesson('1', 'Read files before editing.'), lesson('2', 'Always read a file before you edit it.'), lesson('3', 'Be good.'), lesson('4', 'Run tests after changes.')] });
+  const hygiene = new LessonHygiene({
+    store,
+    log: new OutcomeLog(tempDir()),
+    client: () => fakeClient(() => '{"lessons": [{"text": "Read a file before editing it.", "from": [1, 2]}, {"text": "Run tests after changes.", "from": [4]}], "dropped": [{"n": 3, "reason": "Too vague"}]}'),
+    config: () => ({ model: 'm' }) as any,
+  });
+  assert.deepEqual(await hygiene.tidy('b', true), { retired: 0, merged: 2 });
+  const bot = store.bots.get('b')!;
+  assert.deepEqual(bot.lessons!.map((l) => l.text), ['Read a file before editing it.', 'Run tests after changes.']);
+  assert.equal(bot.lessons![1].id, '4');
+  assert.deepEqual(bot.retiredLessons!.map((l) => l.reason), ['Merged into: Read a file before editing it.', 'Merged into: Read a file before editing it.', 'Too vague']);
 });

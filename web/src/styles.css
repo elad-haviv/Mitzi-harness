@@ -7390,3 +7390,19 @@ input:not([type='checkbox']):not([type='radio']):not([type='range']) {
 .steps-list li {
   unicode-bidi: plaintext;
 }
+
+/* ---------- Lesson health ---------- */
+.lesson-health {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.lesson-health.helping {
+  color: var(--ok);
+}
+.lesson-health.hurting {
+  color: var(--danger);
+}

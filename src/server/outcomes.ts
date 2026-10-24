@@ -281,6 +281,8 @@ export interface LearnerDeps {
   log: OutcomeLog;
   client: () => LlmClient;
   config: () => Config;
+  /** Runs after a bot learned, and for every bot with lessons on the hourly pass (lesson hygiene). */
+  afterLearn?: (botId: string) => Promise<unknown>;
 }
 
 /** Distills outcomes into lessons with the fast model: after enough new ones for a bot, and hourly in the background. */
@@ -300,6 +302,7 @@ export class OutcomeLearner {
     this.timer = setInterval(() => {
       const bots = new Set(this.deps.log.all((o) => !o.distilled && hasSignal(o)).map((o) => o.botId));
       for (const botId of bots) void this.learn(botId).catch(() => {});
+      for (const bot of this.deps.store.bots.all()) if (bot.lessons?.length && !bots.has(bot.id)) void this.deps.afterLearn?.(bot.id).catch(() => {});
     }, intervalMs);
     this.timer.unref();
   }
@@ -334,7 +337,9 @@ export class OutcomeLearner {
       for (const o of pending) log.amend(o.id, { distilled: true });
       // Lessons from teammates' work serve the whole team.
       const source: LessonSource = pending.every((o) => o.source === 'teammate') ? 'teammate' : 'outcome';
-      return addLessons(store, botId, parseLessons(res.content), { source, chatId: pending.at(-1)?.chatId }).map((l) => l.text);
+      const added = addLessons(store, botId, parseLessons(res.content), { source, chatId: pending.at(-1)?.chatId }).map((l) => l.text);
+      await this.deps.afterLearn?.(botId).catch((err) => console.warn(`Lesson hygiene failed: ${err.message}`));
+      return added;
     } finally {
       this.busy.delete(botId);
     }

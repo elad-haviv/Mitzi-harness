@@ -2,6 +2,7 @@
 import type { ProjectFactKind, TaskOutcome } from '../shared/types.js';
 import type { OutcomeLearner, OutcomeLog } from './outcomes.js';
 import type { ProjectKnowledge } from './project-knowledge.js';
+import type { LessonHygiene } from './lesson-hygiene.js';
 import type { Store } from './store.js';
 import { fail, HttpError, Route, str } from './util.js';
 
@@ -10,10 +11,12 @@ export interface LearningDeps {
   outcomes: OutcomeLog;
   learner: OutcomeLearner;
   projectKnowledge: ProjectKnowledge;
+  hygiene: LessonHygiene;
 }
 
 export function registerLearningRoutes(route: Route, deps: LearningDeps): void {
-  const { store, outcomes, learner, projectKnowledge } = deps;
+  const { store, outcomes, learner, projectKnowledge, hygiene } = deps;
+  const getBot = (id: string) => store.bots.get(id) ?? fail(404, 'Bot not found');
   const getProject = (id: string) => store.projects.get(id) ?? fail(404, 'Project not found');
 
   /** Recorded outcomes, newest first, filtered by bot, project or chat. */
@@ -30,6 +33,20 @@ export function registerLearningRoutes(route: Route, deps: LearningDeps): void {
     const lessons = await learner.learn(bot.id);
     return { lessons, pending: learner.pending(bot.id).length };
   });
+
+  // ---- Lesson hygiene ----------------------------------------------------------------------
+
+  /** How each lesson is doing (tasks with it vs without), and the lessons retired so far. */
+  route('GET', '/api/bots/:id/lessons/health', ({ params }) => {
+    const bot = getBot(params.id);
+    return { scores: hygiene.scores(bot), retired: [...(bot.retiredLessons ?? [])].reverse() };
+  });
+  route('POST', '/api/bots/:id/lessons/tidy', async ({ params }) => {
+    const bot = getBot(params.id);
+    const result = await hygiene.tidy(bot.id, true);
+    return { ...result, lessons: store.bots.get(bot.id)?.lessons ?? [] };
+  });
+  route('POST', '/api/bots/:id/lessons/:lessonId/restore', ({ params }) => hygiene.restore(getBot(params.id).id, params.lessonId)?.lessons ?? []);
 
   // ---- What Mitzi learned about a project's repository ------------------------------------
 

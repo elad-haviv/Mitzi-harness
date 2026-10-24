@@ -115,3 +115,7 @@
 - Self-review (`src/server/critique.ts`): bots with `selfReview` get one fast-model review of their Write/Edit changes
   (against the task, lessons and project facts) before a work-mode turn ends; findings come back as an
   `auto: 'critique'` message and the bot works once more. Runs before the verification habit, tagged usage kind `review`.
+- Lesson hygiene (`src/server/lesson-hygiene.ts`): `scoreLessons` compares how tasks went (`wentWell`) with each lesson in
+  the prompt against the bot's tasks without it. After `MIN_USES`, lessons more than `RETIRE_MARGIN` below the baseline
+  retire to `bot.retiredLessons` (restorable). Past `TIDY_AT` lessons, the fast model merges duplicates and drops vague or
+  contradicted ones. Runs after each outcome distillation and on the learner's hourly pass.

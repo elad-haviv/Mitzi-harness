@@ -26,6 +26,7 @@ import type {
   ArtifactType,
   Lesson,
   TaskOutcome,
+  RetiredLesson,
   ProjectFact,
   MediaKind,
   MediaSettings,
@@ -444,6 +445,10 @@ export const api = {
   instructionsProposal: (id: string) =>
     request<{ path: string; exists: boolean; current: string; content: string; added: ProjectFact[] }>('GET', `/api/projects/${id}/learned/instructions`),
   applyInstructions: (id: string) => request<{ path: string; added: number }>('POST', `/api/projects/${id}/learned/instructions`, {}),
+  lessonHealth: (botId: string) =>
+    request<{ scores: { lessonId: string; uses: number; successRate?: number; baseline?: number; verdict: 'unproven' | 'helping' | 'neutral' | 'hurting' }[]; retired: RetiredLesson[] }>('GET', `/api/bots/${botId}/lessons/health`),
+  tidyLessons: (botId: string) => request<{ retired: number; merged: number; lessons: Lesson[] }>('POST', `/api/bots/${botId}/lessons/tidy`, {}),
+  restoreLesson: (botId: string, id: string) => request<Lesson[]>('POST', `/api/bots/${botId}/lessons/${id}/restore`, {}),
   learnNow: (botId: string) => request<{ lessons: string[]; pending: number }>('POST', `/api/bots/${botId}/learn`, {}),
   outcomes: (q: { botId?: string; projectId?: string; chatId?: string; limit?: number } = {}) =>
     request<TaskOutcome[]>('GET', `/api/outcomes?${new URLSearchParams(Object.entries(q).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))}`),

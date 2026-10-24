@@ -285,6 +285,8 @@ export interface Bot {
   memory: BankProfile;
   /** What the bot learned from the user's ratings, newest last. */
   lessons?: Lesson[];
+  /** Lessons taken out of the prompt, newest last (they can be restored). */
+  retiredLessons?: RetiredLesson[];
   /** In work mode, have the fast model review changed files before finishing (costs a little time). */
   selfReview?: boolean;
   starters: string[];
@@ -682,6 +684,9 @@ export interface Lesson {
   /** Where it came from: a thumbs rating, a feedback loop, task outcomes, the user's edits, or a teammate's work. */
   source?: LessonSource;
 }
+
+/** A lesson taken out of the prompt: it measurably hurt, or was merged into another or dropped while tidying. */
+export type RetiredLesson = Lesson & { retiredAt: string; reason: string };
 
 export type LessonSource = 'rating' | 'feedback' | 'outcome' | 'edit' | 'teammate';
 
