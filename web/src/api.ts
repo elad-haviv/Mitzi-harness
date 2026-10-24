@@ -25,6 +25,7 @@ import type {
   StreamEvent,
   ArtifactType,
   Lesson,
+  TaskOutcome,
   MediaKind,
   MediaSettings,
   ProviderKind,
@@ -435,6 +436,9 @@ export const api = {
     request<{ rating: Rating | null }>('POST', `/api/chats/${chatId}/messages/${index}/rating`, { value, comment }),
   lessons: (botId: string) => request<Lesson[]>('GET', `/api/bots/${botId}/lessons`),
   deleteLesson: (botId: string, id: string) => request<Lesson[]>('DELETE', `/api/bots/${botId}/lessons/${id}`),
+  learnNow: (botId: string) => request<{ lessons: string[]; pending: number }>('POST', `/api/bots/${botId}/learn`, {}),
+  outcomes: (q: { botId?: string; projectId?: string; chatId?: string; limit?: number } = {}) =>
+    request<TaskOutcome[]>('GET', `/api/outcomes?${new URLSearchParams(Object.entries(q).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))}`),
 
   createArtifact: (body: { type: ArtifactType; title: string; content?: string; botId?: string; projectId?: string; language?: string }) =>
     request<ArtifactWork>('POST', '/api/artifacts', body),

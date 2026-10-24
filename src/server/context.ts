@@ -6,6 +6,7 @@ import type { Artifact, Bot, Chat, ContextBreakdown, ContextSection, ModelInfo, 
 import { focusPrompt } from './workspace.js';
 import { skillsPrompt } from './extensions/skills.js';
 import { teamPrompt } from './team.js';
+import { lessonsInPrompt } from './lessons.js';
 import { goalPrompt, PLAN_PROMPT, planPrompt, todosPrompt, WORK_PROMPT } from './agentic.js';
 
 const DEFAULT_CONTEXT_LENGTH = 128_000;
@@ -139,14 +140,15 @@ export function promptSections(setup: ChatSetup): PromptSection[] {
     });
   }
 
-  const lessons = (bot.lessons ?? []).slice(-12);
+  const lessons = lessonsInPrompt(bot);
   if (lessons.length) {
     sections.push({
       label: `Lessons from feedback (${lessons.length})`,
       kind: 'memory',
       text:
-        '# Lessons from feedback\nThe user rated some of your earlier answers. Keep doing what they liked and avoid what they disliked:\n' +
-        lessons.map((l) => `- ${l.value > 0 ? '(liked)' : '(disliked)'} ${l.text}`).join('\n'),
+        "# Lessons from feedback\nWhat you learned from the user's ratings and corrections and from how earlier tasks went. " +
+        'Keep doing what they liked and avoid what they disliked:\n' +
+        lessons.map((l) => `- ${!l.source || l.source === 'rating' ? (l.value > 0 ? '(liked) ' : '(disliked) ') : ''}${l.text}`).join('\n'),
     });
   }
 

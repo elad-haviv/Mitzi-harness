@@ -38,6 +38,8 @@ import { ComputerService, systemBackend } from './computer.js';
 import { BrowserService } from './browser.js';
 import { registerWorkRoutes } from './routes-work.js';
 import { detectVerifyCommand } from './verify.js';
+import { backfillOutcomes, OutcomeLearner, OutcomeLog } from './outcomes.js';
+import { registerLearningRoutes } from './routes-learning.js';
 import { registerWorkflowRoutes } from './routes-workflows.js';
 import { WorkflowEngine, workflowTool } from './workflows.js';
 import { clamp, fail, Handler, HttpError, Req, STREAMED, str } from './util.js';
@@ -141,12 +143,15 @@ export function createApp(opts: AppOptions) {
   const knowledge = new KnowledgeIndex();
   const python = new PythonSandbox(opts.dataDir);
   const computer = new ComputerService(systemBackend(), (bytes, mime) => media.save(bytes, mime));
-  const runner = new ChatRunner({ store, config, client, catalog, memory, mcp, skills, commands, media, usage, browser, compareInsights, knowledge, python, computer });
+  const outcomes = new OutcomeLog(join(opts.dataDir, 'outcomes'));
+  const runner = new ChatRunner({ store, config, client, catalog, memory, mcp, skills, commands, media, usage, browser, compareInsights, knowledge, python, computer, outcomes });
+  const learner = new OutcomeLearner({ store, log: outcomes, client, config });
   const starters = new StarterService({ store, memory, client, config, memoryOn: (bot) => runner.memoryOn(bot) });
   seedBots(store, opts.dataDir);
   ensureDefaultBot(store);
   migrateLegacyMemories(store, memory);
   migrateDocs(store);
+  backfillOutcomes(outcomes, store);
   void extensions.sync().then(() => mcp.warmup());
 
   const routes: { method: string; re: RegExp; keys: string[]; handler: Handler }[] = [];
@@ -757,6 +762,7 @@ export function createApp(opts: AppOptions) {
     return hub.view();
   });
   registerWorkRoutes(route, { store, runner, client, config, memory, usage });
+  registerLearningRoutes(route, { store, outcomes, learner });
 
   // Search across chats, artifacts and memories.
   const search = new SearchIndex(join(opts.dataDir, 'search'), store, memory, () => {
@@ -773,6 +779,7 @@ export function createApp(opts: AppOptions) {
     return search.search(q.slice(0, 500), { kinds, projectId: query.get('projectId') || undefined, botId: query.get('botId') || undefined, limit: 60 });
   });
   scheduler.start();
+  learner.start();
 
   // ---- Helpers ---------------------------------------------------------------
 
@@ -845,6 +852,7 @@ export function createApp(opts: AppOptions) {
   return Object.assign(handle, {
     dispose: () => {
       scheduler.stop();
+      learner.stop();
       triggers.stop();
       channels.stop();
       void browser.close();

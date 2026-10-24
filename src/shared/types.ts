@@ -317,6 +317,8 @@ export type ChatMessage = Message & {
   spoken?: boolean;
   /** The project's checks the harness ran before the response ended (on its last answer). */
   verify?: VerifyResult[];
+  /** The outcome recorded for the response (on its last answer). */
+  outcomeId?: string;
   /**
    * Set on user messages Mitzi sent for the user: redo directions, plan approval, goal follow-ups, screenshots for the
    * model, failed checks and self-review findings.
@@ -675,6 +677,67 @@ export interface Lesson {
   value: 1 | -1;
   chatId: string;
   createdAt: string;
+  /** Where it came from: a thumbs rating, a feedback loop, task outcomes, the user's edits, or a teammate's work. */
+  source?: LessonSource;
+}
+
+export type LessonSource = 'rating' | 'feedback' | 'outcome' | 'edit' | 'teammate';
+
+// ---------- Outcomes ----------
+
+/** How a failed tool call is to be read: the agent's mistake, the machine's, or the user saying no. */
+export type ErrorKind = 'agent' | 'environment' | 'declined' | 'unknown';
+
+export interface OutcomeError {
+  tool: string;
+  kind: ErrorKind;
+  text: string;
+}
+
+/** What happened on one substantive task, derived from the run itself (and amended by later signals). */
+export interface TaskOutcome {
+  id: string;
+  ts: number;
+  chatId: string;
+  botId: string;
+  projectId?: string;
+  model: string;
+  /** The user's ask. */
+  task: string;
+  mode: 'chat' | 'work';
+  /** 'teammate': a Delegate or subagent assignment (`leadBotId` handed it over). */
+  source: 'run' | 'teammate' | 'backfill';
+  leadBotId?: string;
+  /** 1 for a first try; a redo with directions counts up. */
+  attempts: number;
+  /** Goal continuations within the run. */
+  goalTurns?: number;
+  toolCalls: number;
+  /** Failed tool calls, the user declining aside. */
+  toolErrors: number;
+  errors: OutcomeError[];
+  errorKinds: ErrorKind[];
+  filesTouched: string[];
+  /** Shell commands run, and whether they exited cleanly. */
+  commands: { command: string; ok: boolean }[];
+  /** The last check of the work: the harness's verification, else the bot's own last test run. */
+  testsPassed?: boolean;
+  /** Whether the harness's first check passed (the bot finished on green by itself). */
+  firstCheckPassed?: boolean;
+  /** The user asked for a redo. */
+  redone: boolean;
+  /** 1–5: a review, or a thumbs up (5) / down (1). */
+  rating?: number;
+  /** Edits the user made to the bot's output right after. */
+  editsAfter?: number;
+  /** Lessons in the prompt while the task ran. */
+  lessonIds: string[];
+  /** The repository's commit when the task started, for replaying it. */
+  gitHead?: string;
+  durationMs?: number;
+  cost?: number;
+  /** Lessons have been distilled from it. */
+  distilled?: boolean;
 }
 
 export type ChatSummary = Omit<Chat, 'messages' | 'summary'> & { messageCount: number };

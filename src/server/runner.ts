@@ -33,6 +33,9 @@ import { BrowserService, browserTool } from './browser.js';
 import { ComputerService, computerTool } from './computer.js';
 import { askTool, AskAnswers, Asker } from './ask.js';
 import { bashTool } from '../tools/bash.js';
+import { OutcomeLog, summarizeRun } from './outcomes.js';
+import { lessonsInPrompt } from './lessons.js';
+import { git } from './git.js';
 import { MAX_VERIFY_ROUNDS, touchedFiles, verifyCommandFor, verifyMessage, verifyOutcome } from './verify.js';
 
 const MAX_EVENT_OUTPUT = 20_000;
@@ -65,6 +68,8 @@ export interface RunnerDeps {
   knowledge: KnowledgeIndex;
   python?: PythonSandbox;
   computer?: ComputerService;
+  /** Where task outcomes are recorded. */
+  outcomes?: OutcomeLog;
 }
 
 export type RunInput =
@@ -183,6 +188,16 @@ class TeammateUI implements UI {
 }
 
 
+/** The repository's commit when it has no uncommitted changes (so a task can be replayed from it). */
+async function cleanHead(folder: string): Promise<string | undefined> {
+  try {
+    if ((await git(['status', '--porcelain'], folder, { timeoutMs: 5000 })).trim()) return undefined;
+    return (await git(['rev-parse', 'HEAD'], folder, { timeoutMs: 5000 })).trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function buildUserContent(text: string, attachments: Attachment[]): string | ContentPart[] {
   const files = attachments
     .filter((a) => a.kind === 'text')
@@ -199,6 +214,10 @@ export class ChatRunner {
   extraTools: () => Tool[] = () => [];
 
   constructor(private readonly deps: RunnerDeps) {}
+
+  get outcomes(): OutcomeLog | undefined {
+    return this.deps.outcomes;
+  }
 
   isRunning(chatId: string): boolean {
     return this.active.has(chatId);
@@ -848,6 +867,8 @@ export class ChatRunner {
     });
     const firstText = typeof content === 'string' ? content : content.map((p) => (p.type === 'text' ? p.text : '')).join(' ');
     const verifications: VerifyResult[] = [];
+    const lessonIds = lessonsInPrompt(bot).map((l) => l.id);
+    const gitHead = project?.folder && !planRequest ? await cleanHead(project.folder) : undefined;
     // Save the user's message right away so a reload mid-turn still shows it.
     const userMessage: ChatMessage = {
       role: 'user',
@@ -940,6 +961,10 @@ export class ChatRunner {
         if (routed) last.route = routed;
         if (input.kind === 'message' && input.feedbackLoopId) last.feedbackLoopId = input.feedbackLoopId;
         if (verifications.length) last.verify = verifications;
+        if (!signal.aborted && !planRequest) {
+          const outcome = this.recordOutcome({ chat, bot, model, input, task: firstText, working, added, verifications, lessonIds, gitHead, durationMs: stats.durationMs, cost: stats.cost });
+          if (outcome) last.outcomeId = outcome.id;
+        }
       }
       emit({ type: 'stats', stats });
       chat.messages.push(...saved);
@@ -958,6 +983,58 @@ export class ChatRunner {
       await title;
       store.chats.put(chat);
     }
+  }
+
+  /** Records what happened on a task in the outcome ledger, when the run did real work. */
+  private recordOutcome(r: {
+    chat: Chat;
+    bot: Bot;
+    model: string;
+    input: RunInput;
+    task: string;
+    working: boolean;
+    added: Message[];
+    verifications: VerifyResult[];
+    lessonIds: string[];
+    gitHead?: string;
+    durationMs: number;
+    cost: number;
+    source?: 'run' | 'teammate';
+    leadBotId?: string;
+  }) {
+    const log = this.deps.outcomes;
+    if (!log) return undefined;
+    const run = summarizeRun(r.added);
+    if (!run.toolCalls && !r.working) return undefined;
+    const loop = r.input.kind === 'message' && r.input.feedbackLoopId ? this.deps.store.feedback.get(r.input.feedbackLoopId) : undefined;
+    const lastCheck = r.verifications.at(-1);
+    return log.record({
+      id: newId(),
+      ts: Date.now(),
+      chatId: r.chat.id,
+      botId: r.bot.id,
+      projectId: r.chat.projectId,
+      model: r.model,
+      task: (loop?.task ?? r.task).replace(/<attachment[\s\S]*?<\/attachment>/g, ' ').trim().slice(0, 500),
+      mode: r.working ? 'work' : 'chat',
+      source: r.source ?? 'run',
+      ...(r.leadBotId ? { leadBotId: r.leadBotId } : {}),
+      attempts: loop ? loop.iterations.length + 1 : 1,
+      ...(r.chat.goal && r.chat.goal.turns ? { goalTurns: r.chat.goal.turns } : {}),
+      toolCalls: run.toolCalls,
+      toolErrors: run.toolErrors,
+      errors: run.errors,
+      errorKinds: [...new Set(run.errors.map((e) => e.kind))],
+      filesTouched: run.filesTouched,
+      commands: run.commands,
+      testsPassed: lastCheck ? lastCheck.passed : run.testsPassed,
+      ...(r.verifications.length ? { firstCheckPassed: r.verifications[0].passed } : {}),
+      redone: false,
+      lessonIds: r.lessonIds,
+      ...(r.gitHead ? { gitHead: r.gitHead } : {}),
+      durationMs: r.durationMs,
+      cost: r.cost,
+    });
   }
 
   /**

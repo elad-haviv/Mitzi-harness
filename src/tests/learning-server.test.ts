@@ -127,3 +127,57 @@ test('work mode checks the project after changes and keeps working until the che
   reply = () => (turn++ === 0 ? toolCallChunks('w3', 'Write', { file_path: 'ok.txt', content: 'broken again' }) : textChunks('Changed.'));
   assert.ok(!(await stream(chat.id, { content: 'Break it' })).some((e) => e.type === 'verify'));
 });
+
+test('outcomes are recorded for tasks, amended by reviews, and distilled into lessons', async () => {
+  const { project } = await codingProject('Outcomes');
+  await call('PATCH', `/api/projects/${project.id}`, { verify: { enabled: false } });
+  const chat = (await call('POST', '/api/chats', { projectId: project.id })).data;
+  let turn = 0;
+  reply = () => {
+    turn++;
+    if (turn === 1) return toolCallChunks('e1', 'Edit', { file_path: 'missing.ts', old_string: 'a', new_string: 'b' });
+    if (turn === 2) return toolCallChunks('b1', 'Bash', { command: 'nonexistent-tool-xyz --version' });
+    return textChunks('I could not do it.');
+  };
+  await stream(chat.id, { content: 'Rename a to b in missing.ts' });
+  let saved = (await call('GET', `/api/chats/${chat.id}`)).data;
+  const outcomeId = saved.messages.at(-1).outcomeId;
+  assert.ok(outcomeId);
+  let [o] = (await call('GET', `/api/outcomes?chatId=${chat.id}`)).data;
+  assert.equal(o.id, outcomeId);
+  assert.equal(o.task, 'Rename a to b in missing.ts');
+  assert.deepEqual(o.errors.map((e: any) => e.kind), ['agent', 'environment']);
+  assert.equal(o.redone, false);
+
+  // A redo request marks the outcome; the redo is the second attempt.
+  const review = (await call('POST', `/api/chats/${chat.id}/messages/${saved.messages.length - 1}/review`, { rating: 1, directions: 'Create the file first', redo: true })).data;
+  [o] = (await call('GET', `/api/outcomes?chatId=${chat.id}`)).data;
+  assert.deepEqual([o.redone, o.rating], [true, 1]);
+  turn = 10;
+  reply = () => (turn++ === 10 ? toolCallChunks('w1', 'Write', { file_path: 'missing.ts', content: 'b' }) : textChunks('Created it.'));
+  await stream(chat.id, { content: review.redo, auto: 'redo', feedbackLoopId: review.loop.id });
+  const list = (await call('GET', `/api/outcomes?chatId=${chat.id}`)).data;
+  assert.equal(list[0].attempts, 2);
+  assert.equal(list[0].task, 'Rename a to b in missing.ts');
+
+  // Distilling: environment problems are set apart, and lessons join the bot's.
+  jobReply = (body) => {
+    const prompt = JSON.stringify(body.messages);
+    if (!/distill what it should do/.test(prompt)) return undefined;
+    assert.match(prompt, /Edit failed: [^\n]*missing\.ts/);
+    assert.match(prompt, /<environment-problems>[\s\S]*nonexistent-tool-xyz[\s\S]*command not found/);
+    return textChunks('{"lessons": ["Check that a file exists with Glob before editing it."]}');
+  };
+  const learned = (await call('POST', '/api/bots/mitzi/learn')).data;
+  assert.deepEqual(learned.lessons, ['Check that a file exists with Glob before editing it.']);
+  assert.equal(learned.pending, 0);
+  const lessons = (await call('GET', '/api/bots/mitzi/lessons')).data;
+  assert.equal(lessons.at(-1).source, 'outcome');
+  jobReply = () => undefined;
+  saved = (await call('GET', `/api/chats/${chat.id}`)).data;
+  // Lessons reach the prompt, and the next outcome records which ones were there.
+  reply = () => (turn++ === 12 ? toolCallChunks('r1', 'Read', { file_path: 'missing.ts' }) : textChunks('It says b.'));
+  await stream(chat.id, { content: 'What does it say?' });
+  const latest = (await call('GET', `/api/outcomes?chatId=${chat.id}`)).data[0];
+  assert.ok(latest.lessonIds.includes(lessons.at(-1).id));
+});

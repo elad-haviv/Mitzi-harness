@@ -90,3 +90,11 @@
   Makefile, Cargo.toml, go.mod or pytest config) through the permission layer as a Bash call. While they fail it adds
   an `auto: 'verify'` message and the bot keeps working, up to `MAX_VERIFY_ROUNDS` more times. Results are saved on the
   response's last answer as `verify` and streamed as `verify` events.
+- Outcome ledger (`src/server/outcomes.ts`): every run that used tools (or ran in work mode) records a `TaskOutcome` in
+  `<data>/outcomes/*.jsonl`: tool errors classified by `classifyError` (agent / environment / declined / unknown),
+  files written, commands, checks, attempts, and the lesson ids in the prompt. Later signals (reviews, redos, thumbs,
+  edits) are appended as amendments via `OutcomeLog.amend`; the outcome id is saved on the response's last answer
+  (`outcomeId`, found with `outcomeIdFor`). Feedback loops from before the ledger are backfilled once. `OutcomeLearner`
+  distills lessons from outcomes with a signal (`hasSignal`) after `BATCH` new ones per bot and hourly; environment errors
+  are shown to the model separately and never become lessons. Lessons go through `addLessons` (`src/server/lessons.ts`)
+  and carry a `source`.

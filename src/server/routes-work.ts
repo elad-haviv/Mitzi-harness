@@ -3,9 +3,11 @@
 import type { ServerResponse } from 'node:http';
 import type { Config } from '../config.js';
 import type { RoutingClient } from '../providers.js';
-import { AUTO_MODEL, Chat, ChatMessage, DEFAULT_BOT_ID, FeedbackIteration, FeedbackLoop, Lesson, UsageEvent } from '../shared/types.js';
+import { AUTO_MODEL, Chat, ChatMessage, DEFAULT_BOT_ID, FeedbackIteration, FeedbackLoop, UsageEvent } from '../shared/types.js';
 import { addSubgoal, BUILTIN_COMMANDS, DEFAULT_GOAL_TURNS, newGoal, parseBuiltin } from './agentic.js';
 import { contextMessages } from './context.js';
+import { addLessons } from './lessons.js';
+import { outcomeIdFor } from './outcomes.js';
 import type { MemoryService } from './memory/index.js';
 import { ChatRunner, GOAL_CONTROLS, summarizeChat } from './runner.js';
 import { newId, now, Store } from './store.js';
@@ -20,8 +22,6 @@ export interface WorkDeps {
   memory: MemoryService;
   usage: UsageLog;
 }
-
-const MAX_LESSONS = 30;
 
 function text(m: ChatMessage | undefined): string {
   if (!m) return '';
@@ -225,13 +225,11 @@ export function registerWorkRoutes(route: Route, deps: WorkDeps): void {
     const res = await withUsage({ kind: 'learning', chatId: chat.id, botId: loop.botId }, () =>
       deps.client().chat({ model: deps.config().smallModel ?? runner.modelOf(chat), messages: [{ role: 'user', content: prompt }], maxTokens: 250 }),
     );
-    const lessonText = res.content.trim().replace(/^["'\s]+|["'\s]+$/g, '').slice(0, 500);
-    if (!lessonText) return;
     const bot = store.bots.get(loop.botId);
     if (!bot) return;
-    const lesson: Lesson = { id: newId(), text: lessonText, value: 1, chatId: chat.id, createdAt: now() };
-    bot.lessons = [...(bot.lessons ?? []), lesson].slice(-MAX_LESSONS);
-    store.bots.put(bot);
+    const [lesson] = addLessons(store, bot.id, [res.content], { value: 1, chatId: chat.id, source: 'feedback' });
+    if (!lesson) return;
+    const lessonText = lesson.text;
     loop.lesson = lessonText;
     loop.lessonId = lesson.id;
     store.feedback.put(loop);
@@ -296,6 +294,8 @@ export function registerWorkRoutes(route: Route, deps: WorkDeps): void {
     }
     store.feedback.put(loop);
     store.chats.put(chat);
+    const outcomeId = outcomeIdFor(chat.messages, index);
+    if (outcomeId) runner.outcomes?.amend(outcomeId, { rating, ...(redo ? { redone: true } : {}) });
     if (accept && loop.iterations.length > 1) {
       const job = learnFromLoop(loop, chat).catch((err) => console.warn(`Couldn't learn from feedback: ${err.message}`));
       if (body?.wait === true) await job;

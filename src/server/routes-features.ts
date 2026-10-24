@@ -1,8 +1,10 @@
 // Routes for branching, ratings, documents, scheduled tasks, and media and voice.
 import type { Config } from '../config.js';
 import type { RoutingClient } from '../providers.js';
-import { Artifact, ArtifactType, Chat, ChatMessage, DEFAULT_BOT_ID, Lesson, TEXT_ARTIFACT_TYPES, MediaSettings, ScheduledTask, StreamEvent, TaskRun, TaskSchedule } from '../shared/types.js';
+import { Artifact, ArtifactType, Chat, ChatMessage, DEFAULT_BOT_ID, TEXT_ARTIFACT_TYPES, MediaSettings, ScheduledTask, StreamEvent, TaskRun, TaskSchedule } from '../shared/types.js';
 import { newComment, userEdit } from './workspace.js';
+import { addLessons } from './lessons.js';
+import { outcomeIdFor } from './outcomes.js';
 import { MediaService } from './media.js';
 import type { MemoryService } from './memory/index.js';
 import { ChatRunner, summarizeChat } from './runner.js';
@@ -22,8 +24,6 @@ export interface FeatureDeps {
   newChat: (fields: Partial<Chat>) => Chat;
   workflows: WorkflowEngine;
 }
-
-const MAX_LESSONS = 30;
 
 function messageText(m: ChatMessage | undefined): string {
   if (!m) return '';
@@ -116,11 +116,8 @@ export function registerFeatureRoutes(route: Route, deps: FeatureDeps): { schedu
     const text = res.content.trim().replace(/^["'\s]+|["'\s]+$/g, '');
     // The rating may have changed while the lesson was being written.
     if (!text || /^NONE\b/i.test(text) || chat.messages[index]?.rating !== rating) return;
-    const lesson: Lesson = { id: newId(), text: text.slice(0, 400), value: rating.value, chatId: chat.id, createdAt: now() };
-    const fresh = store.bots.get(bot.id);
-    if (!fresh) return;
-    fresh.lessons = [...(fresh.lessons ?? []), lesson].slice(-MAX_LESSONS);
-    store.bots.put(fresh);
+    const [lesson] = addLessons(store, bot.id, [text.slice(0, 400)], { value: rating.value, chatId: chat.id, source: 'rating' });
+    if (!lesson) return;
     rating.lesson = lesson.text;
     rating.lessonId = lesson.id;
     store.chats.put(chat);
@@ -155,6 +152,9 @@ export function registerFeatureRoutes(route: Route, deps: FeatureDeps): { schedu
     }
     message.rating = { value, comment: str(body?.comment).trim().slice(0, 2000) || undefined, ratedAt: now() };
     store.chats.put(chat);
+    // A thumbs rating counts as a 5 or a 1 on the outcome of the response it ends.
+    const outcomeId = outcomeIdFor(chat.messages, index);
+    if (outcomeId) runner.outcomes?.amend(outcomeId, { rating: value > 0 ? 5 : 1 });
     const wait = body?.wait === true;
     const job = learn(chat, index).catch((err) => console.warn(`Couldn't learn from a rating: ${err.message}`));
     if (wait) await job;

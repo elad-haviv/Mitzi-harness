@@ -1,6 +1,6 @@
-import { Brain, Globe, ImageIcon, Layers, MessageSquare, Pencil, Plug, Plus, ThumbsDown, ThumbsUp, Trash2, Users, WandSparkles, X, Split, Code2, MousePointerClick } from 'lucide-react';
+import { Brain, Globe, GraduationCap, ImageIcon, Layers, Loader2, MessageSquare, Pencil, PenLine, Plug, Plus, RotateCcw, ThumbsDown, ThumbsUp, Trash2, Users, WandSparkles, X, Split, Code2, MousePointerClick } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { api, BankProfile, Bot, BotTools, Lesson } from '../api';
+import { api, BankProfile, Bot, BotTools, Lesson, LessonSource } from '../api';
 import { ModelPicker } from '../components/ModelPicker';
 import { Empty, Modal, Toggle, useConfirm } from '../components/ui';
 import { href, navigate } from '../router';
@@ -310,29 +310,62 @@ function BotEditor({ bot, onClose, onSaved }: { bot?: Bot; onClose(): void; onSa
   );
 }
 
-/** What the bot learned from thumbs up/down ratings. */
+const SOURCE_INFO: Record<LessonSource, { label: string; icon: React.ReactNode }> = {
+  rating: { label: tr('From a rating'), icon: <ThumbsUp size={13} /> },
+  feedback: { label: tr('From a redo you directed'), icon: <RotateCcw size={13} /> },
+  outcome: { label: tr('From how its tasks went (errors, failing checks, redos)'), icon: <GraduationCap size={13} /> },
+  edit: { label: tr('From your edits to its work'), icon: <PenLine size={13} /> },
+  teammate: { label: tr('From a teammate’s work, shared with the team'), icon: <Users size={13} /> },
+};
+
+/** What the bot learned: from ratings and redos, and on its own from how its tasks went and how you edited its work. */
 function LessonsField({ botId }: { botId: string }) {
   const { toast } = useApp();
   const [lessons, setLessons] = useState<Lesson[]>();
+  const [learning, setLearning] = useState(false);
   useEffect(() => {
     api.lessons(botId).then(setLessons, () => setLessons([]));
   }, [botId]);
-  if (!lessons?.length) return null;
+  const learn = async () => {
+    setLearning(true);
+    try {
+      const res = await api.learnNow(botId);
+      toast(res.lessons.length ? tr('Learned {0} new lesson(s)', res.lessons.length) : tr('Nothing new to learn yet'), 'info');
+      setLessons(await api.lessons(botId));
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setLearning(false);
+    }
+  };
+  if (!lessons) return null;
   return (
     <div className="field">
-      <span className="field-label">{tr('Learned from your ratings')}</span>
-      <div className="card" style={{ padding: 8, boxShadow: 'none' }}>
-        {[...lessons].reverse().map((l) => (
-          <div key={l.id} className="row small" style={{ gap: 8, padding: '4px 6px' }}>
-            {l.value > 0 ? <ThumbsUp size={13} color="var(--ok)" /> : <ThumbsDown size={13} color="var(--danger)" />}
-            <span className="grow">{l.text}</span>
-            <button className="icon-btn sm" aria-label={tr('Forget this lesson')} title={tr('Forget')} onClick={() => void api.deleteLesson(botId, l.id).then(setLessons, (e) => toast(e.message))}>
-              <X size={13} />
-            </button>
-          </div>
-        ))}
-      </div>
-      <span className="field-hint">{tr('Rate answers with 👍 or 👎 in any chat; the bot keeps these lessons in mind.')}</span>
+      <span className="field-label row" style={{ gap: 8 }}>
+        <span className="grow">{tr('Lessons')}</span>
+        <button className="btn btn-ghost btn-sm" type="button" onClick={() => void learn()} disabled={learning} title={tr('Distill lessons from recent task outcomes now')}>
+          {learning ? <Loader2 size={13} className="spin" /> : <GraduationCap size={13} />} {tr('Learn now')}
+        </button>
+      </span>
+      {lessons.length > 0 && (
+        <div className="card" style={{ padding: 8, boxShadow: 'none' }}>
+          {[...lessons].reverse().map((l) => {
+            const source = l.source && l.source !== 'rating' ? SOURCE_INFO[l.source] : undefined;
+            return (
+              <div key={l.id} className="row small" style={{ gap: 8, padding: '4px 6px' }}>
+                <span title={source?.label ?? SOURCE_INFO.rating.label} className="row muted">
+                  {source ? source.icon : l.value > 0 ? <ThumbsUp size={13} color="var(--ok)" /> : <ThumbsDown size={13} color="var(--danger)" />}
+                </span>
+                <span className="grow">{l.text}</span>
+                <button className="icon-btn sm" aria-label={tr('Forget this lesson')} title={tr('Forget')} onClick={() => void api.deleteLesson(botId, l.id).then(setLessons, (e) => toast(e.message))}>
+                  <X size={13} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <span className="field-hint">{tr('Lessons come from your ratings and redos, and from how the bot’s tasks went: errors it made, checks that failed, and your edits to its work.')}</span>
     </div>
   );
 }
