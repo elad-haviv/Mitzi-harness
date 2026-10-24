@@ -2,6 +2,8 @@ import { Check, Copy } from 'lucide-react';
 import { memo, ReactNode, useEffect, useReducer, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
+import rehypeKatex from 'rehype-katex';
+import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 import { tr } from '../i18n';
 import { ZoomableImage } from './ui';
@@ -45,8 +47,8 @@ function CodeBlock({ children, className }: { children?: ReactNode; className?: 
   );
 }
 
-const plugins = [remarkGfm];
-const rehype = [[rehypeHighlight, { detect: true, ignoreMissing: true }]] as any;
+const plugins = [remarkGfm, remarkMath];
+const rehype = [[rehypeHighlight, { detect: true, ignoreMissing: true }], [rehypeKatex, { output: 'htmlAndMathml', throwOnError: false }]] as any;
 
 /**
  * Reveals streamed text at an even pace instead of in the bursts it arrives in. The pace follows the

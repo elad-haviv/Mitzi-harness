@@ -3,20 +3,24 @@
 // diagrams) run in sandboxed frames.
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
+import rehypeKatex from 'rehype-katex';
+import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 import { renderToStaticMarkup } from 'react-dom/server';
 import lightCss from 'highlight.js/styles/github.css?raw';
 import darkCss from 'highlight.js/styles/github-dark.css?raw';
+import katexCss from 'katex/dist/katex.min.css?raw';
 import type { Artifact, Chat, ChatMessage, ContentPart } from './api';
 import { artifactDocument } from './components/Artifacts';
 import { withoutShownMedia } from '../../src/shared/mediaText';
 
-const rehype = [[rehypeHighlight, { detect: true, ignoreMissing: true }]] as any;
+const rehype = [[rehypeHighlight, { detect: true, ignoreMissing: true }], [rehypeKatex, { output: 'htmlAndMathml', throwOnError: false }]] as any;
+const mdPlugins = [remarkGfm, remarkMath];
 const MEDIA = new Set(['image', 'video', 'audio']);
 
 function Md({ text }: { text: string }) {
   return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={rehype}>
+    <ReactMarkdown remarkPlugins={mdPlugins} rehypePlugins={rehype}>
       {text}
     </ReactMarkdown>
   );
@@ -78,7 +82,7 @@ footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);color:v
 function document(title: string, body: string): string {
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>
-<style>${CSS}${lightCss}@media (prefers-color-scheme:dark){${darkCss}}</style></head><body>${body}</body></html>`;
+<style>${CSS}${lightCss}@media (prefers-color-scheme:dark){${darkCss}}${katexCss}</style></head><body>${body}</body></html>`;
 }
 
 /** Generated media (/media/…) become data URLs, so the page works on its own. */

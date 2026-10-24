@@ -5,6 +5,8 @@ import {
   Code,
   Download,
   Eye,
+  FileText,
+  Printer,
   History,
   Layers,
   MessageSquare,
@@ -25,7 +27,10 @@ import { Annotator } from '../components/Annotator';
 import { artifactDocument, ArtifactIcon, ArtifactThumb, download, HighlightedCode, isMedia, MediaView, SlidesView, TYPE_LABEL } from '../components/Artifacts';
 import { Markdown } from '../components/Markdown';
 import { CodeEditor, editorLanguage, FormatCommand, formatMarkdown, FormatToolbar, RichEditor, RichEditorHandle, shortcut } from '../components/Editors';
-import { Empty, Modal, useConfirm } from '../components/ui';
+import { Empty, Menu, Modal, useConfirm } from '../components/ui';
+import { LatexDocument } from '../components/LatexDocument';
+import { Spreadsheet } from '../components/Spreadsheet';
+import { downloadBlob, markdownToDocx, markdownToPptx, parseSheetWorkbook, workbookToXlsx } from '../office';
 import { href, navigate } from '../router';
 import { relativeTime, useApp } from '../state';
 import { ChatView } from './ChatView';
@@ -41,6 +46,8 @@ const NEW_TYPES: { type: ArtifactType; hint: string; placeholder: string }[] = [
   { type: 'react', hint: tr('An interactive app or widget'), placeholder: tr('A habit tracker with a weekly grid, streaks and a dark mode toggle.') },
   { type: 'code', hint: tr('A script or source file'), placeholder: tr('A Python script that renames photos by the date they were taken.') },
   { type: 'mermaid', hint: tr('Flowcharts, sequences, timelines'), placeholder: tr('The sign-up flow: landing page → form → email check → onboarding.') },
+  { type: 'latex', hint: tr('Papers, proofs, technical reports'), placeholder: tr('A formal paper analyzing distributed consensus protocols: abstract, system model, theorem proofs, and complexity table.') },
+  { type: 'sheet', hint: tr('Spreadsheets, tables, financial models'), placeholder: tr('A startup financial model: 12-month projections, revenue, headcount, burn rate and runway.') },
 ];
 
 export function ArtifactsPage() {
@@ -227,6 +234,8 @@ const MODES: Partial<Record<ArtifactType, [string, string]>> = {
   svg: [tr('Preview'), tr('Code')],
   mermaid: [tr('Preview'), tr('Code')],
   image: [tr('View'), tr('Mark up')],
+  latex: [tr('Paper'), tr('LaTeX')],
+  sheet: [tr('View'), tr('Edit')],
 };
 
 const latestOf = (a: Artifact) => a.versions.at(-1)?.content ?? '';
@@ -511,7 +520,14 @@ export function ArtifactPage({ id }: { id: string }) {
         }}
       />
     );
-    body = prose ? (
+    if (artifact.type === 'sheet') {
+      body = (
+        <div className="ws-sheet-wrap">
+          <Spreadsheet value={draft} onChange={edit} title={artifact.title} />
+        </div>
+      );
+    } else {
+      body = prose ? (
       <div className="write-pane">
         <FormatToolbar onCommand={format} source={!rich} onToggleSource={toggleSource} disabled={busy} hideToggle={artifact.type === 'slides'} />
         {rich ? (
@@ -525,12 +541,25 @@ export function ArtifactPage({ id }: { id: string }) {
     ) : (
       sourceEditor
     );
-  } else if (iframeDoc) {
+  }
+} else if (iframeDoc) {
     body = <iframe className="ws-frame" title={artifact.title} sandbox="allow-scripts allow-popups allow-forms allow-modals allow-downloads" srcDoc={iframeDoc} />;
   } else if (!draft.trim()) {
     body = (
       <div className="muted doc-empty">
         {tr('This {0} is empty. Switch to', kind)}{' '}<button className="link-btn" onClick={() => setMode('edit')}>{modes?.[1]}</button>{' '}{tr('or ask {0} for a first version.', botName)}
+      </div>
+    );
+  } else if (artifact.type === 'sheet') {
+    body = (
+      <div className="ws-sheet-wrap">
+        <Spreadsheet value={draft} readOnly title={artifact.title} />
+      </div>
+    );
+  } else if (artifact.type === 'latex') {
+    body = (
+      <div ref={preview} className="ws-latex-wrap">
+        <LatexDocument value={draft} title={artifact.title} />
       </div>
     );
   } else if (artifact.type === 'slides') {
@@ -588,9 +617,83 @@ export function ArtifactPage({ id }: { id: string }) {
               <History size={17} />
             </button>
           )}
-          <button className="icon-btn" title={tr('Download')} aria-label={tr('Download')} onClick={() => download(artifact, draft)}>
-            <Download size={17} />
-          </button>
+          <Menu
+            align="right"
+            trigger={(_open, toggle) => (
+              <button className="icon-btn" title={tr('Download or export')} aria-label={tr('Download')} onClick={toggle}>
+                <Download size={17} />
+              </button>
+            )}
+          >
+            {(close) => (
+              <>
+                <button
+                  onClick={() => {
+                    close();
+                    download(artifact, draft);
+                  }}
+                >
+                  <Download size={14} /> {tr('Download original ({0})', artifact.type === 'code' ? artifact.language || 'code' : artifact.type)}
+                </button>
+                {artifact.type === 'markdown' && (
+                  <button
+                    onClick={async () => {
+                      close();
+                      try {
+                        const blob = await markdownToDocx(draft, artifact.title);
+                        downloadBlob(blob, `${artifact.title.replace(/[^\w.-]+/g, '_') || 'document'}.docx`);
+                      } catch (err) {
+                        toast((err as Error).message);
+                      }
+                    }}
+                  >
+                    <FileText size={14} /> {tr('Export to Word (.docx)')}
+                  </button>
+                )}
+                {artifact.type === 'slides' && (
+                  <button
+                    onClick={async () => {
+                      close();
+                      try {
+                        const blob = await markdownToPptx(draft, artifact.title);
+                        downloadBlob(blob, `${artifact.title.replace(/[^\w.-]+/g, '_') || 'presentation'}.pptx`);
+                      } catch (err) {
+                        toast((err as Error).message);
+                      }
+                    }}
+                  >
+                    <Presentation size={14} /> {tr('Export to PowerPoint (.pptx)')}
+                  </button>
+                )}
+                {artifact.type === 'sheet' && (
+                  <button
+                    onClick={() => {
+                      close();
+                      try {
+                        const wb = parseSheetWorkbook(draft);
+                        const blob = workbookToXlsx(wb);
+                        downloadBlob(blob, `${artifact.title.replace(/[^\w.-]+/g, '_') || 'spreadsheet'}.xlsx`);
+                      } catch (err) {
+                        toast((err as Error).message);
+                      }
+                    }}
+                  >
+                    <FileText size={14} /> {tr('Export to Excel (.xlsx)')}
+                  </button>
+                )}
+                {artifact.type === 'latex' && (
+                  <button
+                    onClick={() => {
+                      close();
+                      window.print();
+                    }}
+                  >
+                    <Printer size={14} /> {tr('Print / PDF')}
+                  </button>
+                )}
+              </>
+            )}
+          </Menu>
           <button
             className="icon-btn"
             title={tr('Delete')}

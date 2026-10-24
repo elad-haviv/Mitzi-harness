@@ -874,10 +874,10 @@ export interface TaskOutcome {
 
 export type ChatSummary = Omit<Chat, 'messages' | 'summary'> & { messageCount: number };
 
-export type ArtifactType = 'markdown' | 'slides' | 'code' | 'html' | 'react' | 'svg' | 'mermaid' | 'image' | 'video' | 'audio';
+export type ArtifactType = 'markdown' | 'slides' | 'code' | 'html' | 'react' | 'svg' | 'mermaid' | 'image' | 'video' | 'audio' | 'latex' | 'sheet';
 
 /** Artifacts whose content is text the user and the bot edit (media artifacts hold a file URL). */
-export const TEXT_ARTIFACT_TYPES: ArtifactType[] = ['markdown', 'slides', 'code', 'html', 'react', 'svg', 'mermaid'];
+export const TEXT_ARTIFACT_TYPES: ArtifactType[] = ['markdown', 'slides', 'code', 'html', 'react', 'svg', 'mermaid', 'latex', 'sheet'];
 
 export interface ArtifactVersion {
   content: string;

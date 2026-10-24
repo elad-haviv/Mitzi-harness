@@ -64,6 +64,8 @@ Prefer "update" for small edits to an existing artifact.
 and Tailwind CSS classes work. No other packages can be imported.
 - svg: one <svg> element with a viewBox. mermaid: diagram source only, without code fences.
 - code: set language. markdown: GitHub-flavored markdown.
+- latex: a complete LaTeX document (starts with \\documentclass{...} and ends with \\end{document}). Use standard LaTeX for sections, equations ($...$, \\[...\\], \\begin{equation}), tables, and lists.
+- sheet: a spreadsheet workbook formatted as CSV (or multi-sheet with "## Sheet: Name" or JSON { "sheets": [...] }). Cells can include values and formulas (e.g. =SUM(A1:A10)).
 - slides: a presentation in Markdown. Separate slides with a line containing only ---. Start with a title slide (# Title, \
 then a subtitle line); give each slide one ## heading and a few short bullets, a table, an image or a short quote. Aim \
 for 6–12 slides unless asked otherwise.`;

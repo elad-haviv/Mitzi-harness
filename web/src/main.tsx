@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { AppProvider } from './state';
 import './styles.css';
+import 'katex/dist/katex.min.css';
 import { manifestHref } from './api';
 
 document.querySelector<HTMLLinkElement>('link[rel="manifest"]')?.setAttribute('href', manifestHref());

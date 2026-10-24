@@ -1,6 +1,9 @@
 import hljs from 'highlight.js/lib/common';
 import { ShareDialog } from './Share';
-import { ChevronLeft, ChevronRight, Code, Download, Share2, ExternalLink, FileCode, FileText, Globe, Image, ImageIcon, Maximize, Maximize2, Minimize2, Music, Network, PanelsTopLeft, Presentation, Shapes, SquareArrowOutUpRight, Video, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Code, Download, Share2, ExternalLink, FileCode, FileSpreadsheet, FileText, Globe, Image, ImageIcon, Maximize, Maximize2, Minimize2, Music, Network, PanelsTopLeft, Presentation, Shapes, Sigma, SquareArrowOutUpRight, Table, Video, X } from 'lucide-react';
+import { LatexDocument } from './LatexDocument';
+import { Spreadsheet } from './Spreadsheet';
+import { downloadBlob, markdownToDocx, markdownToPptx, parseSheetWorkbook, workbookToXlsx } from '../office';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Artifact, ArtifactType } from '../api';
 import { href } from '../router';
@@ -27,6 +30,10 @@ export function ArtifactIcon({ type, size = 18 }: { type: ArtifactType; size?: n
       return <Network size={size} />;
     case 'code':
       return <FileCode size={size} />;
+    case 'latex':
+      return <Sigma size={size} />;
+    case 'sheet':
+      return <FileSpreadsheet size={size} />;
     default:
       return <FileText size={size} />;
   }
@@ -43,6 +50,8 @@ export const TYPE_LABEL: Record<ArtifactType, string> = {
   image: tr('Image'),
   video: tr('Video'),
   audio: tr('Audio'),
+  latex: tr('LaTeX Document'),
+  sheet: tr('Spreadsheet'),
 };
 
 export const isMedia = (type: ArtifactType) => type === 'image' || type === 'video' || type === 'audio';
@@ -170,9 +179,21 @@ export function artifactDocument(type: ArtifactType, content: string): string | 
   }
 }
 
-const EXT: Record<ArtifactType, string> = { markdown: 'md', slides: 'md', code: 'txt', html: 'html', react: 'jsx', svg: 'svg', mermaid: 'mmd', image: 'png', video: 'mp4', audio: 'mp3' };
+const EXT: Record<ArtifactType, string> = { markdown: 'md', slides: 'md', code: 'txt', html: 'html', react: 'jsx', svg: 'svg', mermaid: 'mmd', image: 'png', video: 'mp4', audio: 'mp3', latex: 'tex', sheet: 'xlsx' };
 
 export function download(artifact: Artifact, content: string) {
+  if (artifact.type === 'sheet') {
+    const wb = parseSheetWorkbook(content);
+    const blob = workbookToXlsx(wb);
+    const name = `${artifact.title.replace(/[^\w.-]+/g, '-').replace(/^-|-$/g, '') || 'spreadsheet'}.xlsx`;
+    downloadBlob(blob, name);
+    return;
+  }
+  if (artifact.type === 'latex') {
+    const name = `${artifact.title.replace(/[^\w.-]+/g, '-').replace(/^-|-$/g, '') || 'document'}.tex`;
+    downloadBlob(new Blob([content], { type: 'text/plain;charset=utf-8' }), name);
+    return;
+  }
   if (isMedia(artifact.type)) {
     const a = document.createElement('a');
     a.href = content;
@@ -244,6 +265,20 @@ export function ArtifactThumb({ type, content, language }: { type: ArtifactType;
         <HighlightedCode code={content.split('\n').slice(0, 18).join('\n')} language={language} />
       </div>
     );
+  } else if (type === 'latex') {
+    inner = (
+      <div className="thumb-scale">
+        <div className="doc-paper latex-paper">
+          <LatexDocument value={content.slice(0, 1500)} />
+        </div>
+      </div>
+    );
+  } else if (type === 'sheet') {
+    inner = (
+      <div className="thumb-scale">
+        <Spreadsheet value={content} readOnly />
+      </div>
+    );
   } else {
     inner = (
       <div className="thumb-scale">
@@ -298,7 +333,7 @@ export function ArtifactView({
   useEffect(() => setVersion(versionProp ?? artifact.versions.length - 1), [artifact.id, artifact.versions.length, versionProp]);
   const content = artifact.versions[Math.min(version, latest)]?.content ?? '';
   const doc = artifactDocument(artifact.type, content);
-  const previewable = !!doc || artifact.type === 'markdown' || artifact.type === 'slides';
+  const previewable = !!doc || artifact.type === 'markdown' || artifact.type === 'slides' || artifact.type === 'latex' || artifact.type === 'sheet';
   const media = isMedia(artifact.type);
   const [tab, setTab] = useState<'preview' | 'code'>(previewable ? 'preview' : 'code');
   const [sharing, setSharing] = useState(false);
@@ -381,6 +416,8 @@ export function ArtifactView({
         {media && <MediaView type={artifact.type} url={content} title={artifact.title} />}
         {tab === 'preview' && artifact.type === 'markdown' && <Markdown text={content} />}
         {tab === 'preview' && artifact.type === 'slides' && <SlidesView content={content} compact />}
+        {tab === 'preview' && artifact.type === 'latex' && <LatexDocument value={content} title={artifact.title} />}
+        {tab === 'preview' && artifact.type === 'sheet' && <Spreadsheet value={content} readOnly title={artifact.title} />}
         {tab === 'code' && !media && <HighlightedCode code={content} language={artifact.type === 'code' ? artifact.language : artifact.type === 'react' ? 'jsx' : artifact.type === 'svg' ? 'xml' : artifact.type === 'slides' ? 'markdown' : artifact.type} />}
       </div>
     </>

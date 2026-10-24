@@ -43,6 +43,8 @@ export function editorLanguage(type: string, language?: string): string | undefi
     case 'markdown':
     case 'slides':
       return 'markdown';
+    case 'latex':
+      return 'latex';
     default:
       return undefined;
   }

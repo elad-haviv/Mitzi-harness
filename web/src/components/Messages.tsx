@@ -42,9 +42,11 @@ import type { Artifact, Attachment, Bot, ChatMessage, ContentPart, Rating, Recal
 import { speaker, useSpeaking } from '../speech';
 import { href } from '../router';
 import { LOGO, modelLabel, useApp } from '../state';
-import { ArtifactIcon, TYPE_LABEL } from './Artifacts';
+import { ArtifactIcon, SlidesView, TYPE_LABEL } from './Artifacts';
+import { LatexDocument } from './LatexDocument';
+import { Spreadsheet } from './Spreadsheet';
 import { CopyButton, Markdown } from './Markdown';
-import { Diff, useAutoResize } from './ui';
+import { Diff, Modal, useAutoResize } from './ui';
 import { SubagentsCard, TeamCard, TeamProgress } from './Team';
 import { AutoMessage, LoopBadge, ReviewBox } from './Feedback';
 import { clock, PlanCard, StatsLine, useChatActions, useElapsed, VerifyBadge } from './Work';
@@ -148,21 +150,53 @@ export function buildTurns(messages: ChatMessage[], contextStart: number): { tur
 
 export function AttachmentChips({ attachments, onRemove }: { attachments: Attachment[]; onRemove?(i: number): void }) {
   const files = attachments.map((a, i) => ({ a, i })).filter((x) => x.a.kind === 'text');
+  const [viewing, setViewing] = useState<Attachment | null>(null);
   if (!files.length) return null;
   return (
-    <div className="attachment-chips">
-      {files.map(({ a, i }) => (
-        <span key={i} className="chip" title={a.name}>
-          <Paperclip size={13} />
-          <span>{a.name}</span>
-          {onRemove && (
-            <button onClick={() => onRemove(i)} aria-label={tr('Remove {0}', a.name)}>
-              <X size={13} />
-            </button>
-          )}
-        </span>
-      ))}
-    </div>
+    <>
+      <div className="attachment-chips">
+        {files.map(({ a, i }) => (
+          <span
+            key={i}
+            className="chip clickable"
+            title={tr('Click to view {0}', a.name)}
+            onClick={() => setViewing(a)}
+            style={{ cursor: 'pointer' }}
+          >
+            <Paperclip size={13} />
+            <span>{a.name}</span>
+            {onRemove && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove(i);
+                }}
+                aria-label={tr('Remove {0}', a.name)}
+              >
+                <X size={13} />
+              </button>
+            )}
+          </span>
+        ))}
+      </div>
+      {viewing && (
+        <Modal title={viewing.name} onClose={() => setViewing(null)} wide>
+          <div style={{ maxHeight: '75vh', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+            {/\.(xlsx|csv)$/i.test(viewing.name) ? (
+              <Spreadsheet value={viewing.content} readOnly title={viewing.name} />
+            ) : /\.(tex|latex)$/i.test(viewing.name) ? (
+              <LatexDocument value={viewing.content} title={viewing.name} />
+            ) : /\.(pptx)$/i.test(viewing.name) ? (
+              <SlidesView content={viewing.content} />
+            ) : (
+              <div className="doc-paper">
+                <Markdown text={viewing.content} />
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+    </>
   );
 }
 
