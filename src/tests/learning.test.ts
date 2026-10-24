@@ -346,3 +346,27 @@ test('formatted editor: its HTML turns back into the same Markdown', async () =>
     ].join('\n\n') + '\n',
   );
 });
+
+test('budgets: several limits, each starting over when the user chose', async () => {
+  const { budgetLimits, budgetStatus, periodOf, UsageLog } = await import('../server/usage.js');
+  const at = (y: number, m: number, d: number, h = 12) => new Date(y, m - 1, d, h);
+  // Wednesday 2026-10-21.
+  const now = at(2026, 10, 21);
+  assert.deepEqual(periodOf({ id: 'w', amount: 1, period: 'week', resetDay: 1 }, now).start, at(2026, 10, 19, 0));
+  assert.deepEqual(periodOf({ id: 'w', amount: 1, period: 'week', resetDay: 4 }, now).start, at(2026, 10, 15, 0));
+  assert.deepEqual(periodOf({ id: 'm', amount: 1, period: 'month', resetDay: 25 }, now).start, at(2026, 9, 25, 0));
+  assert.deepEqual(periodOf({ id: 'm', amount: 1, period: 'month', resetDay: 25 }, now).end, at(2026, 10, 25, 0));
+  assert.deepEqual(periodOf({ id: 'm', amount: 1, period: 'month', resetDay: 15 }, now).start, at(2026, 10, 15, 0));
+  assert.equal(periodOf({ id: 't', amount: 1, period: 'total', since: at(2026, 1, 1).toISOString() }, now).end, undefined);
+  // Older settings with a daily and a monthly limit still count.
+  assert.deepEqual(budgetLimits({ daily: 2, monthly: 30, alertPercent: 80, hardStop: false }).map((l) => l.period), ['day', 'month']);
+
+  const log = new UsageLog(tempDir());
+  log.record('m', { prompt_tokens: 1, completion_tokens: 1, cost: 4 } as any, { kind: 'chat' });
+  const status = budgetStatus(log, { limits: [{ id: 'd', amount: 10, period: 'day' }, { id: 'w', amount: 4.5, period: 'week', resetDay: 1 }, { id: 'y', amount: 100, period: 'year' }], alertPercent: 80, hardStop: true });
+  assert.deepEqual(status.limits.map((l) => [l.id, l.state]), [['d', 'ok'], ['w', 'warn'], ['y', 'ok']]);
+  assert.equal(status.limit?.id, 'w');
+  assert.equal(status.freeMode, false);
+  const over = budgetStatus(log, { limits: [{ id: 'd', amount: 3, period: 'day' }], alertPercent: 80, hardStop: false, freeModel: 'free/model' });
+  assert.deepEqual([over.state, over.freeMode, over.freeModel], ['over', true, 'free/model']);
+});

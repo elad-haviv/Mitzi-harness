@@ -1,6 +1,8 @@
-import { ArrowUp, Globe, ListPlus, Loader2, Paperclip, Square, X, Zap } from 'lucide-react';
+import { ArrowUp, Globe, Leaf, ListPlus, Loader2, Paperclip, Square, X, Zap } from 'lucide-react';
 import { forwardRef, ReactNode, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { api, Attachment, SlashCommandInfo } from '../api';
+import { api, Attachment, BudgetStatus, ModelInfo, SlashCommandInfo } from '../api';
+import { href } from '../router';
+import { budgetName } from '../pages/Insights';
 import { formatTokens, useApp } from '../state';
 import { AttachmentChips } from './Messages';
 import { ModelPicker } from './ModelPicker';
@@ -33,6 +35,8 @@ interface Props {
   extra?: ReactNode;
   /** Shown after the search button, e.g. the project picker. */
   leading?: ReactNode;
+  /** A spending limit is reached and requests go to the free model. */
+  free?: boolean;
   /** Shown under the message box on the left, e.g. the autonomy level. */
   footer?: ReactNode;
   /** Shown under the message box on the right, after the model picker, e.g. the context usage. */
@@ -128,7 +132,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(prop
     <div className="composer-wrap">
       <div
         style={{ position: 'relative' }}
-        className={`composer${dragging ? ' dragging' : ''}`}
+        className={`composer${dragging ? ' dragging' : ''}${props.free ? ' free-mode' : ''}`}
         onDragOver={(e) => {
           if (e.dataTransfer.types.includes('Files')) {
             e.preventDefault();
@@ -307,5 +311,47 @@ export function ContextRing({ used, total, onClick, active }: { used: number; to
       </svg>
       {Math.round(pct * 100)}%<span className="muted"> · {formatTokens(used)}</span>
     </button>
+  );
+}
+
+/**
+ * Tells the user a spending limit is reached and Mitzi has switched to the free model, until the limit starts over.
+ * Dismissing it hides it for the rest of that period.
+ */
+export function FreeModeNotice({ budget, models }: { budget: BudgetStatus; models: ModelInfo[] }) {
+  const l = budget.limit;
+  const key = `mitzi.freeNotice.${l?.id}.${l?.start}`;
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return sessionStorage.getItem(key) === '1';
+    } catch {
+      return false;
+    }
+  });
+  if (!l || hidden) return null;
+  const name = models.find((m) => m.id === budget.freeModel)?.name ?? budget.freeModel;
+  const until = l.resetsAt ? new Date(l.resetsAt).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }) : undefined;
+  return (
+    <div className="free-notice" role="status">
+      <Leaf size={16} />
+      <span className="grow">
+        {until ? tr('You’ve reached your {0}. Mitzi is using the free model {1} until {2}.', budgetName(l), name, until) : tr('You’ve reached your {0}. Mitzi is using the free model {1}.', budgetName(l), name)}{' '}
+        <a href={href({ page: 'settings', section: 'budget' })}>{tr('Change the budget')}</a>
+      </span>
+      <button
+        className="icon-btn sm"
+        aria-label={tr('Dismiss')}
+        onClick={() => {
+          try {
+            sessionStorage.setItem(key, '1');
+          } catch {
+            // Hidden for now only.
+          }
+          setHidden(true);
+        }}
+      >
+        <X size={14} />
+      </button>
+    </div>
   );
 }

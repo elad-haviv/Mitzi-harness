@@ -64,6 +64,8 @@ import { applyDelegateEvent, TeamProgress } from '../components/Team';
 import { applyCompareEvent, CompareState, CompareView } from '../components/Compare';
 import { lang, plural, rtl, tr } from '../i18n';
 import { ArchivedBanner } from './Archive';
+import { budgetName } from './Insights';
+import { FreeModeNotice } from '../components/Composer';
 import { withoutShownMedia } from '../../../src/shared/mediaText';
 
 type LiveBlock =
@@ -607,8 +609,11 @@ export function ChatView({
   const isEmpty = !loading && !running && !(chat?.messages.length);
 
   const composerNode = (
+    <>
+    {app.budget?.freeMode && <FreeModeNotice budget={app.budget} models={app.models} />}
     <Composer
       ref={composer}
+      free={!!app.budget?.freeMode}
       onSend={(t, a) => void send(t, a)}
       running={running}
       onStop={stop}
@@ -658,6 +663,7 @@ export function ChatView({
         </>
       }
     />
+    </>
   );
 
   // ---------- Header ----------
@@ -980,11 +986,11 @@ export function ChatView({
         </div>
       </div>
       <div className="composer-stack">
-        {app.budget?.state === 'over' && app.budget.hardStop && (
+        {app.budget?.state === 'over' && app.budget.hardStop && !app.budget.freeMode && app.budget.limit && (
           <div className="error-box budget-banner">
             <Wallet size={16} />
             <span style={{ flex: 1 }}>
-              {app.budget.limit === 'daily' ? tr('You’ve reached your daily budget, so Mitzi is paused.') : tr('You’ve reached your monthly budget, so Mitzi is paused.')}{' '}<a href={href({ page: 'settings', section: 'budget' })}>{tr('Change the budget')}</a>
+              {tr('You’ve reached your {0}, so Mitzi is paused.', budgetName(app.budget.limit))}{' '}<a href={href({ page: 'settings', section: 'budget' })}>{tr('Change the budget')}</a>
             </span>
           </div>
         )}

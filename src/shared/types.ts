@@ -526,27 +526,52 @@ export interface SearchHit {
 
 // ---------- Budgets ----------
 
+/** How often a spending limit starts over. 'total' never does. */
+export type BudgetPeriod = 'day' | 'week' | 'month' | 'year' | 'total';
+
+export interface BudgetLimit {
+  id: string;
+  /** US dollars. */
+  amount: number;
+  period: BudgetPeriod;
+  /** When it starts over: the weekday for a week (0 = Sunday), the day of the month (1–28) for a month. */
+  resetDay?: number;
+  /** For 'total': when counting started. */
+  since?: string;
+}
+
 export interface BudgetSettings {
-  /** 0 or absent: no limit. */
+  limits?: BudgetLimit[];
+  /** From before `limits` (moved into them). */
   daily?: number;
   monthly?: number;
   /** Warn when this share of a limit (percent) is spent. */
   alertPercent: number;
-  /** Refuse new requests once a limit is reached. */
+  /** Refuse new requests once a limit is reached (when there's no free model to switch to). */
   hardStop: boolean;
+  /** Once a limit is reached, requests go to this (free) model instead of stopping or running up costs. */
+  freeModel?: string;
+}
+
+export interface BudgetLimitStatus extends BudgetLimit {
+  spent: number;
+  /** When the current period started, and when it starts over (none for 'total'). */
+  start: string;
+  resetsAt?: string;
+  state: 'ok' | 'warn' | 'over';
 }
 
 export interface BudgetStatus {
-  daily?: number;
-  monthly?: number;
-  spentToday: number;
-  spentMonth: number;
+  limits: BudgetLimitStatus[];
   alertPercent: number;
   hardStop: boolean;
+  freeModel?: string;
   /** ok, warn (past the alert share of a limit) or over (a limit reached). */
   state: 'ok' | 'warn' | 'over';
-  /** Which limit the state is about. */
-  limit?: 'daily' | 'monthly';
+  /** The limit the state is about. */
+  limit?: BudgetLimitStatus;
+  /** A limit is reached and requests are going to the free model. */
+  freeMode: boolean;
 }
 
 // ---------- Usage ----------

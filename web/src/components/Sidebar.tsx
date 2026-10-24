@@ -4,6 +4,7 @@ import { api, ChatListItem } from '../api';
 import { href, navigate, Route } from '../router';
 import { LOGO, useApp } from '../state';
 import { useConfirm } from './ui';
+import { budgetName } from '../pages/Insights';
 import { tr } from '../i18n';
 
 type GroupBy = 'date' | 'project' | 'bot' | 'model' | 'none';
@@ -367,12 +368,16 @@ export function Sidebar({ route, collapsed, onCollapse }: { route: Route; collap
             <span>{tr('Add an API key for OpenRouter or another provider to start chatting')}</span>
           </a>
         )}
-        {budget && budget.state !== 'ok' && (
-          <a className={`budget-pill ${budget.state}`} href={href({ page: 'settings', section: 'budget' })}>
+        {budget && budget.state !== 'ok' && budget.limit && (
+          <a className={`budget-pill ${budget.freeMode ? 'free' : budget.state}`} href={href({ page: 'settings', section: 'budget' })}>
             <Wallet size={15} />
-            {budget.state === 'over'
-              ? budget.limit === 'daily' ? (budget.hardStop ? tr('Daily budget reached: paused') : tr('Daily budget reached')) : budget.hardStop ? tr('Monthly budget reached: paused') : tr('Monthly budget reached')
-              : tr(budget.limit === 'daily' ? '{0}% of today’s budget used' : '{0}% of this month’s budget used', Math.round(((budget.limit === 'daily' ? budget.spentToday / budget.daily! : budget.spentMonth / budget.monthly!) || 0) * 100))}
+            {budget.freeMode
+              ? tr('Budget reached: using the free model')
+              : budget.state === 'over'
+                ? budget.hardStop
+                  ? tr('Your {0} is reached: paused', budgetName(budget.limit))
+                  : tr('Your {0} is reached', budgetName(budget.limit))
+                : tr('{0}% of your {1} used', Math.round((budget.limit.spent / budget.limit.amount) * 100), budgetName(budget.limit))}
           </a>
         )}
         {update?.supported && update.behind > 0 && (

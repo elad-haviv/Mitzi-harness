@@ -734,14 +734,15 @@ test('budgets warn, and the hard stop refuses requests once a limit is reached',
   await stream(`/api/chats/${chat.id}/messages`, { content: 'Spend a little' });
   // Memory jobs after the answer cost a little too; let them finish.
   await new Promise((r) => setTimeout(r, 500));
-  const spent = (await call('GET', '/api/budget')).data.spentMonth;
+  await call('PUT', '/api/settings', { budget: { limits: [{ amount: 1000, period: 'month' }], alertPercent: 80, hardStop: false } });
+  const spent = (await call('GET', '/api/budget')).data.limits[0].spent;
   assert.ok(spent > 0);
 
   // 85% of the limit spent: past the 80% alert.
   await call('PUT', '/api/settings', { budget: { monthly: spent / 0.85, alertPercent: 80, hardStop: true } });
   let b = (await call('GET', '/api/budget')).data;
   assert.equal(b.state, 'warn');
-  assert.equal(b.limit, 'monthly');
+  assert.equal(b.limit.period, 'month');
 
   await call('PUT', '/api/settings', { budget: { monthly: 0.001, daily: 1000, alertPercent: 80, hardStop: false } });
   b = (await call('GET', '/api/budget')).data;
@@ -753,8 +754,18 @@ test('budgets warn, and the hard stop refuses requests once a limit is reached',
   await call('PUT', '/api/settings', { budget: { monthly: 0.001, alertPercent: 80, hardStop: true } });
   events = await stream(`/api/chats/${chat.id}/messages`, { content: 'Refused' });
   assert.match(events.find((e) => e.type === 'error').message, /monthly budget of \$0\.00[\s\S]*Settings → Usage & budget/);
-  await call('PUT', '/api/settings', { budget: { alertPercent: 80, hardStop: false } });
-  assert.equal((await call('GET', '/api/budget')).data.state, 'ok');
+
+  // With a free model set, a reached limit switches to it instead of stopping.
+  await call('PUT', '/api/settings', { budget: { limits: [{ amount: 0.001, period: 'week', resetDay: 3 }], alertPercent: 80, hardStop: true, freeModel: 'test/free' } });
+  b = (await call('GET', '/api/budget')).data;
+  assert.deepEqual([b.state, b.freeMode, b.freeModel, b.limit.period, b.limit.resetDay], ['over', true, 'test/free', 'week', 3]);
+  events = await stream(`/api/chats/${chat.id}/messages`, { content: 'Free, please' });
+  assert.ok(!events.some((e) => e.type === 'error'));
+  assert.equal(lastMain().model, 'test/free');
+
+  await call('PUT', '/api/settings', { budget: { limits: [], alertPercent: 80, hardStop: false } });
+  b = (await call('GET', '/api/budget')).data;
+  assert.deepEqual([b.state, b.freeMode, b.limits], ['ok', false, []]);
 });
 
 test('Auto routes quick messages to the fast model and in-depth ones to the strong model', async () => {

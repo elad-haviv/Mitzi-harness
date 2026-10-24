@@ -146,3 +146,8 @@
   result is the image's next version. `MediaService.editImage` sends the current image, plus the user's markup
   (`artifact.markup`, saved from the editor's Mark up mode via `POST /api/artifacts/:id/image`) as a guide. Documents
   are edited formatted (`web/src/components/Editors.tsx`) and stored as Markdown via `src/shared/htmlToMarkdown.ts`.
+- Budgets (`src/server/usage.ts`): `settings.budget.limits` is a list of `{ amount, period, resetDay }` (day, week from a
+  weekday, month from a day 1–28, year, or total since it was set); older `daily`/`monthly` settings still count
+  (`budgetLimits`). `budgetStatus` reports each limit and the one furthest along. When a limit is reached and
+  `budget.freeModel` is set, `RoutingClient.beforeChat` returns that model and every request goes to it (`freeMode`);
+  otherwise the hard stop refuses requests as before.

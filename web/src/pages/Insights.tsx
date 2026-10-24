@@ -2,7 +2,7 @@
 // bots are learning from feedback loops (attempts needed and first-try ratings over time).
 import { BarChart3, Columns2, GraduationCap, Loader2, Sparkles, Trash2, Trophy } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { api, BudgetStatus, CompareInsights, EvalRunView, FeedbackLoop, LearningCurve, LearningMetrics, TaskOutcome, UsageGroup, UsageReport } from '../api';
+import { api, BudgetLimit, BudgetLimitStatus, BudgetStatus, CompareInsights, EvalRunView, FeedbackLoop, LearningCurve, LearningMetrics, TaskOutcome, UsageGroup, UsageReport } from '../api';
 import { ModelPicker } from '../components/ModelPicker';
 import { Breakdown, Chart, movingAverage } from '../components/Charts';
 import { Stars } from '../components/Feedback';
@@ -104,7 +104,7 @@ export function UsageView({ projectId: fixedProject, compact }: { projectId?: st
           ))}
         </select>
       </div>
-      {budget && !fixedProject && (budget.daily || budget.monthly) ? (
+      {budget && !fixedProject && budget.limits.length ? (
         <section className="card chart-card">
           <h2>
             {tr('Budget')}{' '}<a className="small" href={href({ page: 'settings', section: 'budget' })} style={{ fontWeight: 400, marginLeft: 6 }}>{tr('Change')}</a>
@@ -453,27 +453,28 @@ export function ProjectUsage({ projectId }: { projectId: string }) {
 }
 
 /** Spending against the daily and monthly limits. */
+/** A limit's name: "daily budget", "weekly budget"… */
+export function budgetName(l: Pick<BudgetLimit, 'period'>): string {
+  return { day: tr('daily budget'), week: tr('weekly budget'), month: tr('monthly budget'), year: tr('yearly budget'), total: tr('total budget') }[l.period];
+}
+
+/** How far along each limit is. */
 export function BudgetMeters({ budget }: { budget: BudgetStatus }) {
-  const rows = [
-    { label: tr('Today'), spent: budget.spentToday, max: budget.daily },
-    { label: tr('This month'), spent: budget.spentMonth, max: budget.monthly },
-  ].filter((r) => r.max);
-  if (!rows.length) return null;
+  if (!budget.limits.length) return null;
+  const label = (l: BudgetLimitStatus) =>
+    ({ day: tr('Today'), week: tr('This week'), month: tr('This month'), year: tr('This year'), total: tr('In total') })[l.period];
   return (
     <div className="budget-meters">
-      {rows.map((r) => {
-        const pct = Math.min(100, (r.spent / r.max!) * 100);
-        const tone = pct >= 100 ? 'over' : pct >= budget.alertPercent ? 'warn' : 'ok';
+      {budget.limits.map((l) => {
+        const pct = Math.min(100, (l.spent / l.amount) * 100);
         return (
-          <div key={r.label} className="budget-meter">
+          <div key={l.id} className="budget-meter">
             <div className="budget-meter-head">
-              <span>{r.label}</span>
-              <span className={`budget-meter-value ${tone}`}>
-                {tr('{0} of {1}', money(r.spent), money(r.max!))}
-              </span>
+              <span title={l.resetsAt ? tr('Starts over {0}', new Date(l.resetsAt).toLocaleString()) : undefined}>{label(l)}</span>
+              <span className={`budget-meter-value ${l.state}`}>{tr('{0} of {1}', money(l.spent), money(l.amount))}</span>
             </div>
-            <div className="budget-bar" role="meter" aria-valuemin={0} aria-valuemax={r.max} aria-valuenow={r.spent} aria-label={tr('{0}: {1} of {2}', r.label, money(r.spent), money(r.max!))}>
-              <div className={tone} style={{ width: `${pct}%` }} />
+            <div className="budget-bar" role="meter" aria-valuemin={0} aria-valuemax={l.amount} aria-valuenow={l.spent} aria-label={tr('{0}: {1} of {2}', label(l), money(l.spent), money(l.amount))}>
+              <div className={l.state} style={{ width: `${pct}%` }} />
               <i style={{ left: `${budget.alertPercent}%` }} title={tr('Alert at {0}%', budget.alertPercent)} />
             </div>
           </div>

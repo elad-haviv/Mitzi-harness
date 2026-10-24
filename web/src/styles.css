@@ -7986,3 +7986,72 @@ button.todo-check:hover {
     opacity: 1;
   }
 }
+
+/* ---------- Budgets ---------- */
+.budget-limits {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.budget-limit {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.budget-limit-end {
+  margin-inline-start: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.budget-limit .select {
+  width: auto;
+}
+.budget-limit .money-input .input {
+  width: 110px;
+}
+.budget-limit-spent.warn {
+  color: var(--warn);
+}
+.budget-limit-spent.over {
+  color: var(--danger);
+}
+.budget-pill.free {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+/* Free mode: the composer is outlined in green while a limit sends requests to the free model. */
+.composer.free-mode {
+  border-color: var(--ok);
+  border-style: dashed;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 14%, transparent);
+}
+.free-notice {
+  max-width: 780px;
+  margin: 0 auto 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--ok) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent);
+  color: var(--text);
+  font-size: 13.5px;
+  box-shadow: var(--shadow);
+  animation: free-notice-in 0.25s ease-out;
+}
+.free-notice > svg {
+  color: var(--ok);
+  flex-shrink: 0;
+}
+@keyframes free-notice-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}

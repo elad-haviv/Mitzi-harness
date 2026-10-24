@@ -4,7 +4,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { appendFileSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Usage } from '../openrouter.js';
-import type { BudgetSettings, BudgetStatus, ModelInfo, UsageEvent, UsageKind } from '../shared/types.js';
+import type { BudgetLimit, BudgetLimitStatus, BudgetPeriod, BudgetSettings, BudgetStatus, ModelInfo, UsageEvent, UsageKind } from '../shared/types.js';
 
 export interface UsageTag {
   kind: UsageKind;
@@ -122,28 +122,62 @@ export function dayOf(ts: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** Spending against the budget limits, from the usage log. */
-export function budgetStatus(log: UsageLog, budget: BudgetSettings | undefined, now = new Date()): BudgetStatus {
-  const day = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const month = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-  const events = log.all(month);
-  const spentMonth = events.reduce((n, e) => n + e.cost, 0);
-  const spentToday = events.filter((e) => e.ts >= day).reduce((n, e) => n + e.cost, 0);
-  const daily = budget?.daily || undefined;
-  const monthly = budget?.monthly || undefined;
-  const alertPercent = budget?.alertPercent ?? 80;
-  const status: BudgetStatus = { daily, monthly, spentToday, spentMonth, alertPercent, hardStop: !!budget?.hardStop, state: 'ok' };
-  // The tighter of the two limits decides.
-  const checks: ['daily' | 'monthly', number, number | undefined][] = [
-    ['daily', spentToday, daily],
-    ['monthly', spentMonth, monthly],
-  ];
-  for (const [limit, spent, max] of checks) {
-    if (!max) continue;
-    if (spent >= max) return { ...status, state: 'over', limit };
-    if (spent >= (max * alertPercent) / 100 && status.state === 'ok') Object.assign(status, { state: 'warn', limit });
+/** The limits in a budget: its list, or the daily and monthly limits from before there was one. */
+export function budgetLimits(budget: BudgetSettings | undefined): BudgetLimit[] {
+  if (budget?.limits) return budget.limits.filter((l) => l.amount > 0);
+  const legacy: BudgetLimit[] = [];
+  if (budget?.daily) legacy.push({ id: 'daily', amount: budget.daily, period: 'day' });
+  if (budget?.monthly) legacy.push({ id: 'monthly', amount: budget.monthly, period: 'month', resetDay: 1 });
+  return legacy;
+}
+
+/** The current period of a limit, in local time: when it started and when it starts over. */
+export function periodOf(limit: BudgetLimit, now = new Date()): { start: Date; end?: Date } {
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  switch (limit.period) {
+    case 'day':
+      return { start: midnight, end: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) };
+    case 'week': {
+      const resetDay = (limit.resetDay ?? 1) % 7;
+      const back = (midnight.getDay() - resetDay + 7) % 7;
+      const start = new Date(midnight.getFullYear(), midnight.getMonth(), midnight.getDate() - back);
+      return { start, end: new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7) };
+    }
+    case 'month': {
+      const day = Math.min(28, Math.max(1, limit.resetDay ?? 1));
+      const thisMonth = new Date(now.getFullYear(), now.getMonth(), day);
+      const start = thisMonth <= now ? thisMonth : new Date(now.getFullYear(), now.getMonth() - 1, day);
+      return { start, end: new Date(start.getFullYear(), start.getMonth() + 1, day) };
+    }
+    case 'year':
+      return { start: new Date(now.getFullYear(), 0, 1), end: new Date(now.getFullYear() + 1, 0, 1) };
+    case 'total':
+      return { start: new Date(limit.since ? Date.parse(limit.since) : 0) };
   }
-  return status;
+}
+
+/** Spending against each budget limit, from the usage log. The limit that's furthest along decides the state. */
+export function budgetStatus(log: UsageLog, budget: BudgetSettings | undefined, now = new Date()): BudgetStatus {
+  const alertPercent = budget?.alertPercent ?? 80;
+  const limits: BudgetLimitStatus[] = budgetLimits(budget).map((l) => {
+    const { start, end } = periodOf(l, now);
+    const spent = log.all(start.getTime()).reduce((n, e) => n + e.cost, 0);
+    const state = spent >= l.amount ? 'over' : spent >= (l.amount * alertPercent) / 100 ? 'warn' : 'ok';
+    return { ...l, spent, start: start.toISOString(), ...(end ? { resetsAt: end.toISOString() } : {}), state };
+  });
+  const rank = { over: 2, warn: 1, ok: 0 } as const;
+  const worst = [...limits].sort((a, b) => rank[b.state] - rank[a.state] || b.spent / b.amount - a.spent / a.amount)[0];
+  const state = worst?.state ?? 'ok';
+  const freeModel = budget?.freeModel?.trim() || undefined;
+  return {
+    limits,
+    alertPercent,
+    hardStop: !!budget?.hardStop,
+    ...(freeModel ? { freeModel } : {}),
+    state,
+    ...(worst && state !== 'ok' ? { limit: worst } : {}),
+    freeMode: state === 'over' && !!freeModel,
+  };
 }
 
 /** Thrown when the budget's hard stop refuses a request. */
@@ -151,7 +185,10 @@ export class BudgetExceeded extends Error {
   readonly status = 402;
 }
 
+const PERIOD_NAME: Record<BudgetPeriod, string> = { day: 'daily', week: 'weekly', month: 'monthly', year: 'yearly', total: 'total' };
+
 export function budgetMessage(s: BudgetStatus): string {
-  const limit = s.limit === 'daily' ? `daily budget of $${s.daily!.toFixed(2)}` : `monthly budget of $${s.monthly!.toFixed(2)}`;
-  return `You've reached your ${limit}. Raise it in Settings → Usage & budget${s.limit === 'daily' ? ', or wait until tomorrow' : ', or wait until next month'}.`;
+  const l = s.limit!;
+  const when = l.resetsAt ? `, or wait until it starts over on ${new Date(l.resetsAt).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}` : '';
+  return `You've reached your ${PERIOD_NAME[l.period]} budget of $${l.amount.toFixed(2)}. Raise it or set a free model in Settings → Usage & budget${when}.`;
 }

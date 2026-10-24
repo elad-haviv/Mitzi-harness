@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { Config, loadConfig, MITZI_HOME, PERMISSION_MODES, PermissionMode } from '../config.js';
 import { PROVIDER_PRESETS, providerView, resolveProviders, RoutingClient, usable } from '../providers.js';
-import type { ProviderConfig, ProviderKind, SearchKind } from '../shared/types.js';
+import type { BudgetLimit, BudgetPeriod, ProviderConfig, ProviderKind, SearchKind } from '../shared/types.js';
 import type { ApprovalAnswer } from '../permissions.js';
 import { APPROVAL_LEVELS, Attachment, AUTO_MODEL, BankProfile, BankSummary, Bot, BotTools, Chat, DEFAULT_BOT_ID, MemoryType, Project, PublicSettings, SettingsUpdate, StreamEvent } from '../shared/types.js';
 import { toToolSpecs } from '../tools/index.js';
@@ -97,7 +97,10 @@ export function createApp(opts: AppOptions) {
       routing.client.onUsage = (model, u) => usage.record(model, u);
       routing.client.beforeChat = () => {
         const b = budgetStatus(usage, store.settings.budget);
-        if (b.state === 'over' && b.hardStop) throw new BudgetExceeded(budgetMessage(b));
+        if (b.state !== 'over') return;
+        // With a free model set, a reached limit switches to it instead of stopping.
+        if (b.freeModel) return b.freeModel;
+        if (b.hardStop) throw new BudgetExceeded(budgetMessage(b));
       };
       catalog?.invalidate();
     }
@@ -227,11 +230,34 @@ export function createApp(opts: AppOptions) {
     if (update.media) ui.media = mediaUpdate(update.media, store.settings.media);
     if (update.budget && typeof update.budget === 'object') {
       const money = (v: unknown) => (typeof v === 'number' && v > 0 ? Math.round(v * 10_000) / 10_000 : undefined);
+      const b = update.budget;
+      const periods: BudgetPeriod[] = ['day', 'week', 'month', 'year', 'total'];
+      // A list of limits, or (from older clients) a daily and a monthly one.
+      const limits: BudgetLimit[] = Array.isArray(b.limits)
+        ? b.limits
+            .filter((l: any) => money(l?.amount) && periods.includes(l?.period))
+            .slice(0, 12)
+            .map((l: any): BudgetLimit => {
+              const old = store.settings.budget?.limits?.find((x) => x.id === l.id);
+              return {
+                id: typeof l.id === 'string' && /^[\w-]{1,40}$/.test(l.id) ? l.id : newId(),
+                amount: money(l.amount)!,
+                period: l.period,
+                ...(l.period === 'week' ? { resetDay: clamp(Math.round(Number(l.resetDay ?? 1)), 0, 6) } : {}),
+                ...(l.period === 'month' ? { resetDay: clamp(Math.round(Number(l.resetDay ?? 1)), 1, 28) } : {}),
+                // A running total counts from when it was set up.
+                ...(l.period === 'total' ? { since: old?.period === 'total' && old.since ? old.since : now() } : {}),
+              };
+            })
+        : [
+            ...(money(b.daily) ? [{ id: 'daily', amount: money(b.daily)!, period: 'day' as const }] : []),
+            ...(money(b.monthly) ? [{ id: 'monthly', amount: money(b.monthly)!, period: 'month' as const, resetDay: 1 }] : []),
+          ];
       ui.budget = {
-        daily: money(update.budget.daily),
-        monthly: money(update.budget.monthly),
-        alertPercent: clamp(Math.round(Number(update.budget.alertPercent) || 80), 10, 100),
-        hardStop: update.budget.hardStop === true,
+        limits,
+        alertPercent: clamp(Math.round(Number(b.alertPercent) || 80), 10, 100),
+        hardStop: b.hardStop === true,
+        ...(typeof b.freeModel === 'string' && b.freeModel.trim() && b.freeModel.trim() !== AUTO_MODEL ? { freeModel: b.freeModel.trim() } : {}),
       };
     }
     if (update.routing && typeof update.routing === 'object') {

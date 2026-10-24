@@ -99,7 +99,7 @@ export class RoutingClient implements LlmClient {
   readonly errors = new Map<string, string>();
   readonly counts = new Map<string, number>();
   /** Called before every chat call; throws to refuse it (the budget's hard stop). */
-  beforeChat?: () => void;
+  beforeChat?: (req: ChatRequest) => string | void;
   /** Told about every chat call's token usage (for the usage log). */
   onUsage?: (model: string, usage: ChatResult['usage']) => void;
 
@@ -150,10 +150,11 @@ export class RoutingClient implements LlmClient {
   }
 
   async chat(req: ChatRequest, handlers?: StreamHandlers): Promise<ChatResult> {
-    this.beforeChat?.();
-    const { provider, model } = this.route(req.model);
+    // The budget may refuse the request, or send it to another (free) model.
+    const id = this.beforeChat?.(req) || req.model;
+    const { provider, model } = this.route(id);
     const result = await this.client(provider).chat({ ...req, model }, handlers);
-    this.onUsage?.(req.model, result.usage);
+    this.onUsage?.(id, result.usage);
     return result;
   }
 

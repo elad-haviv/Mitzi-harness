@@ -1,6 +1,8 @@
-import { AlertTriangle, ArrowUpCircle, Languages, Wallet, Brain, Check, CircleDashed, Loader2, RefreshCw, Copy, Database, Download, KeyRound, MessagesSquare, Monitor, Moon, Palette, Plug, Puzzle, Sparkles, Sun, Volume2, WandSparkles, Send, X, Smartphone, Bell } from 'lucide-react';
+import { AlertTriangle, ArrowUpCircle, Languages, Wallet, Brain, Check, CircleDashed, Loader2, RefreshCw, Copy, Database, Download, KeyRound, MessagesSquare, Monitor, Moon, Palette, Plug, Puzzle, Sparkles, Sun, Volume2, WandSparkles, Send, X, Smartphone, Bell, Plus } from 'lucide-react';
 import { ReactNode, useEffect, useState } from 'react';
-import { api, UpdateStep } from '../api';
+import { api, BudgetLimit, BudgetLimitStatus, BudgetPeriod, UpdateStep } from '../api';
+import type { BudgetSettings as Budget } from '../api';
+import { money } from '../components/Work';
 import { MessagingSettings } from './MessagingSettings';
 import { ImportModal } from '../components/Import';
 import { ModelPicker } from '../components/ModelPicker';
@@ -314,49 +316,51 @@ function ModelSettings() {
   );
 }
 
+const PRESETS = [1, 5, 10, 20, 50, 100, 200, 500];
+const PERIODS: { id: BudgetPeriod; label: string }[] = [
+  { id: 'day', label: tr('per day') },
+  { id: 'week', label: tr('per week') },
+  { id: 'month', label: tr('per month') },
+  { id: 'year', label: tr('per year') },
+  { id: 'total', label: tr('in total') },
+];
+const WEEKDAYS = [tr('Sunday'), tr('Monday'), tr('Tuesday'), tr('Wednesday'), tr('Thursday'), tr('Friday'), tr('Saturday')];
+
 function BudgetSettings() {
-  const { settings, budget, refreshBudget } = useApp();
+  const { settings, budget, refreshBudget, models } = useApp();
   const save = useSave();
-  const b = settings?.budget ?? { alertPercent: 80, hardStop: false };
-  const [daily, setDaily] = useState(b.daily ? String(b.daily) : '');
-  const [monthly, setMonthly] = useState(b.monthly ? String(b.monthly) : '');
   useEffect(() => {
     void refreshBudget();
   }, [refreshBudget]);
   if (!settings) return null;
-  const update = async (patch: Partial<typeof b>) => {
-    await save({ budget: { ...b, daily: Number(daily) || undefined, monthly: Number(monthly) || undefined, ...patch } }, 'Budget saved');
+  const b = settings.budget ?? { alertPercent: 80, hardStop: false };
+  // Settings from before the list keep their daily and monthly limits, shown as entries.
+  const limits: BudgetLimit[] = budget?.limits.map(({ id, amount, period, resetDay, since }) => ({ id, amount, period, resetDay, since })) ?? b.limits ?? [];
+  const update = async (patch: Partial<Budget>) => {
+    // Saved as you go; the limits show the result, so there's no message.
+    await save({ budget: { alertPercent: b.alertPercent, hardStop: b.hardStop, freeModel: b.freeModel, limits, ...patch } });
     void refreshBudget();
   };
+  const setLimit = (i: number, patch: Partial<BudgetLimit>) => void update({ limits: limits.map((l, j) => (j === i ? { ...l, ...patch } : l)) });
+  // Free models cost nothing; offer those when the model list knows any.
+  const free = models.filter((m) => m.promptPrice === 0 && (m.completionPrice ?? 0) === 0);
   return (
     <>
       <section className="settings-section card">
         <h2>{tr('Spending limits')}</h2>
         <p className="muted small" style={{ marginTop: 0 }}>
-          {tr('Costs come from your providers (or the model list’s prices when a provider doesn’t report them). Leave a limit empty for none.')}
+          {tr('Costs come from your providers (or the model list’s prices when a provider doesn’t report them). Add as many limits as you like; each starts over when you choose.')}
         </p>
-        <form
-          className="budget-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void update({});
-          }}
-        >
-          <label className="field">
-            <span className="field-label">{tr('Per day')}</span>
-            <span className="money-input">
-              $<input className="input" type="number" min={0} step="any" value={daily} placeholder={tr('No limit')} onChange={(e) => setDaily(e.target.value)} />
-            </span>
-          </label>
-          <label className="field">
-            <span className="field-label">{tr('Per month')}</span>
-            <span className="money-input">
-              $<input className="input" type="number" min={0} step="any" value={monthly} placeholder={tr('No limit')} onChange={(e) => setMonthly(e.target.value)} />
-            </span>
-          </label>
-          <button className="btn btn-primary">{tr('Save limits')}</button>
-        </form>
-        <div className="field">
+        <div className="budget-limits">
+          {limits.map((l, i) => (
+            <LimitRow key={l.id} limit={l} status={budget?.limits.find((x) => x.id === l.id)} onChange={(patch) => setLimit(i, patch)} onRemove={() => void update({ limits: limits.filter((_, j) => j !== i) })} />
+          ))}
+          {!limits.length && <p className="muted small">{tr('No limits: Mitzi spends what your work needs.')}</p>}
+          <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => void update({ limits: [...limits, { id: `l${Date.now().toString(36)}`, amount: 20, period: 'month', resetDay: 1 }] })}>
+            <Plus size={14} /> {tr('Add a limit')}
+          </button>
+        </div>
+        <div className="field" style={{ marginTop: 14 }}>
           <span className="field-label">{tr('Warn me at')}</span>
           <select className="select" style={{ maxWidth: 200 }} value={b.alertPercent} onChange={(e) => void update({ alertPercent: Number(e.target.value) })}>
             {[50, 70, 80, 90, 95].map((p) => (
@@ -366,15 +370,36 @@ function BudgetSettings() {
             ))}
           </select>
         </div>
-        <div className="tool-toggle" style={{ padding: 0, border: 0 }}>
+      </section>
+      <section className="settings-section card">
+        <h2>{tr('When a limit is reached')}</h2>
+        <div className="field">
+          <span className="field-label">{tr('Switch to a free model')}</span>
+          <ModelPicker
+            value={b.freeModel ?? ''}
+            onChange={(m) => void update({ freeModel: m || undefined })}
+            variant="input"
+            direction="down"
+            options={free.length ? free : undefined}
+            allowEmpty={tr('None')}
+          />
+          <span className="field-hint">
+            {tr('Mitzi keeps working on this model until the limit starts over, and tells you in the chat. Models whose id ends in “:free” on OpenRouter cost nothing.')}
+          </span>
+        </div>
+        <div className="tool-toggle" style={{ padding: 0, border: 0, opacity: b.freeModel ? 0.55 : 1 }}>
           <div className="grow">
             <div className="t">{tr('Stop at the limit')}</div>
-            <div className="s">{tr('Refuse new requests once a limit is reached, including scheduled tasks and workflows. Otherwise Mitzi only warns.')}</div>
+            <div className="s">
+              {b.freeModel
+                ? tr('With a free model set, Mitzi switches to it instead of stopping.')
+                : tr('Refuse new requests once a limit is reached, including scheduled tasks and workflows. Otherwise Mitzi only warns.')}
+            </div>
           </div>
           <Toggle label={tr('Stop at the limit')} on={b.hardStop} onChange={(v) => void update({ hardStop: v })} />
         </div>
       </section>
-      {budget && (budget.daily || budget.monthly) ? (
+      {budget?.limits.length ? (
         <section className="settings-section card">
           <h2>{tr('So far')}</h2>
           <BudgetMeters budget={budget} />
@@ -384,6 +409,103 @@ function BudgetSettings() {
         </section>
       ) : null}
     </>
+  );
+}
+
+/** One limit: how much, per what period, and when that period starts over. */
+function LimitRow({ limit, status, onChange, onRemove }: { limit: BudgetLimit; status?: BudgetLimitStatus; onChange(patch: Partial<BudgetLimit>): void; onRemove(): void }) {
+  const preset = PRESETS.includes(limit.amount);
+  const [custom, setCustom] = useState(!preset);
+  const [amount, setAmount] = useState(String(limit.amount));
+  useEffect(() => setAmount(String(limit.amount)), [limit.amount]);
+  return (
+    <div className={`budget-limit ${status?.state ?? 'ok'}`}>
+      {custom ? (
+        <form
+          className="money-input"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (Number(amount) > 0) onChange({ amount: Number(amount) });
+          }}
+        >
+          $
+          <input
+            className="input"
+            type="number"
+            min={0.01}
+            step="any"
+            autoFocus={!preset}
+            value={amount}
+            aria-label={tr('Amount in dollars')}
+            onChange={(e) => setAmount(e.target.value)}
+            onBlur={() => Number(amount) > 0 && Number(amount) !== limit.amount && onChange({ amount: Number(amount) })}
+          />
+        </form>
+      ) : (
+        <select
+          className="select"
+          value={limit.amount}
+          aria-label={tr('Amount')}
+          onChange={(e) => (e.target.value === 'custom' ? setCustom(true) : onChange({ amount: Number(e.target.value) }))}
+        >
+          {PRESETS.map((p) => (
+            <option key={p} value={p}>
+              ${p}
+            </option>
+          ))}
+          <option value="custom">{tr('Custom…')}</option>
+        </select>
+      )}
+      <select
+        className="select"
+        value={limit.period}
+        aria-label={tr('Period')}
+        onChange={(e) => {
+          const period = e.target.value as BudgetPeriod;
+          onChange({ period, resetDay: period === 'week' ? 1 : period === 'month' ? 1 : undefined });
+        }}
+      >
+        {PERIODS.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.label}
+          </option>
+        ))}
+      </select>
+      {limit.period === 'week' && (
+        <label className="row small" style={{ gap: 6 }}>
+          {tr('starting')}
+          <select className="select" value={limit.resetDay ?? 1} aria-label={tr('Day the week starts over')} onChange={(e) => onChange({ resetDay: Number(e.target.value) })}>
+            {WEEKDAYS.map((d, i) => (
+              <option key={i} value={i}>
+                {d}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {limit.period === 'month' && (
+        <label className="row small" style={{ gap: 6 }}>
+          {tr('starting on day')}
+          <select className="select" value={limit.resetDay ?? 1} aria-label={tr('Day the month starts over')} onChange={(e) => onChange({ resetDay: Number(e.target.value) })}>
+            {Array.from({ length: 28 }, (_, i) => (
+              <option key={i + 1} value={i + 1}>
+                {i + 1}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <span className="budget-limit-end">
+      {status && (
+        <span className={`small budget-limit-spent ${status.state}`} title={status.resetsAt ? tr('Starts over {0}', new Date(status.resetsAt).toLocaleString()) : tr('Counting since {0}', new Date(status.start).toLocaleDateString())}>
+          {tr('{0} spent', money(status.spent))}
+        </span>
+      )}
+      <button className="icon-btn sm" aria-label={tr('Remove this limit')} title={tr('Remove')} onClick={onRemove}>
+        <X size={14} />
+      </button>
+      </span>
+    </div>
   );
 }
 
