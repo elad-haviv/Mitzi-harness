@@ -47,7 +47,7 @@ import { CopyButton, Markdown } from './Markdown';
 import { Diff, useAutoResize } from './ui';
 import { SubagentsCard, TeamCard, TeamProgress } from './Team';
 import { AutoMessage, LoopBadge, ReviewBox } from './Feedback';
-import { clock, PlanCard, StatsLine, useChatActions, useElapsed } from './Work';
+import { clock, PlanCard, StatsLine, useChatActions, useElapsed, VerifyBadge } from './Work';
 import { plural, tr } from '../i18n';
 
 // ---------- Content helpers ----------
@@ -339,6 +339,7 @@ export function AssistantTurn({
   const model = messages.find((m) => m.model)?.model;
   const rating = messages.at(-1)?.rating;
   const stats = messages.at(-1)?.stats;
+  const verify = messages.at(-1)?.verify;
   const route = messages.findLast((m) => m.route)?.route;
   const actions = useChatActions();
   const loopId = messages.at(-1)?.feedbackLoopId;
@@ -379,6 +380,7 @@ export function AssistantTurn({
           )}
           {route ? <RouteBadge route={route} /> : model && <span className="meta">{modelLabel(model, models)}</span>}
           {stats && <StatsLine stats={stats} />}
+          {verify && <VerifyBadge results={verify} />}
         </div>
         {loop && reviewIndex !== undefined && <LoopBadge loop={loop} index={reviewIndex} />}
         {reviewing && reviewIndex !== undefined && <ReviewBox index={reviewIndex} loop={loop} onDone={() => setReviewing(false)} />}

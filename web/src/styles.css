@@ -4674,6 +4674,34 @@ button.folder-row:hover {
   width: fit-content;
   max-width: 100%;
 }
+.auto-divider > summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+}
+details.auto-divider {
+  display: block;
+}
+.verify-output {
+  margin: 6px 0 0;
+  max-height: 240px;
+  overflow: auto;
+  font-size: 11.5px;
+  white-space: pre-wrap;
+}
+.verify-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.verify-badge.ok {
+  color: var(--ok);
+}
+.verify-badge.bad {
+  color: var(--danger);
+}
 .turn > .auto-divider,
 .messages-inner > .auto-divider {
   margin-inline-start: 44px;

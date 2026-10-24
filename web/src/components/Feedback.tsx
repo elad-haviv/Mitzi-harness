@@ -1,6 +1,6 @@
 // The feedback loop: rate a result, tell the bot what you meant and what it did, have it redo the
 // task until you're happy, and let it learn from the whole exchange.
-import { Brain, Check, ListChecks, Loader2, RotateCcw, Star, Target } from 'lucide-react';
+import { BadgeX, Brain, Check, ListChecks, Loader2, RotateCcw, SearchCheck, Star, Target } from 'lucide-react';
 import { useState } from 'react';
 import { api, ChatMessage, FeedbackLoop } from '../api';
 import { useApp } from '../state';
@@ -144,6 +144,29 @@ export function AutoMessage({ message }: { message: ChatMessage }) {
         <Target size={13} />
         <span>{tr('Goal not met yet')}{check ? `: ${check}` : ''} {tr('· continuing')}</span>
       </div>
+    );
+  }
+  if (message.auto === 'verify') {
+    const command = /\(`([^`]+)`\)/.exec(text)?.[1];
+    const output = /<output>\n([\s\S]*)\n<\/output>/.exec(text)?.[1];
+    return (
+      <details className="auto-divider verify-failed">
+        <summary>
+          <BadgeX size={13} /> {tr('Checks failed{0} · continuing', command ? ` (${command})` : '')}
+        </summary>
+        {output && <pre className="verify-output">{output}</pre>}
+      </details>
+    );
+  }
+  if (message.auto === 'critique') {
+    const findings = text.split('\n').filter((l) => l.startsWith('- '));
+    return (
+      <details className="auto-divider">
+        <summary>
+          <SearchCheck size={13} /> {tr('Self-review found issues · continuing')}
+        </summary>
+        {findings.length > 0 && <pre className="verify-output">{findings.join('\n')}</pre>}
+      </details>
     );
   }
   if (message.auto === 'plan') {

@@ -1,6 +1,8 @@
 // Pieces of a chat that works on tasks: the stopwatch, response stats, modes, the side panel's
 // tabs (tasks, browser, usage), the goal bar, /btw answers and plans.
 import {
+  BadgeCheck,
+  BadgeX,
   BarChart3,
   Check,
   CheckCircle2,
@@ -23,7 +25,7 @@ import {
   X,
 } from 'lucide-react';
 import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
-import type { Chat, ChatMode, FeedbackLoop, Goal, Plan, ResponseStats, Todo } from '../api';
+import type { Chat, ChatMode, FeedbackLoop, Goal, Plan, ResponseStats, Todo, VerifyResult } from '../api';
 import { href, navigate } from '../router';
 import { formatTokens, useApp } from '../state';
 import { Markdown } from './Markdown';
@@ -90,6 +92,20 @@ export function StatsLine({ stats }: { stats: ResponseStats }) {
       <Timer size={12} /> {duration(stats.durationMs)}
       {tokens > 0 && <>{' '}{tr('· {0} tokens', formatTokens(tokens))}</>}
       {stats.cost > 0 && <> · {money(stats.cost)}</>}
+    </span>
+  );
+}
+
+/** Whether the project's checks passed when the response ended. */
+export function VerifyBadge({ results }: { results: VerifyResult[] }) {
+  const last = results.at(-1);
+  if (!last) return null;
+  const tries = results.length;
+  return (
+    <span className={`meta verify-badge ${last.passed ? 'ok' : 'bad'}`} title={last.output.slice(-600)}>
+      {last.passed ? <BadgeCheck size={12} /> : <BadgeX size={12} />}{' '}
+      {last.passed ? tr('Checks pass') : tr('Checks fail')} <code>{last.command}</code>
+      {tries > 1 && <>{' '}{tr('· {0} runs', tries)}</>}
     </span>
   );
 }

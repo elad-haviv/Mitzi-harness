@@ -259,7 +259,7 @@ export function registerWorkRoutes(route: Route, deps: WorkDeps): void {
     const rating = Math.round(Number(body?.rating));
     if (!(rating >= 1 && rating <= 5)) throw new HttpError(400, 'Rate from 1 to 5');
     const redo = body?.redo === true;
-    const userIndex = chat.messages.slice(0, index).findLastIndex((m) => m.role === 'user' && m.auto !== 'redo' && m.auto !== 'goal');
+    const userIndex = chat.messages.slice(0, index).findLastIndex((m) => m.role === 'user' && !m.auto);
     let loop = answer.feedbackLoopId ? store.feedback.get(answer.feedbackLoopId) : undefined;
     if (!loop) {
       loop = {

@@ -37,6 +37,7 @@ import { SearchIndex } from './search.js';
 import { ComputerService, systemBackend } from './computer.js';
 import { BrowserService } from './browser.js';
 import { registerWorkRoutes } from './routes-work.js';
+import { detectVerifyCommand } from './verify.js';
 import { registerWorkflowRoutes } from './routes-workflows.js';
 import { WorkflowEngine, workflowTool } from './workflows.js';
 import { clamp, fail, Handler, HttpError, Req, STREAMED, str } from './util.js';
@@ -533,7 +534,12 @@ export function createApp(opts: AppOptions) {
 
   const projectView = (p: Project) => {
     const size = knowledge.size(p);
-    return { ...p, chatCount: store.chats.all().filter((c) => c.projectId === p.id).length, knowledge: { ...size, searched: size.chars > INLINE_LIMIT } };
+    return {
+      ...p,
+      chatCount: store.chats.all().filter((c) => c.projectId === p.id).length,
+      knowledge: { ...size, searched: size.chars > INLINE_LIMIT },
+      verifyDetected: p.folder ? detectVerifyCommand(p.folder) : undefined,
+    };
   };
 
   route('GET', '/api/projects', () =>
@@ -569,6 +575,12 @@ export function createApp(opts: AppOptions) {
     }
     if (body.folder === null || body.folder === '') p.folder = undefined;
     else if (typeof body.folder === 'string') p.folder = validateFolder(body.folder);
+    if (body.verify && typeof body.verify === 'object') {
+      p.verify = {
+        enabled: body.verify.enabled !== false,
+        command: typeof body.verify.command === 'string' && body.verify.command.trim() ? body.verify.command.trim().slice(0, 500) : undefined,
+      };
+    }
     if (Array.isArray(body.knowledgeFolders)) p.knowledgeFolders = [...new Set(body.knowledgeFolders.filter((f: unknown) => typeof f === 'string').map((f: string) => validateFolder(f)))].slice(0, 10) as string[];
     p.updatedAt = now();
     return projectView(store.projects.put(p));

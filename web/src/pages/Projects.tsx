@@ -1,6 +1,6 @@
 import { extractText, isDocument } from '../documents';
 import { ProjectUsage } from './Insights';
-import { BookOpen, FileText, FolderGit2, FolderOpen, FolderSearch, GitBranch, Loader2, RefreshCw, Layers, MessageSquare, MoreHorizontal, Pencil, Plus, ShieldCheck, SquarePen, Terminal, Trash2, Upload } from 'lucide-react';
+import { BadgeCheck, BookOpen, FileText, FolderGit2, FolderOpen, FolderSearch, GitBranch, Loader2, RefreshCw, Layers, MessageSquare, MoreHorizontal, Pencil, Plus, ShieldCheck, SquarePen, Terminal, Trash2, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { api, ArtifactListItem, ChatListItem, PermissionMode, ProjectView, RepoStatus } from '../api';
 import { CloneRepoModal, FolderPicker } from '../components/Folders';
@@ -467,6 +467,7 @@ export function ProjectPage({ id }: { id: string }) {
                   </select>
                 </div>
               )}
+              {project.folder && <VerifyField project={project} onSave={(verify) => void update({ verify })} />}
             </div>
           </div>
         </div>
@@ -632,5 +633,44 @@ function DeleteProjectModal({ project: initial, onClose, onDeleted }: { project:
         </div>
       )}
     </Modal>
+  );
+}
+
+/** How Mitzi checks work in the folder before a work-mode turn ends. */
+function VerifyField({ project, onSave }: { project: ProjectView; onSave(verify: { enabled: boolean; command?: string }): void }) {
+  const enabled = project.verify?.enabled !== false;
+  const [command, setCommand] = useState(project.verify?.command ?? '');
+  useEffect(() => setCommand(project.verify?.command ?? ''), [project.verify?.command]);
+  return (
+    <div className="field" style={{ marginTop: 14, marginBottom: 0 }}>
+      <span className="field-label row" style={{ gap: 6 }}>
+        <BadgeCheck size={14} /> {tr('Checks before finishing')}
+      </span>
+      <label className="row small" style={{ gap: 6 }}>
+        <input type="checkbox" checked={enabled} onChange={(e) => onSave({ enabled: e.target.checked, command: command.trim() || undefined })} />
+        {tr('In Work mode, run the project’s checks after changes and keep working until they pass')}
+      </label>
+      {enabled && (
+        <form
+          className="row"
+          style={{ gap: 6, marginTop: 6 }}
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSave({ enabled, command: command.trim() || undefined });
+          }}
+        >
+          <input
+            className="input grow"
+            value={command}
+            onChange={(e) => setCommand(e.target.value)}
+            placeholder={project.verifyDetected ? tr('Detected: {0}', project.verifyDetected) : tr('No checks found; enter a command, e.g. npm test')}
+            aria-label={tr('Check command')}
+          />
+          <button className="btn btn-sm" type="submit" disabled={command.trim() === (project.verify?.command ?? '')}>
+            {tr('Save')}
+          </button>
+        </form>
+      )}
+    </div>
   );
 }

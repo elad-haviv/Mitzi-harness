@@ -196,8 +196,19 @@ export interface Project {
   /** Set when the folder was cloned from a remote repository. */
   repo?: { url: string; branch?: string };
   permissionMode: PermissionMode;
+  /** How work in the folder is checked before a work-mode turn ends (detected from the manifests unless set). */
+  verify?: { enabled?: boolean; command?: string };
   createdAt: string;
   updatedAt: string;
+}
+
+/** One run of a project's checks by the harness. */
+export interface VerifyResult {
+  command: string;
+  passed: boolean;
+  /** The end of the output. */
+  output: string;
+  at: string;
 }
 
 export interface AskOption {
@@ -304,8 +315,13 @@ export type ChatMessage = Message & {
   feedbackLoopId?: string;
   /** Said aloud in a realtime voice conversation (the text is its transcript). */
   spoken?: boolean;
-  /** Set on user messages Mitzi sent for the user: redo directions, plan approval, goal follow-ups, screenshots for the model. */
-  auto?: 'redo' | 'plan' | 'goal' | 'images';
+  /** The project's checks the harness ran before the response ended (on its last answer). */
+  verify?: VerifyResult[];
+  /**
+   * Set on user messages Mitzi sent for the user: redo directions, plan approval, goal follow-ups, screenshots for the
+   * model, failed checks and self-review findings.
+   */
+  auto?: 'redo' | 'plan' | 'goal' | 'images' | 'verify' | 'critique';
 };
 
 /** Time, tokens and cost of one response, including any teammates' work. */
@@ -798,6 +814,8 @@ export type StreamEvent =
   | { type: 'route'; route: RouteChoice }
   | { type: 'browser'; url: string; title: string; screenshot?: string }
   | { type: 'status'; message: string }
+  /** The harness ran the project's checks. */
+  | { type: 'verify'; result: VerifyResult }
   | { type: 'recall'; memories: RecalledMemory[] }
   | { type: 'warn'; message: string }
   | { type: 'compacted'; contextStart: number }

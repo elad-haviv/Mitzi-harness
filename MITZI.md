@@ -85,3 +85,8 @@
 - Browser (`src/server/browser.ts`): playwright-core (optional dependency) drives `browserExecutable()`, with a persistent
   profile in `MITZI_HOME/browser-profile`. Each action returns a text view with numbered elements (`data-mitzi-ref`), and
   a screenshot is emitted to the chat as a `browser` event.
+- Verification habit (`src/server/verify.ts`): in work mode, when a turn changed files (successful Write/Edit) in a
+  project folder, the runner runs the project's checks (`project.verify.command`, else detected from package.json,
+  Makefile, Cargo.toml, go.mod or pytest config) through the permission layer as a Bash call. While they fail it adds
+  an `auto: 'verify'` message and the bot keeps working, up to `MAX_VERIFY_ROUNDS` more times. Results are saved on the
+  response's last answer as `verify` and streamed as `verify` events.

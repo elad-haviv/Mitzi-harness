@@ -6,7 +6,7 @@ import type { Config, PermissionMode } from '../config.js';
 import type { ContentPart, LlmClient, Message } from '../openrouter.js';
 import type { RoutingClient } from '../providers.js';
 import { ApprovalAnswer, Approver, Permissions } from '../permissions.js';
-import { ApprovalLevel, Artifact, Attachment, AUTO_MODEL, Project, QueuedMessage, Bot, Chat, ChatMessage, ChatSummary, DEFAULT_BOT_ID, RecalledMemory, RouteChoice, StreamEvent } from '../shared/types.js';
+import { ApprovalLevel, Artifact, Attachment, AUTO_MODEL, Project, QueuedMessage, Bot, Chat, ChatMessage, ChatSummary, DEFAULT_BOT_ID, RecalledMemory, RouteChoice, StreamEvent, VerifyResult } from '../shared/types.js';
 import { ALL_TOOLS, Tool, toToolSpecs } from '../tools/index.js';
 import { webFetchTool } from '../tools/web.js';
 import { ToolError, type Todo } from '../tools/types.js';
@@ -32,6 +32,8 @@ import { concreteModel, route, RouteInput, RouteModels, routeModels } from './ro
 import { BrowserService, browserTool } from './browser.js';
 import { ComputerService, computerTool } from './computer.js';
 import { askTool, AskAnswers, Asker } from './ask.js';
+import { bashTool } from '../tools/bash.js';
+import { MAX_VERIFY_ROUNDS, touchedFiles, verifyCommandFor, verifyMessage, verifyOutcome } from './verify.js';
 
 const MAX_EVENT_OUTPUT = 20_000;
 
@@ -845,6 +847,7 @@ export class ChatRunner {
       systemPrompt: () => systemPrompt({ ...this.setup(chat), model, planning: !!planRequest }),
     });
     const firstText = typeof content === 'string' ? content : content.map((p) => (p.type === 'text' ? p.text : '')).join(' ');
+    const verifications: VerifyResult[] = [];
     // Save the user's message right away so a reload mid-turn still shows it.
     const userMessage: ChatMessage = {
       role: 'user',
@@ -917,6 +920,7 @@ export class ChatRunner {
         chat.goal.status = 'paused';
         emit({ type: 'goal', goal: chat.goal });
       }
+      if (working && !planRequest) await this.verifyWork(project, agent, before, permissions, emit, signal, verifications);
     } catch (err: any) {
       if (!signal.aborted) emit({ type: 'error', message: err?.message ?? String(err) });
     } finally {
@@ -935,6 +939,7 @@ export class ChatRunner {
         last.stats = stats;
         if (routed) last.route = routed;
         if (input.kind === 'message' && input.feedbackLoopId) last.feedbackLoopId = input.feedbackLoopId;
+        if (verifications.length) last.verify = verifications;
       }
       emit({ type: 'stats', stats });
       chat.messages.push(...saved);
@@ -952,6 +957,54 @@ export class ChatRunner {
     if (title) {
       await title;
       store.chats.put(chat);
+    }
+  }
+
+  /**
+   * The verification habit: when work changed files in the project's folder, run the project's checks, and while they
+   * fail, send the bot back to work (a few rounds at most). The check goes through the permission layer like any Bash call.
+   */
+  private async verifyWork(
+    project: Project | undefined,
+    agent: Agent,
+    before: number,
+    permissions: Permissions,
+    emit: (e: StreamEvent) => void,
+    signal: AbortSignal,
+    results: VerifyResult[],
+  ): Promise<void> {
+    const command = verifyCommandFor(project);
+    if (!command || !project?.folder) return;
+    let since = before;
+    for (let round = 1; !signal.aborted && agent.messages.at(-1)?.role === 'assistant'; round++) {
+      // Only check again when the bot changed something since the last check.
+      if (!touchedFiles(agent.messages.slice(since)).length) return;
+      since = agent.messages.length;
+      emit({ type: 'status', message: `Checking the work: ${command}…` });
+      const ctx = { ...agent.ctx, cwd: project.folder, signal };
+      const args = { command, timeout: 600_000, description: 'Run the project checks' };
+      const decision = await permissions.check(bashTool, args, ctx, signal);
+      if (!decision.allow) {
+        emit({ type: 'warn', message: `The project's checks didn't run: ${decision.reason}` });
+        return;
+      }
+      let output: string;
+      try {
+        output = await bashTool.run(args, ctx);
+      } catch (err: any) {
+        output = `Error: ${err?.message ?? String(err)}`;
+      }
+      if (signal.aborted) return;
+      const result = verifyOutcome(command, output);
+      results.push(result);
+      emit({ type: 'verify', result });
+      if (result.passed) return;
+      if (round > MAX_VERIFY_ROUNDS) {
+        emit({ type: 'warn', message: `The project's checks still fail after ${round} tries; stopping here so you can take a look.` });
+        return;
+      }
+      agent.messages.push({ role: 'user', content: verifyMessage(result, round + 1), auto: 'verify' } as ChatMessage as Message);
+      await agent.run(null, signal);
     }
   }
 

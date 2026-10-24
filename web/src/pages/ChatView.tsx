@@ -343,6 +343,9 @@ export function ChatView({
       case 'status':
         setLive((l) => l && { ...l, status: e.message });
         break;
+      case 'verify':
+        setLive((l) => l && { ...l, status: e.result.passed ? tr('Checks pass: {0}', e.result.command) : tr('Checks failed: {0}', e.result.command) });
+        break;
       case 'route':
         setLive((l) => l && { ...l, route: e.route });
         break;
