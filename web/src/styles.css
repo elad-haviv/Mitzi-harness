@@ -7666,3 +7666,111 @@ img.zoomable {
 .resizing-chat iframe {
   pointer-events: none;
 }
+
+/* ---------- Workspace editors ---------- */
+.code-editor {
+  position: relative;
+  flex: 1;
+  min-height: 70vh;
+  background: var(--code-bg);
+}
+.code-editor-layer,
+.code-editor-input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 18px 22px;
+  border: 0;
+  font: 13px/1.6 var(--mono);
+  letter-spacing: normal;
+  tab-size: 2;
+  white-space: pre;
+  overflow: auto;
+  box-sizing: border-box;
+}
+.code-editor-layer {
+  pointer-events: none;
+  color: var(--text);
+  background: transparent;
+  overflow: hidden;
+}
+.code-editor-input {
+  resize: none;
+  outline: none;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+  -webkit-text-fill-color: transparent;
+}
+.code-editor-input::placeholder {
+  color: var(--muted);
+  -webkit-text-fill-color: var(--muted);
+}
+.code-editor-input::selection {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  -webkit-text-fill-color: transparent;
+}
+/* Prose (Markdown source) wraps, and reads like the document. */
+.code-editor.wrap {
+  background: transparent;
+}
+.code-editor.wrap .code-editor-layer,
+.code-editor.wrap .code-editor-input {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.7;
+  padding: 28px max(24px, calc((100% - 760px) / 2)) 80px;
+}
+.write-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.format-bar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.format-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 5px;
+  background: var(--border);
+}
+.rich-wrap {
+  flex: 1;
+  padding: 32px 24px 80px;
+}
+.rich-editor {
+  outline: none;
+  min-height: 60vh;
+  cursor: text;
+}
+.rich-editor {
+  position: relative;
+}
+.rich-editor[data-empty='true']::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  color: var(--muted);
+  pointer-events: none;
+  white-space: pre-wrap;
+}
+.rich-editor table {
+  border-collapse: collapse;
+}
+.rich-editor th,
+.rich-editor td {
+  border: 1px solid var(--border-strong);
+  padding: 4px 10px;
+  min-width: 60px;
+}

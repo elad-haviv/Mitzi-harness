@@ -23,6 +23,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { api, Artifact, ArtifactComment, ArtifactListItem, ArtifactType, ArtifactWork, DEFAULT_BOT_ID, TEXT_ARTIFACT_TYPES } from '../api';
 import { artifactDocument, ArtifactIcon, ArtifactThumb, download, HighlightedCode, isMedia, MediaView, SlidesView, TYPE_LABEL } from '../components/Artifacts';
 import { Markdown } from '../components/Markdown';
+import { CodeEditor, editorLanguage, FormatCommand, formatMarkdown, FormatToolbar, RichEditor, RichEditorHandle, shortcut } from '../components/Editors';
 import { Empty, Modal, useConfirm } from '../components/ui';
 import { href, navigate } from '../router';
 import { relativeTime, useApp } from '../state';
@@ -314,6 +315,42 @@ export function ArtifactPage({ id }: { id: string }) {
   };
   useEffect(() => () => void flush(), [flush]);
 
+  const edit = (value: string) => {
+    setDraft(value);
+    queueSave({ content: value });
+  };
+  // Documents are edited formatted unless the user asked to see the Markdown.
+  const [showSource, setShowSource] = useState(() => {
+    try {
+      return localStorage.getItem('mitzi.writeSource') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggleSource = () => {
+    setShowSource((v) => {
+      try {
+        localStorage.setItem('mitzi.writeSource', v ? '0' : '1');
+      } catch {
+        // Not remembered.
+      }
+      return !v;
+    });
+  };
+  const richEditor = useRef<RichEditorHandle>(null);
+  const format = (cmd: FormatCommand) => {
+    if (richEditor.current && !showSource && artifact?.type === 'markdown') return richEditor.current.run(cmd);
+    const el = textarea.current;
+    if (!el) return;
+    el.focus();
+    if (cmd === 'undo' || cmd === 'redo') return void document.execCommand(cmd);
+    const url = cmd === 'link' ? window.prompt(tr('Link address'), 'https://') : '';
+    if (cmd === 'link' && url === null) return;
+    const next = formatMarkdown(el.value, el.selectionStart, el.selectionEnd, cmd, url ?? '');
+    edit(next.text);
+    requestAnimationFrame(() => el.setSelectionRange(next.start, next.end));
+  };
+
   // The bot works from the saved version, so save before each request.
   const ask = async (text: string) => {
     await flush();
@@ -421,23 +458,44 @@ export function ArtifactPage({ id }: { id: string }) {
       </div>
     );
   } else if (mode === 'edit') {
-    body = (
-      <textarea
+    const prose = artifact.type === 'markdown' || artifact.type === 'slides';
+    const placeholder =
+      artifact.type === 'slides'
+        ? tr('# Title\nA subtitle\n\n---\n\n## First slide\n- A point\n- Another point\n\n(Separate slides with ---, or ask {0} to draft it →)', botName)
+        : tr('Start writing, or ask {0} to draft it →', botName);
+    const rich = artifact.type === 'markdown' && !showSource;
+    const sourceEditor = (
+      <CodeEditor
         ref={textarea}
-        className={`doc-editor${artifact.type === 'markdown' ? '' : ' code'}`}
         value={draft}
         readOnly={busy}
-        spellCheck={artifact.type === 'markdown' || artifact.type === 'slides'}
-        placeholder={
-          artifact.type === 'slides'
-            ? tr('# Title\nA subtitle\n\n---\n\n## First slide\n- A point\n- Another point\n\n(Separate slides with ---, or ask {0} to draft it →)', botName)
-            : tr('Start writing, or ask {0} to draft it →', botName)
-        }
-        onChange={(e) => {
-          setDraft(e.target.value);
-          queueSave({ content: e.target.value });
+        wrap={prose}
+        spellCheck={prose}
+        language={editorLanguage(artifact.type, artifact.language)}
+        placeholder={placeholder}
+        onChange={edit}
+        onKey={(e) => {
+          const cmd = prose ? shortcut(e) : undefined;
+          if (!cmd) return false;
+          e.preventDefault();
+          format(cmd);
+          return true;
         }}
       />
+    );
+    body = prose ? (
+      <div className="write-pane">
+        <FormatToolbar onCommand={format} source={!rich} onToggleSource={toggleSource} disabled={busy} hideToggle={artifact.type === 'slides'} />
+        {rich ? (
+          <div ref={preview} className="rich-wrap">
+            <RichEditor ref={richEditor} value={draft} readOnly={busy} placeholder={placeholder} onChange={edit} />
+          </div>
+        ) : (
+          sourceEditor
+        )}
+      </div>
+    ) : (
+      sourceEditor
     );
   } else if (iframeDoc) {
     body = <iframe className="ws-frame" title={artifact.title} sandbox="allow-scripts allow-popups allow-forms allow-modals allow-downloads" srcDoc={iframeDoc} />;
@@ -522,7 +580,7 @@ export function ArtifactPage({ id }: { id: string }) {
           </button>
         </div>
         <div className="doc-body">
-          <div className={`doc-paper-wrap${flash ? ' flash' : ''}${iframeDoc || (mode === 'edit' && artifact.type !== 'markdown') ? ' full' : ''}`} onMouseUp={captureSelection} onKeyUp={captureSelection}>
+          <div className={`doc-paper-wrap${flash ? ' flash' : ''}${iframeDoc || mode === 'edit' ? ' full' : ''}`} onMouseUp={captureSelection} onKeyUp={captureSelection}>
             {body}
           </div>
           {side && (

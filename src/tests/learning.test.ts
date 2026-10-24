@@ -311,3 +311,38 @@ test('learned routing: switches only with enough data on both models and a clear
   assert.equal(learnedPick('work', 'better', stats, new Set(['better', 'strong'])), undefined);
   assert.equal(learnedPick('chat', 'chatty', stats), undefined);
 });
+
+test('formatted editor: its HTML turns back into the same Markdown', async () => {
+  const { htmlToMarkdown } = await import('../shared/htmlToMarkdown.js');
+  type N = { nodeType: number; nodeName: string; textContent: string | null; childNodes: N[]; getAttribute(n: string): string | null };
+  const t = (text: string): N => ({ nodeType: 3, nodeName: '#text', textContent: text, childNodes: [], getAttribute: () => null });
+  const h = (tag: string, attrs: Record<string, string> | null, ...children: (N | string)[]): N => {
+    const childNodes = children.map((c) => (typeof c === 'string' ? t(c) : c));
+    return { nodeType: 1, nodeName: tag.toUpperCase(), childNodes, textContent: childNodes.map((c) => c.textContent).join(''), getAttribute: (n) => attrs?.[n] ?? null };
+  };
+  const doc = h(
+    'div',
+    null,
+    h('h1', null, 'Q3 update'),
+    h('p', null, 'We ', h('strong', null, 'shipped '), 'it. See ', h('a', { href: 'https://x.dev' }, 'the post'), ' and ', h('code', null, 'npm test'), '.'),
+    h('ul', null, h('li', null, 'Billing'), h('li', null, 'Mobile', h('ol', null, h('li', null, 'iOS'), h('li', null, 'Android')))),
+    h('blockquote', null, h('p', null, 'Great ', h('em', null, 'quarter'))),
+    h('pre', null, h('code', { class: 'language-js' }, 'let a = 1;\n')),
+    h('table', null, h('thead', null, h('tr', null, h('th', null, 'A'), h('th', null, 'B'))), h('tbody', null, h('tr', null, h('td', null, '1'), h('td', null, 'x|y')))),
+    h('hr', null),
+    h('div', null, 'Typed on a new line', h('br', null), 'and another'),
+  );
+  assert.equal(
+    htmlToMarkdown(doc),
+    [
+      '# Q3 update',
+      'We **shipped** it. See [the post](https://x.dev) and `npm test`.',
+      '- Billing\n- Mobile\n  1. iOS\n  2. Android',
+      '> Great *quarter*',
+      '```js\nlet a = 1;\n```',
+      '| A | B |\n| --- | --- |\n| 1 | x\\|y |',
+      '---',
+      'Typed on a new line  \nand another',
+    ].join('\n\n') + '\n',
+  );
+});
