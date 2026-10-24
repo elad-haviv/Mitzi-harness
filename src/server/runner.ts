@@ -438,7 +438,7 @@ export class ChatRunner {
     const tools: Tool[] = project?.folder ? [...ALL_TOOLS] : bot.tools.web ? [webFetchTool] : [];
     // Working on an artifact in its workspace needs the artifact tools whatever the bot's settings.
     const focus = this.focusOf(chat);
-    if (bot.tools.artifacts || focus) tools.push(artifactTool(store, chat.id, chat.projectId, onArtifact));
+    if (bot.tools.artifacts || focus) tools.push(artifactTool(store, chat.id, chat.projectId, onArtifact, focus?.id));
     if (focus || store.artifacts.all().some((a) => a.chatId === chat.id && a.comments?.length)) tools.push(commentTool(store, chat.id, onArtifact));
     if (this.memoryOn(bot)) tools.push(memoryTool(memory, memory.bankFor(bot)));
     if (project?.folder && this.projectKnowledge) tools.push(projectNoteTool(this.projectKnowledge, project.id));

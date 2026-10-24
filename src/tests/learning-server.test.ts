@@ -36,12 +36,20 @@ before(async () => {
       }
       const body = JSON.parse(raw);
       requests.push(body);
-      const chunks =
+      let chunks: object[];
+      try {
+        chunks =
         body.max_tokens === 60
           ? textChunks('Generated Title')
           : isMemoryJob(body)
             ? textChunks(JSON.stringify(body).includes('Extract memories') ? '{"facts": []}' : '{"update": [], "create": []}')
             : (jobReply(body) ?? reply(body));
+      } catch (err) {
+        // A failed assertion inside a reply shows up as a model error instead of hanging the test.
+        res.writeHead(500, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: { message: `mock: ${(err as Error).message}` } }));
+        return;
+      }
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       for (const c of chunks) res.write(`data: ${JSON.stringify(c)}\n\n`);
       res.end('data: [DONE]\n\n');
@@ -451,4 +459,28 @@ test('evals: a past task is replayed with another model in a throwaway worktree,
   assert.equal(existsSync(join(folder, 'eval.txt')), false);
   assert.doesNotMatch(execFileSync('git', ['worktree', 'list'], { cwd: folder }).toString(), /mitzi-eval-/);
   assert.equal((await call('GET', '/api/evals')).data[0].id, run.id);
+});
+
+test('workspace: "create" while an artifact of that type is open fills it in, and comment fixes stay in it', async () => {
+  const page = (await call('POST', '/api/artifacts', { type: 'html', title: 'Untitled web page' })).data;
+  let turn = 0;
+  reply = (body) => {
+    if (turn++ === 0) {
+      assert.match(JSON.stringify(body.messages[0]), /rewrite\\" with id /);
+      return toolCallChunks('c1', 'Artifact', { command: 'create', type: 'html', title: 'Bakery', content: '<h1>Bakery</h1>' });
+    }
+    return textChunks('Made it.');
+  };
+  await stream(page.chatId, { content: 'Create a web page for a bakery', focus: page.id });
+  let list = (await call('GET', '/api/artifacts')).data.filter((a: any) => a.chatId === page.chatId);
+  assert.equal(list.length, 1);
+  assert.equal(list[0].title, 'Bakery');
+  assert.equal(list[0].versions.at(-1).content, '<h1>Bakery</h1>');
+
+  // Another type, or an explicit request for a separate one, still makes a new artifact.
+  turn = 0;
+  reply = () => (turn++ === 0 ? toolCallChunks('c2', 'Artifact', { command: 'create', type: 'html', title: 'Bakery v2', content: '<h1>Two</h1>', separate: true }) : textChunks('Here is a second one.'));
+  await stream(page.chatId, { content: 'Make me a separate second version', focus: page.id });
+  list = (await call('GET', '/api/artifacts')).data.filter((a: any) => a.chatId === page.chatId);
+  assert.equal(list.length, 2);
 });

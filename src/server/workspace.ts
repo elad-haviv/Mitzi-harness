@@ -46,8 +46,10 @@ export function focusPrompt(artifact: Artifact): string {
   return `# Workspace
 The user has the artifact "${artifact.title}" (id ${artifact.id}, type ${artifact.type}) open beside this chat and is working \
 on it with you. They can also edit it directly, so always work from the version below. When they ask for changes, make them \
-in the artifact with the Artifact tool ("update" for targeted edits, preferred; "rewrite" for restructuring or a first draft) \
-instead of pasting content into the chat, then say in a sentence or two what you changed. Use ArtifactComment to reply to \
+in this artifact with the Artifact tool ("update" for targeted edits, preferred; "rewrite" with id ${artifact.id} for \
+restructuring or a first draft, including when it's empty and they ask you to "create" or "make" it) instead of pasting \
+content into the chat or creating a new artifact, then say in a sentence or two what you changed. Addressing comments \
+means editing this artifact. Only create a separate artifact when they explicitly ask for another one. Use ArtifactComment to reply to \
 or resolve the user's comments once you've addressed them, or to leave a note on a passage.
 
 <artifact id="${artifact.id}" type="${artifact.type}" title="${artifact.title.replace(/"/g, "'")}">

@@ -14,9 +14,15 @@ interface ArtifactArgs {
   content?: string;
   old_str?: string;
   new_str?: string;
+  separate?: boolean;
 }
 
-export function artifactTool(store: Store, chatId: string, projectId: string | undefined, onChange: (a: Artifact) => void): Tool<ArtifactArgs> {
+/**
+ * `focusId`: the artifact open in the workspace beside the chat. While one is open, "create" of the same type writes
+ * into it (an empty draft gets its first version, a revision stays in the same artifact) unless the bot asks for a
+ * separate one, so asking to "create" or "fix" what's on screen never scatters copies.
+ */
+export function artifactTool(store: Store, chatId: string, projectId: string | undefined, onChange: (a: Artifact) => void, focusId?: string): Tool<ArtifactArgs> {
   return {
     name: 'Artifact',
     kind: 'read',
@@ -37,11 +43,24 @@ export function artifactTool(store: Store, chatId: string, projectId: string | u
         content: { type: 'string', description: 'Full content (create/rewrite)' },
         old_str: { type: 'string', description: 'Exact text to replace (update)' },
         new_str: { type: 'string', description: 'Replacement text (update)' },
+        separate: { type: 'boolean', description: 'create: make a new artifact even though one of the same type is open in the workspace (only when the user asks for another one)' },
       },
       required: ['command'],
     },
     summarize: (a) => a.title ?? a.id ?? '',
     async run(args, ctx) {
+      // The artifact on screen is the one being worked on.
+      const focus = focusId ? store.artifacts.get(focusId) : undefined;
+      if (args.command === 'create' && focus?.chatId === chatId && focus.type === args.type && !args.separate && typeof args.content === 'string') {
+        const empty = !(focus.versions.at(-1)?.content ?? '').trim();
+        if (args.title?.trim() && (empty || /^Untitled\b/i.test(focus.title))) focus.title = args.title.trim();
+        if (args.language) focus.language = args.language;
+        focus.versions.push({ content: args.content, title: focus.title, author: 'assistant', createdAt: now(), callId: ctx.callId });
+        focus.updatedAt = now();
+        store.artifacts.put(focus);
+        onChange(focus);
+        return `Wrote it into the open artifact "${focus.title}" (id ${focus.id}, now version ${focus.versions.length}) instead of creating a new one. Next time, change it with "update" or "rewrite".`;
+      }
       if (args.command === 'create') {
         if (!args.type || !ARTIFACT_TYPES.includes(args.type)) throw new ToolError(`type must be one of: ${ARTIFACT_TYPES.join(', ')}`);
         if (typeof args.content !== 'string') throw new ToolError('content is required');
