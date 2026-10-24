@@ -38,6 +38,7 @@ import type { EditMiner } from './edits.js';
 import { changesFromMessages, critiqueMessage, critiquePrompt, parseCritique, planCheckPrompt } from './critique.js';
 import { ProjectKnowledge, projectNoteTool } from './project-knowledge.js';
 import type { Playbooks } from './playbooks.js';
+import type { ModelAdaptation } from './adaptation.js';
 import { lessonsInPrompt } from './lessons.js';
 import { git } from './git.js';
 import { MAX_VERIFY_ROUNDS, touchedFiles, verifyCommandFor, verifyMessage, verifyOutcome } from './verify.js';
@@ -222,6 +223,8 @@ export class ChatRunner {
   projectKnowledge?: ProjectKnowledge;
   /** How kinds of tasks were done before (set once it exists). */
   playbooks?: Playbooks;
+  /** Per-model notes from the outcome ledger (set once it exists). */
+  adaptation?: ModelAdaptation;
 
   constructor(private readonly deps: RunnerDeps) {}
 
@@ -548,7 +551,7 @@ export class ChatRunner {
       cwd: project?.folder ?? homedir(),
       inlineImage: this.inlineImage,
       systemPrompt: () =>
-        `${systemPrompt({ ...this.setup(virtual), recalled, team: [] })}\n\n` +
+        `${systemPrompt({ ...this.setup(virtual), recalled, team: [], modelHints: this.adaptation?.hints(model).map((h) => h.hint) })}\n\n` +
         (run.subagent
           ? `# Working as a subagent\nYou are a subagent: the main ${lead.name} split this focused task off a larger request from the user and works on other parts meanwhile. ` +
             `The user won't see your reply directly: the main ${lead.name} will use it. Stay on this task, do it thoroughly, and reply with the finished result, without small talk.`
@@ -895,7 +898,7 @@ export class ChatRunner {
       ui,
       cwd: project?.folder ?? homedir(),
       inlineImage: this.inlineImage,
-      systemPrompt: () => systemPrompt({ ...this.setup(chat), model, planning: !!planRequest }),
+      systemPrompt: () => systemPrompt({ ...this.setup(chat), model, planning: !!planRequest, modelHints: this.adaptation?.hints(model).map((h) => h.hint) }),
     });
     const firstText = typeof content === 'string' ? content : content.map((p) => (p.type === 'text' ? p.text : '')).join(' ');
     const verifications: VerifyResult[] = [];

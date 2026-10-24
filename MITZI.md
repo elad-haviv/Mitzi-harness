@@ -129,3 +129,7 @@
   (`OutcomeLog.amendListeners`).
 - Plan critique: after `/plan` proposes a plan, `checkPlan` asks the fast model where it goes against the bot's lessons
   or the project's facts; findings are saved as `plan.notes` and shown on the plan before approval.
+- Per-model adaptation (`src/server/adaptation.ts`): `modelHints` turns a model's measured habits (first checks
+  failing, failed edits, redos, over-broad changes, user fix-ups) into prompt notes, only after `MIN_TASKS` outcomes and
+  compared with the other models. `ModelAdaptation` caches them for 5 minutes; the runner adds them for the answering
+  model (and teammates'), and Insights → Learning lists them per model.

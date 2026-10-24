@@ -1711,4 +1711,6 @@ export const he: Record<string, string> = {
   'Learning from experience': 'למידה מניסיון',
   'Show the tool calls that worked last time': 'להציג את קריאות הכלים שעבדו בפעם הקודמת',
   'When a task matches a playbook Mitzi learned in the project, also include the exact sequence of tool calls that worked. It can help weaker models, but long or outdated sequences can mislead, so it’s off by default.': 'כשמשימה תואמת מדריך עבודה שמיצי למדה בפרויקט, לצרף גם את רצף קריאות הכלים המדויק שעבד. זה יכול לעזור למודלים חלשים יותר, אבל רצפים ארוכים או מיושנים עלולים להטעות, ולכן זה כבוי כברירת מחדל.',
+  'Notes it gets': 'הערות שהוא מקבל',
+  'Once a model has enough tasks, the habits its numbers show (skipping checks, failing edits, needing redos) become notes in its prompt. Hover a note to see why.': 'כשלמודל יש מספיק משימות, ההרגלים שהמספרים שלו מראים (דילוג על בדיקות, עריכות שנכשלות, צורך בתיקונים) הופכים להערות בהנחיה שלו. אפשר לרחף מעל הערה כדי לראות למה.',
 };

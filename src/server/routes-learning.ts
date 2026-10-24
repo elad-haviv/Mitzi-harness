@@ -5,6 +5,7 @@ import type { ProjectKnowledge } from './project-knowledge.js';
 import type { LessonHygiene } from './lesson-hygiene.js';
 import { learningMetrics } from './metrics.js';
 import type { Playbooks } from './playbooks.js';
+import type { ModelAdaptation } from './adaptation.js';
 import type { Store } from './store.js';
 import { fail, HttpError, Route, str } from './util.js';
 
@@ -15,10 +16,11 @@ export interface LearningDeps {
   projectKnowledge: ProjectKnowledge;
   hygiene: LessonHygiene;
   playbooks: Playbooks;
+  adaptation: ModelAdaptation;
 }
 
 export function registerLearningRoutes(route: Route, deps: LearningDeps): void {
-  const { store, outcomes, learner, projectKnowledge, hygiene, playbooks } = deps;
+  const { store, outcomes, learner, projectKnowledge, hygiene, playbooks, adaptation } = deps;
   const getBot = (id: string) => store.bots.get(id) ?? fail(404, 'Bot not found');
   const getProject = (id: string) => store.projects.get(id) ?? fail(404, 'Project not found');
 
@@ -42,6 +44,9 @@ export function registerLearningRoutes(route: Route, deps: LearningDeps): void {
       bots.flatMap((b) => b.retiredLessons ?? []),
     );
   });
+
+  /** The notes each model gets from how its tasks went, and why. */
+  route('GET', '/api/insights/model-hints', () => adaptation.all());
 
   /** Distills lessons from a bot's outcomes now instead of waiting for the background job. */
   route('POST', '/api/bots/:id/learn', async ({ params }) => {

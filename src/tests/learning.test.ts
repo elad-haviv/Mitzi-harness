@@ -14,6 +14,7 @@ import { changesFromMessages, parseCritique } from '../server/critique.js';
 import { LessonHygiene, scoreLessons } from '../server/lesson-hygiene.js';
 import { learningMetrics, lessonsAt, weekOf } from '../server/metrics.js';
 import { cleanRun, similarity } from '../server/playbooks.js';
+import { modelHints } from '../server/adaptation.js';
 import { tempDir } from './helpers.js';
 
 const call = (id: string, name: string, args: object) => ({ id, type: 'function' as const, function: { name, arguments: JSON.stringify(args) } });
@@ -257,4 +258,16 @@ test('playbooks: learned only from clean work, and offered to similar tasks', ()
   const pb = { title: 'Add an API route', when: 'Adding a new HTTP endpoint to the server routes' };
   assert.ok(similarity('Add a route to the server for exporting users', pb) >= 0.2);
   assert.ok(similarity('Translate the README into Hebrew', pb) < 0.2);
+});
+
+test('per-model adaptation: notes appear only with enough evidence, and say what the numbers show', () => {
+  const sloppy = (i: number) =>
+    outcome({ model: 'weak', firstCheckPassed: i % 3 === 0, errors: [{ tool: 'Edit', kind: 'agent', text: 'old_string not found' }], filesTouched: ['a', 'b', 'c', 'd'] });
+  const tidy = () => outcome({ model: 'strong', firstCheckPassed: true, filesTouched: ['a'] });
+  const all = [...Array.from({ length: 9 }, (_, i) => sloppy(i)), ...Array.from({ length: 10 }, tidy)];
+  const hints = modelHints('weak', all);
+  assert.deepEqual(hints.map((h) => h.hint.split(' ').slice(0, 3).join(' ')), ["Before you say", 'Read a file', 'Keep changes focused']);
+  assert.match(hints[0].why, /Only 33% of its checked work passed/);
+  assert.deepEqual(modelHints('strong', all), []);
+  assert.deepEqual(modelHints('weak', all.slice(0, 5)), []);
 });

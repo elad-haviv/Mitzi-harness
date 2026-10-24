@@ -191,8 +191,10 @@ const pct = (v?: number) => (v === undefined ? '–' : `${Math.round(v * 100)}%`
 function OutcomeMetrics({ botId }: { botId?: string }) {
   const { toast, models } = useApp();
   const [data, setData] = useState<LearningMetrics>();
+  const [hints, setHints] = useState<Awaited<ReturnType<typeof api.modelHints>>>([]);
   useEffect(() => {
     api.outcomeMetrics(botId).then(setData, (err) => toast(err.message));
+    api.modelHints().then(setHints, () => {});
   }, [botId, toast]);
   if (!data) return <Loader2 size={18} className="spin muted" />;
   const o = data.overall;
@@ -238,6 +240,7 @@ function OutcomeMetrics({ botId }: { botId?: string }) {
       {data.byModel.length > 0 && (
         <section className="card">
           <h2>{tr('By model')}</h2>
+          <p className="muted small">{tr('Once a model has enough tasks, the habits its numbers show (skipping checks, failing edits, needing redos) become notes in its prompt. Hover a note to see why.')}</p>
           <table className="data-table">
             <thead>
               <tr>
@@ -246,6 +249,7 @@ function OutcomeMetrics({ botId }: { botId?: string }) {
                 <th>{tr('Right first try')}</th>
                 <th>{tr('Finished on green')}</th>
                 <th>{tr('Mistakes per task')}</th>
+                <th>{tr('Notes it gets')}</th>
               </tr>
             </thead>
             <tbody>
@@ -256,6 +260,13 @@ function OutcomeMetrics({ botId }: { botId?: string }) {
                   <td>{pct(m.firstTryAccepted)}</td>
                   <td>{pct(m.firstCheckPassed)}</td>
                   <td>{m.agentErrors.toFixed(1)}</td>
+                  <td className="small">
+                    {(hints.find((h) => h.model === m.model)?.hints ?? []).map((h, i) => (
+                      <div key={i} title={h.why}>
+                        {h.hint}
+                      </div>
+                    ))}
+                  </td>
                 </tr>
               ))}
             </tbody>

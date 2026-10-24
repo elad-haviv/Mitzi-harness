@@ -288,6 +288,7 @@ export const api = {
   acceptLoop: (id: string) => request<FeedbackLoop>('POST', `/api/feedback/${id}/accept`, {}),
   feedbackLoops: (botId?: string) => request<(FeedbackLoop & { chatTitle?: string })[]>('GET', `/api/feedback${botId ? `?botId=${botId}` : ''}`),
   deleteLoop: (id: string) => request('DELETE', `/api/feedback/${id}`),
+  modelHints: () => request<{ model: string; hints: { why: string; hint: string }[] }[]>('GET', '/api/insights/model-hints'),
   outcomeMetrics: (botId?: string, days = 90) => request<LearningMetrics>('GET', `/api/insights/outcomes?days=${days}${botId ? `&botId=${botId}` : ''}`),
   learning: (botId?: string) => request<LearningCurve>('GET', `/api/insights/learning${botId ? `?botId=${botId}` : ''}`),
   /** /compare: pick the winner (A or B) or skip. */

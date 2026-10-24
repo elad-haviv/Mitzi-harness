@@ -44,6 +44,7 @@ import { EditMiner } from './edits.js';
 import { LessonHygiene } from './lesson-hygiene.js';
 import { ProjectKnowledge } from './project-knowledge.js';
 import { Playbooks } from './playbooks.js';
+import { ModelAdaptation } from './adaptation.js';
 import { registerWorkflowRoutes } from './routes-workflows.js';
 import { WorkflowEngine, workflowTool } from './workflows.js';
 import { clamp, fail, Handler, HttpError, Req, STREAMED, str } from './util.js';
@@ -157,6 +158,8 @@ export function createApp(opts: AppOptions) {
   runner.projectKnowledge = projectKnowledge;
   const playbooks = new Playbooks({ store, client, config, outcomes });
   runner.playbooks = playbooks;
+  const adaptation = new ModelAdaptation(() => outcomes.all());
+  runner.adaptation = adaptation;
   const starters = new StarterService({ store, memory, client, config, memoryOn: (bot) => runner.memoryOn(bot) });
   seedBots(store, opts.dataDir);
   ensureDefaultBot(store);
@@ -776,7 +779,7 @@ export function createApp(opts: AppOptions) {
     return hub.view();
   });
   registerWorkRoutes(route, { store, runner, client, config, memory, usage });
-  registerLearningRoutes(route, { store, outcomes, learner, projectKnowledge, hygiene, playbooks });
+  registerLearningRoutes(route, { store, outcomes, learner, projectKnowledge, hygiene, playbooks, adaptation });
 
   // Search across chats, artifacts and memories.
   const search = new SearchIndex(join(opts.dataDir, 'search'), store, memory, () => {

@@ -43,6 +43,8 @@ export interface ChatSetup {
   projectFacts?: ProjectFact[];
   /** Playbooks from earlier work that match the task at hand. */
   playbooks?: Playbook[];
+  /** Notes for the answering model, from how its earlier tasks went. */
+  modelHints?: string[];
 }
 
 interface PromptSection {
@@ -177,6 +179,14 @@ export function promptSections(setup: ChatSetup): PromptSection[] {
       label: `Team lessons (${teamLessons.length})`,
       kind: 'memory',
       text: '# Team lessons\nYour teammates learned these from their own work. Keep them in mind, and when handing work over:\n' + teamLessons.map(({ bot: b, l }) => `- (${b.name}) ${l.text}`).join('\n'),
+    });
+  }
+
+  if (setup.modelHints?.length) {
+    sections.push({
+      label: `Notes for this model (${setup.modelHints.length})`,
+      kind: 'memory',
+      text: '# Notes for this model\nFrom how your earlier tasks here went:\n' + setup.modelHints.map((h) => `- ${h}`).join('\n'),
     });
   }
 
