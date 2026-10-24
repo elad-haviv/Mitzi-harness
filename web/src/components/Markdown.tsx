@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import { tr } from '../i18n';
+import { ZoomableImage } from './ui';
 
 export function CopyButton({ text, label = tr('Copy') }: { text: () => string; label?: string }) {
   const [done, setDone] = useState(false);
@@ -163,6 +164,7 @@ function MarkdownBody({ text }: { text: string }) {
           h2: ({ children }) => <h2 dir="auto">{children}</h2>,
           h3: ({ children }) => <h3 dir="auto">{children}</h3>,
           blockquote: ({ children }) => <blockquote dir="auto">{children}</blockquote>,
+          img: ({ src, alt }) => <ZoomableImage src={typeof src === 'string' ? src : undefined} alt={alt} />,
           a: ({ children, href }) => (
             <a href={href} target="_blank" rel="noreferrer noopener">
               {children}

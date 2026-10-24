@@ -49,6 +49,8 @@ import { SubagentsCard, TeamCard, TeamProgress } from './Team';
 import { AutoMessage, LoopBadge, ReviewBox } from './Feedback';
 import { clock, PlanCard, StatsLine, useChatActions, useElapsed, VerifyBadge } from './Work';
 import { plural, tr } from '../i18n';
+import { withoutShownMedia } from '../../../src/shared/mediaText';
+import { Lightbox } from './ui';
 
 // ---------- Content helpers ----------
 
@@ -335,6 +337,11 @@ export function AssistantTurn({
   onRate?(value: 1 | -1 | 0, comment?: string): void;
 }) {
   const { models } = useApp();
+  // Media the turn's tools made already show as cards; a reply embedding them again would show them twice.
+  const shownMedia = useMemo(
+    () => messages.flatMap((m) => (m.tool_calls ?? []).flatMap((c) => mediaFrom(results.get(c.id)?.output).map((x) => x.url))),
+    [messages, results],
+  );
   const text = messages.map(messageText).filter(Boolean).join('\n\n');
   const model = messages.find((m) => m.model)?.model;
   const rating = messages.at(-1)?.rating;
@@ -351,7 +358,7 @@ export function AssistantTurn({
       <div className="assistant-body">
         {memories && memories.length > 0 && <MemoryRecall memories={memories} botId={bot?.id} />}
         {messages.map((m, i) => (
-          <AssistantMessageBody key={i} message={m} results={results} artifacts={artifacts} activeArtifact={activeArtifact} onOpenArtifact={onOpenArtifact} />
+          <AssistantMessageBody key={i} message={m} results={results} artifacts={artifacts} activeArtifact={activeArtifact} onOpenArtifact={onOpenArtifact} shownMedia={shownMedia} />
         ))}
         <div className="msg-actions">
           <MessageTime ts={messages.at(-1)?.ts} />
@@ -493,12 +500,16 @@ export function mediaFrom(output?: string): { url: string; mime: string }[] {
 }
 
 export function MediaPreview({ url, mime, caption }: { url: string; mime: string; caption?: string }) {
+  const [open, setOpen] = useState(false);
   return (
     <figure className="media-card">
       {mime.startsWith('image/') ? (
-        <a href={url} target="_blank" rel="noreferrer">
-          <img src={url} alt={caption ?? tr('Generated image')} loading="lazy" />
-        </a>
+        <>
+          <button type="button" className="media-zoom" onClick={() => setOpen(true)} aria-label={tr('View larger')}>
+            <img src={url} alt={caption ?? tr('Generated image')} loading="lazy" />
+          </button>
+          {open && <Lightbox src={url} alt={caption ?? tr('Generated image')} onClose={() => setOpen(false)} />}
+        </>
       ) : mime.startsWith('video/') ? (
         <video src={url} controls playsInline preload="metadata" />
       ) : (
@@ -522,14 +533,17 @@ function AssistantMessageBody({
   artifacts,
   activeArtifact,
   onOpenArtifact,
+  shownMedia = [],
 }: {
   message: ChatMessage;
   results: Map<string, ToolResult>;
   artifacts: Artifact[];
   activeArtifact?: string;
   onOpenArtifact(a: Artifact, version: number): void;
+  /** Media files already shown as cards in this turn. */
+  shownMedia?: string[];
 }) {
-  const text = messageText(message);
+  const text = withoutShownMedia(messageText(message), shownMedia);
   return (
     <>
       {message.reasoning?.trim() && <Reasoning text={message.reasoning} />}

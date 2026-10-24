@@ -1,5 +1,6 @@
-import { X } from 'lucide-react';
+import { Download, X } from 'lucide-react';
 import { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useApp } from '../state';
 import { tr } from '../i18n';
 
@@ -179,4 +180,40 @@ export function useAutoResize(ref: React.RefObject<HTMLTextAreaElement | null>, 
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
   }, [ref, value]);
+}
+
+/** An image shown large over the page, without leaving Mitzi. Escape, the close button or a click outside closes it. */
+export function Lightbox({ src, alt, onClose }: { src: string; alt?: string; onClose(): void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return createPortal(
+    <div className="lightbox" role="dialog" aria-modal="true" aria-label={alt || tr('Image')} onClick={onClose}>
+      <div className="lightbox-bar" onClick={(e) => e.stopPropagation()}>
+        {alt && <span className="lightbox-caption">{alt}</span>}
+        <a className="icon-btn" href={src} download title={tr('Download')} aria-label={tr('Download')}>
+          <Download size={18} />
+        </a>
+        <button className="icon-btn" onClick={onClose} title={tr('Close')} aria-label={tr('Close')} autoFocus>
+          <X size={18} />
+        </button>
+      </div>
+      <img src={src} alt={alt ?? ''} onClick={(e) => e.stopPropagation()} />
+    </div>,
+    document.body,
+  );
+}
+
+/** An inline image that opens in the lightbox when clicked. */
+export function ZoomableImage({ src, alt }: { src?: string; alt?: string }) {
+  const [open, setOpen] = useState(false);
+  if (!src) return null;
+  return (
+    <>
+      <img src={src} alt={alt ?? ''} loading="lazy" className="zoomable" onClick={() => setOpen(true)} />
+      {open && <Lightbox src={src} alt={alt} onClose={() => setOpen(false)} />}
+    </>
+  );
 }

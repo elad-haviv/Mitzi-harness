@@ -1679,4 +1679,5 @@ export const he: Record<string, string> = {
   'not helping': 'לא עוזר',
   'no clear effect': 'אין השפעה ברורה',
   'Retired lessons ({0})': 'לקחים שהוצאו משימוש ({0})',
+  'View larger': 'הצגה בגדול',
 };

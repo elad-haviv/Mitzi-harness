@@ -154,3 +154,11 @@ test('the sensitive mode asks only when a tool says a call is risky, and says wh
   const plain = { ...bashTool, name: 'Custom', sensitive: undefined };
   assert.deepEqual(await permissions.check(plain, { command: 'rm -rf /' }, ctx), { allow: true });
 });
+
+test('media repeated in a reply is taken out, so each generated image shows once', async () => {
+  const { withoutShownMedia } = await import('../shared/mediaText.js');
+  const url = '/media/0123456789abcdef0123456789abcdef.png';
+  const text = `Here it is:\n\n![A cat](${url})\n\n[![A cat](${url})](${url})\n<img src="${url}" alt="x">\nEnjoy! Other: ![b](/media/other.png)`;
+  assert.equal(withoutShownMedia(text, [url]), 'Here it is:\n\nEnjoy! Other: ![b](/media/other.png)');
+  assert.equal(withoutShownMedia('No images.', [url]), 'No images.');
+});

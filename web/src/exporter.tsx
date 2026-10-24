@@ -9,6 +9,7 @@ import lightCss from 'highlight.js/styles/github.css?raw';
 import darkCss from 'highlight.js/styles/github-dark.css?raw';
 import type { Artifact, Chat, ChatMessage, ContentPart } from './api';
 import { artifactDocument } from './components/Artifacts';
+import { withoutShownMedia } from '../../src/shared/mediaText';
 
 const rehype = [[rehypeHighlight, { detect: true, ignoreMissing: true }]] as any;
 const MEDIA = new Set(['image', 'video', 'audio']);
@@ -116,6 +117,8 @@ export async function chatPage(chat: Chat, artifacts: Artifact[], opts: { botNam
   // Where each artifact was made: the tool call that created its first version.
   const made = new Map(artifacts.map((a) => [a.versions[0]?.callId, a]));
   const shown = new Set<string>();
+  // Media files the page already shows as artifacts; the bot's text sometimes embeds them again.
+  const mediaUrls = artifacts.filter((a) => MEDIA.has(a.type)).flatMap((a) => a.versions.map((v) => v.content));
   const turns = chat.messages.map((m, i) => {
     if (m.role === 'user' && m.auto === 'images') return null;
     if (m.role === 'user') {
@@ -132,7 +135,7 @@ export async function chatPage(chat: Chat, artifacts: Artifact[], opts: { botNam
       );
     }
     if (m.role !== 'assistant') return null;
-    const text = textOf(m).trim();
+    const text = withoutShownMedia(textOf(m), mediaUrls).trim();
     const created = (m.tool_calls ?? []).map((c) => made.get(c.id)).filter((a): a is Artifact => !!a && !shown.has(a.id));
     created.forEach((a) => shown.add(a.id));
     if (!text && !created.length) return null;

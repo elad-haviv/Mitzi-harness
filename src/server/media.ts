@@ -626,7 +626,7 @@ export function mediaTools(media: MediaService, onMedia?: (m: GeneratedMedia) =>
   const tools: Tool[] = [];
   const result = (kind: string, f: MediaFile, prompt: string, callId?: string) => {
     onMedia?.({ kind: kind === 'image' || kind === 'video' ? kind : 'audio', url: f.url, prompt, callId });
-    return `Generated ${kind}; the user can see it in the chat and in their artifacts.\nMEDIA: ${f.url} ${f.mimeType}`;
+    return `Generated ${kind}; it is already shown to the user in the chat and in their artifacts, so don't embed or link it again in your reply.\nMEDIA: ${f.url} ${f.mimeType}`;
   };
   if (on.image) {
     tools.push({

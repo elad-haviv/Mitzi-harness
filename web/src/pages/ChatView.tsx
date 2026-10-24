@@ -56,13 +56,14 @@ import { Markdown } from '../components/Markdown';
 import { ChatTabs } from '../components/ChatTabs';
 import { ShareDialog } from '../components/Share';
 import { APPROVAL, ApprovalPicker, approvalOf, nextLevel } from '../components/Approval';
-import { AssistantTurn, Avatar, buildTurns, messageText, Reasoning, CompactDivider, MemoryRecall, PermissionCard, PermissionRequest, RouteBadge, ToolBlock, UserTurn } from '../components/Messages';
+import { AssistantTurn, Avatar, buildTurns, mediaFrom, messageText, Reasoning, CompactDivider, MemoryRecall, PermissionCard, PermissionRequest, RouteBadge, ToolBlock, UserTurn } from '../components/Messages';
 import { Menu, useConfirm } from '../components/ui';
 import { href, navigate, parseRoute } from '../router';
 import { LOGO, relativeTime, useApp } from '../state';
 import { applyDelegateEvent, TeamProgress } from '../components/Team';
 import { applyCompareEvent, CompareState, CompareView } from '../components/Compare';
 import { lang, plural, rtl, tr } from '../i18n';
+import { withoutShownMedia } from '../../../src/shared/mediaText';
 
 type LiveBlock =
   | { kind: 'text'; text: string }
@@ -826,7 +827,7 @@ export function ChatView({
             />
           )}
           {live.blocks.map((b, i) => {
-            if (b.kind === 'text') return <Markdown key={i} text={b.text} streaming={i === live.blocks.length - 1} />;
+            if (b.kind === 'text') return <Markdown key={i} text={withoutShownMedia(b.text, live.blocks.flatMap((x) => (x.kind === 'tool' ? mediaFrom(x.result?.output).map((m) => m.url) : [])))} streaming={i === live.blocks.length - 1} />;
             if (b.kind === 'reasoning') return <Reasoning key={i} text={b.text} active={i === live.blocks.length - 1} />;
             if (b.kind === 'question') return <QuestionCard key={b.req.requestId} req={b.req} onAnswer={(a) => chatId && api.answerQuestion(chatId, b.req.requestId, a).catch((err) => toast(err.message))} />;
             if (b.kind === 'permission') return <PermissionCard key={b.req.requestId} req={b.req} onAnswer={(a, fb) => answerPermission(b.req.requestId, a, fb)} />;
