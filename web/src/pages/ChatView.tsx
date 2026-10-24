@@ -625,7 +625,6 @@ export function ChatView({
               }
             />
           )}
-          <ApprovalPicker level={approval} onChange={setApproval} planOnly={project?.permissionMode === 'plan'} />
         </>
       }
       onShiftTab={() => setApproval(nextLevel(approval))}
@@ -640,7 +639,7 @@ export function ChatView({
       autoFocus
       footer={
         <>
-          <ModeSwitch mode={mode} onChange={setMode} compact />
+          <ApprovalPicker level={approval} onChange={setApproval} planOnly={project?.permissionMode === 'plan'} />
           <div style={{ flex: 1 }} />
           {chat && chat.messages.length > 0 && !embedded && (
             <ContextButton chatId={chat.id} used={chat.lastPromptTokens} total={contextLength} refreshKey={contextVersion} onDetails={() => setPanel({ tab: 'context' })} />
@@ -700,6 +699,7 @@ export function ChatView({
         </span>
       )}
       <div className="header-spacer" />
+      {chat && !isEmpty && <ModeSwitch mode={mode} onChange={setMode} compact />}
       {artifacts.length > 0 && (
         <button className={`pill-btn${panel?.tab === 'artifacts' ? ' on' : ''}`} onClick={() => togglePanel('artifacts')}>
           <Layers size={15} />
@@ -794,6 +794,7 @@ export function ChatView({
             </span>
           </div>
         )}
+        <ModeSwitch mode={mode} onChange={setMode} />
         {composerNode}
         {mode === 'work' && (
           <p className="muted small mode-hint">
