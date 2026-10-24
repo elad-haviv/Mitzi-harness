@@ -102,3 +102,10 @@
   artifact the user edits after the bot is diffed (`lineDiff`) against the bot's last version once the user pauses
   (`MITZI_EDIT_LEARN_DELAY_MS`, default 90s); files the bot wrote in a project folder are snapshotted after the run and
   compared at the start of the next turn. Each edit also bumps `editsAfter` on the chat's latest outcome.
+- Project knowledge (`src/server/project-knowledge.ts`): facts about a project's repository live in
+  `store.projectMemory` (keyed by project id), separate from the bots' memory banks. They're learned passively from
+  outcomes (`factsFromOutcome`: checks that passed, commands that worked in two tasks, environment failures), from user
+  corrections (`looksLikeCorrection`, then the fast model), from the bot's ProjectNote tool, and typed in on the project
+  page. `core()` facts go into every prompt for the project, query-free. Consolidation merges them with the fast model.
+  `proposal()` turns them into a "Learned by Mitzi" section (between `MD_START`/`MD_END` markers) of the folder's
+  MITZI.md/AGENTS.md/CLAUDE.md; the file is only written when the user accepts.

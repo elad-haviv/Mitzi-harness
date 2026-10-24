@@ -230,3 +230,58 @@ test('the user silently rewriting the bot\'s work becomes a style lesson', async
   assert.equal(o.editsAfter, 1);
   jobReply = () => undefined;
 });
+
+test('project knowledge: learned from what works and from corrections, kept in every prompt, offered for MITZI.md', async () => {
+  const { folder, project } = await codingProject('Knowledge');
+  const chat = (await call('POST', '/api/chats', { projectId: project.id })).data;
+  await call('PATCH', `/api/chats/${chat.id}`, { mode: 'work' });
+  // Two tasks: the same command works both times, and the second passes the checks.
+  let turn = 0;
+  reply = () => (turn++ % 2 === 0 ? toolCallChunks(`b${turn}`, 'Bash', { command: 'node -e "1"' }) : textChunks('Ran it.'));
+  await stream(chat.id, { content: 'Run node' });
+  turn = 0;
+  reply = () => [toolCallChunks('w', 'Write', { file_path: 'ok.txt', content: 'fixed' }), toolCallChunks('b', 'Bash', { command: 'node -e "1"' }), textChunks('Done.')][turn++] ?? textChunks('Done.');
+  await stream(chat.id, { content: 'Fix it' });
+  let facts = (await call('GET', `/api/projects/${project.id}/learned`)).data;
+  assert.deepEqual(facts.map((f: any) => f.text).sort(), ['Verify changes with `npm test`.', '`node -e "1"` works here.']);
+
+  // A correction becomes a fact from the user; the bot can note facts itself.
+  jobReply = (body) => (/corrects how things are done/.test(JSON.stringify(body.messages)) ? textChunks('{"facts": [{"text": "Use pnpm, not npm.", "kind": "command"}]}') : undefined);
+  turn = 0;
+  reply = (body) => {
+    if (turn++ === 0) return toolCallChunks('n1', 'ProjectNote', { text: 'Sources live in src/, tests in test/.', kind: 'layout' });
+    assert.match(JSON.stringify(body.messages[0]), /# What you know about this repository[\s\S]*Verify changes with `npm test`/);
+    return textChunks('Noted.');
+  };
+  await stream(chat.id, { content: 'No, we use pnpm here' });
+  facts = await eventually(async () => {
+    const list = (await call('GET', `/api/projects/${project.id}/learned`)).data;
+    return list.some((f: any) => f.source === 'correction') ? list : undefined;
+  }, 'a correction fact');
+  const correction = facts.find((f: any) => f.source === 'correction');
+  assert.deepEqual([correction.text, correction.priority], ['Use pnpm, not npm.', 3]);
+  assert.ok(facts.some((f: any) => f.source === 'agent' && f.kind === 'layout'));
+  jobReply = () => undefined;
+  reply = (body) => {
+    assert.match(JSON.stringify(body.messages[0]), /\(from the user\) Use pnpm, not npm\./);
+    return textChunks('Sure.');
+  };
+  await stream(chat.id, { content: 'Thanks' });
+
+  // The facts as an addition to MITZI.md, written only when accepted.
+  writeFileSync(join(folder, 'MITZI.md'), '# Notes\n- Use pnpm, not npm.\n');
+  const proposal = (await call('GET', `/api/projects/${project.id}/learned/instructions`)).data;
+  assert.ok(!proposal.added.some((f: any) => /pnpm/.test(f.text)));
+  assert.ok(proposal.added.some((f: any) => /npm test/.test(f.text)));
+  assert.equal(readFileSync(join(folder, 'MITZI.md'), 'utf8'), '# Notes\n- Use pnpm, not npm.\n');
+  const applied = (await call('POST', `/api/projects/${project.id}/learned/instructions`)).data;
+  assert.equal(applied.added, proposal.added.length);
+  assert.match(readFileSync(join(folder, 'MITZI.md'), 'utf8'), /## Learned by Mitzi[\s\S]*Verify changes with `npm test`/);
+
+  // Consolidation merges facts.
+  jobReply = (body) => (/Merge duplicates/.test(JSON.stringify(body.messages)) ? textChunks('{"facts": [{"text": "Use pnpm, not npm; verify with `pnpm test`.", "kind": "command", "from": [1, 2, 3]}]}') : undefined);
+  facts = (await call('POST', `/api/projects/${project.id}/learned/consolidate`)).data;
+  assert.equal(facts[0].text, 'Use pnpm, not npm; verify with `pnpm test`.');
+  assert.equal(facts[0].source, 'consolidated');
+  jobReply = () => undefined;
+});

@@ -2,7 +2,8 @@ import type { Excerpt, KnowledgeDoc } from './knowledge.js';
 import { COMPACT_PROMPT, renderForTranscript } from '../agent.js';
 import type { LlmClient, Message, ToolSpec } from '../openrouter.js';
 import { buildSystemPrompt } from '../prompt.js';
-import type { Artifact, Bot, Chat, ContextBreakdown, ContextSection, ModelInfo, Project, RecalledMemory, SkillInfo, UiSettings } from '../shared/types.js';
+import type { Artifact, Bot, Chat, ContextBreakdown, ContextSection, ModelInfo, Project, ProjectFact, RecalledMemory, SkillInfo, UiSettings } from '../shared/types.js';
+import { projectFactsPrompt } from './project-knowledge.js';
 import { focusPrompt } from './workspace.js';
 import { skillsPrompt } from './extensions/skills.js';
 import { teamPrompt } from './team.js';
@@ -37,6 +38,8 @@ export interface ChatSetup {
   team?: Bot[];
   /** Planning with /plan: look, don't change. */
   planning?: boolean;
+  /** What was learned about the project's repository, included in every prompt. */
+  projectFacts?: ProjectFact[];
 }
 
 interface PromptSection {
@@ -95,6 +98,9 @@ export function promptSections(setup: ChatSetup): PromptSection[] {
       kind: 'project',
       text: `# Project: ${project.name}\nFollow these project instructions:\n${project.instructions.trim()}`,
     });
+  }
+  if (setup.projectFacts?.length) {
+    sections.push({ label: `Learned about this repository (${setup.projectFacts.length})`, kind: 'project', text: projectFactsPrompt(setup.projectFacts) });
   }
   const knowledge = setup.knowledge;
   if (knowledge?.mode === 'inline') {

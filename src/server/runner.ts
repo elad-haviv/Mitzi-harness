@@ -35,6 +35,7 @@ import { askTool, AskAnswers, Asker } from './ask.js';
 import { bashTool } from '../tools/bash.js';
 import { OutcomeLog, summarizeRun } from './outcomes.js';
 import type { EditMiner } from './edits.js';
+import { ProjectKnowledge, projectNoteTool } from './project-knowledge.js';
 import { lessonsInPrompt } from './lessons.js';
 import { git } from './git.js';
 import { MAX_VERIFY_ROUNDS, touchedFiles, verifyCommandFor, verifyMessage, verifyOutcome } from './verify.js';
@@ -215,6 +216,8 @@ export class ChatRunner {
   extraTools: () => Tool[] = () => [];
   /** Learns from the user's edits to files the bot wrote (set once it exists). */
   edits?: EditMiner;
+  /** What was learned about project folders (set once it exists). */
+  projectKnowledge?: ProjectKnowledge;
 
   constructor(private readonly deps: RunnerDeps) {}
 
@@ -341,6 +344,7 @@ export class ChatRunner {
       recalled: chat.messages.findLast((m) => m.role === 'user' && m.auto !== 'images')?.memories ?? [],
       skills: this.deps.skills.enabled(),
       knowledge: project ? this.knowledgeFor(project, chat) : undefined,
+      projectFacts: project?.folder ? this.projectKnowledge?.core(project.id) : undefined,
       artifacts: store.artifacts.all().filter((a) => a.chatId === chat.id),
       focus: this.focusOf(chat),
     };
@@ -383,6 +387,7 @@ export class ChatRunner {
     if (bot.tools.artifacts || focus) tools.push(artifactTool(store, chat.id, chat.projectId, onArtifact));
     if (focus || store.artifacts.all().some((a) => a.chatId === chat.id && a.comments?.length)) tools.push(commentTool(store, chat.id, onArtifact));
     if (this.memoryOn(bot)) tools.push(memoryTool(memory, memory.bankFor(bot)));
+    if (project?.folder && this.projectKnowledge) tools.push(projectNoteTool(this.projectKnowledge, project.id));
     if (project && this.deps.knowledge.isLarge(project)) tools.push(this.deps.knowledge.tool(project));
     const python = this.deps.python;
     if (bot.tools.code !== false && python?.available()) {
@@ -736,6 +741,8 @@ export class ChatRunner {
     }
     // Did the user change what the bot wrote last turn? That's a silent correction to learn from.
     if (project?.folder) this.edits?.checkWrites(chat);
+    // A correction ("no, we use pnpm here") is a fact about the repository.
+    if (project?.folder && input.kind === 'message' && !input.auto && !command) this.projectKnowledge?.noticeCorrection(project.id, input.content);
     const isFirstTurn = chat.messages.length === 0;
     const working = chat.mode === 'work' || chat.goal?.status === 'active';
 
@@ -1034,7 +1041,7 @@ export class ChatRunner {
       filesTouched: run.filesTouched,
       commands: run.commands,
       testsPassed: lastCheck ? lastCheck.passed : run.testsPassed,
-      ...(r.verifications.length ? { firstCheckPassed: r.verifications[0].passed } : {}),
+      ...(r.verifications.length ? { firstCheckPassed: r.verifications[0].passed, checkCommand: r.verifications[0].command } : {}),
       redone: false,
       lessonIds: r.lessonIds,
       ...(r.gitHead ? { gitHead: r.gitHead } : {}),

@@ -683,6 +683,35 @@ export interface Lesson {
 
 export type LessonSource = 'rating' | 'feedback' | 'outcome' | 'edit' | 'teammate';
 
+// ---------- Project knowledge ----------
+
+export type ProjectFactKind = 'command' | 'convention' | 'layout' | 'gotcha' | 'preference';
+
+/** Something learned about a repository: how to build and test it, its conventions, this machine's gotchas. */
+export interface ProjectFact {
+  id: string;
+  text: string;
+  kind: ProjectFactKind;
+  /** observed: from what worked or failed; correction: the user corrected the bot; agent: the bot noted it; user: typed in. */
+  source: 'observed' | 'correction' | 'agent' | 'user' | 'consolidated';
+  /** 1 (seen once) to 3 (the user said so). */
+  priority: number;
+  /** How many times it was seen again. */
+  evidence: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** What Mitzi learned about one project's folder. */
+export interface ProjectMemory {
+  /** The project's id. */
+  id: string;
+  facts: ProjectFact[];
+  /** Facts added since the last consolidation. */
+  sinceConsolidation: number;
+  updatedAt: string;
+}
+
 // ---------- Outcomes ----------
 
 /** How a failed tool call is to be read: the agent's mistake, the machine's, or the user saying no. */
@@ -692,6 +721,8 @@ export interface OutcomeError {
   tool: string;
   kind: ErrorKind;
   text: string;
+  /** The shell command, for Bash. */
+  command?: string;
 }
 
 /** What happened on one substantive task, derived from the run itself (and amended by later signals). */
@@ -724,6 +755,8 @@ export interface TaskOutcome {
   testsPassed?: boolean;
   /** Whether the harness's first check passed (the bot finished on green by itself). */
   firstCheckPassed?: boolean;
+  /** The command the harness checked the work with. */
+  checkCommand?: string;
   /** The user asked for a redo. */
   redone: boolean;
   /** 1–5: a review, or a thumbs up (5) / down (1). */

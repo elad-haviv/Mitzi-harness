@@ -41,6 +41,7 @@ import { detectVerifyCommand } from './verify.js';
 import { backfillOutcomes, OutcomeLearner, OutcomeLog } from './outcomes.js';
 import { registerLearningRoutes } from './routes-learning.js';
 import { EditMiner } from './edits.js';
+import { ProjectKnowledge } from './project-knowledge.js';
 import { registerWorkflowRoutes } from './routes-workflows.js';
 import { WorkflowEngine, workflowTool } from './workflows.js';
 import { clamp, fail, Handler, HttpError, Req, STREAMED, str } from './util.js';
@@ -149,6 +150,8 @@ export function createApp(opts: AppOptions) {
   const learner = new OutcomeLearner({ store, log: outcomes, client, config });
   const edits = new EditMiner({ store, client, config, botFor: (chat) => runner.botFor(chat), outcomes, delayMs: Number(process.env.MITZI_EDIT_LEARN_DELAY_MS) || undefined });
   runner.edits = edits;
+  const projectKnowledge = new ProjectKnowledge({ store, client, config, outcomes });
+  runner.projectKnowledge = projectKnowledge;
   const starters = new StarterService({ store, memory, client, config, memoryOn: (bot) => runner.memoryOn(bot) });
   seedBots(store, opts.dataDir);
   ensureDefaultBot(store);
@@ -605,6 +608,7 @@ export function createApp(opts: AppOptions) {
     for (const a of store.artifacts.all()) if (a.projectId === params.id && store.artifacts.get(a.id)) store.artifacts.put({ ...a, projectId: undefined });
     for (const t of store.tasks.all()) if (t.projectId === params.id) store.tasks.put({ ...t, projectId: undefined });
     store.projects.delete(params.id);
+    store.projectMemory.delete(params.id);
     rmSync(join(opts.dataDir, 'repo-tokens', `${params.id}.json`), { force: true });
     return { ok: true };
   });
@@ -765,7 +769,7 @@ export function createApp(opts: AppOptions) {
     return hub.view();
   });
   registerWorkRoutes(route, { store, runner, client, config, memory, usage });
-  registerLearningRoutes(route, { store, outcomes, learner });
+  registerLearningRoutes(route, { store, outcomes, learner, projectKnowledge });
 
   // Search across chats, artifacts and memories.
   const search = new SearchIndex(join(opts.dataDir, 'search'), store, memory, () => {

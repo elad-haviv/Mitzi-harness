@@ -9,6 +9,7 @@ import { backfillOutcomes, classifyError, describeOutcomes, hasSignal, OutcomeLo
 import { Store } from '../server/store.js';
 import type { TaskOutcome } from '../shared/types.js';
 import { lineDiff, meaningfulEdit } from '../server/edits.js';
+import { factsFromOutcome, looksLikeCorrection, MD_START, proposeInstructions } from '../server/project-knowledge.js';
 import { tempDir } from './helpers.js';
 
 const call = (id: string, name: string, args: object) => ({ id, type: 'function' as const, function: { name, arguments: JSON.stringify(args) } });
@@ -134,4 +135,32 @@ test('edits: a readable line diff, and whitespace-only edits are ignored', () =>
   assert.equal(lineDiff('x\ny', 'x\ny\nz'), '  y\n+ z');
   assert.equal(meaningfulEdit('a  b\n', 'a b'), false);
   assert.equal(meaningfulEdit('a b', 'a c'), true);
+});
+
+test('project knowledge: facts come from checks that pass, commands that keep working, and machine gotchas', () => {
+  const earlier = outcome({ commands: [{ command: 'cd /x && npm run build', ok: true }, { command: 'ls', ok: true }] });
+  const now = outcome({
+    checkCommand: 'npm test',
+    testsPassed: true,
+    commands: [{ command: 'npm run build', ok: true }, { command: 'ls', ok: true }, { command: 'npm run lint', ok: true }, { command: 'pnpm i', ok: false }],
+    errors: [{ tool: 'Bash', kind: 'environment', text: 'pnpm: command not found\n[Exit code 127]', command: 'pnpm i' }],
+  });
+  assert.deepEqual(
+    factsFromOutcome(now, [earlier]).map((f) => f.text),
+    ['Verify changes with `npm test`.', '`npm run build` works here.', 'On this machine, `pnpm i` fails: pnpm: command not found'],
+  );
+  assert.equal(looksLikeCorrection('No, we use pnpm here'), true);
+  assert.equal(looksLikeCorrection('Use vitest instead of jest'), true);
+  assert.equal(looksLikeCorrection('Add a dark mode toggle'), false);
+});
+
+test('project knowledge: proposed instructions add only what the file lacks, in a section that can be updated', () => {
+  const fact = (text: string, kind: any) => ({ id: text, text, kind, source: 'observed' as const, priority: 2, evidence: 2, createdAt: '', updatedAt: '' });
+  const existing = '# Notes\n- Build with `npm run build`.\n';
+  const first = proposeInstructions(existing, [fact('Build with `npm run build`.', 'command'), fact('Relative imports end in `.js`.', 'convention')]);
+  assert.deepEqual(first.added.map((f) => f.text), ['Relative imports end in `.js`.']);
+  assert.match(first.content, /# Notes[\s\S]*## Learned by Mitzi\n\n### Conventions\n- Relative imports end in `\.js`\./);
+  const second = proposeInstructions(first.content, [fact('Relative imports end in `.js`.', 'convention'), fact('Tests need `tsc` first.', 'gotcha')]);
+  assert.equal(second.content.split(MD_START).length, 2);
+  assert.match(second.content, /### Gotchas on this machine\n- Tests need `tsc` first\./);
 });

@@ -26,6 +26,7 @@ import type {
   ArtifactType,
   Lesson,
   TaskOutcome,
+  ProjectFact,
   MediaKind,
   MediaSettings,
   ProviderKind,
@@ -436,6 +437,13 @@ export const api = {
     request<{ rating: Rating | null }>('POST', `/api/chats/${chatId}/messages/${index}/rating`, { value, comment }),
   lessons: (botId: string) => request<Lesson[]>('GET', `/api/bots/${botId}/lessons`),
   deleteLesson: (botId: string, id: string) => request<Lesson[]>('DELETE', `/api/bots/${botId}/lessons/${id}`),
+  projectFacts: (id: string) => request<ProjectFact[]>('GET', `/api/projects/${id}/learned`),
+  addProjectFact: (id: string, text: string) => request<ProjectFact[]>('POST', `/api/projects/${id}/learned`, { text }),
+  removeProjectFact: (id: string, factId: string) => request<ProjectFact[]>('DELETE', `/api/projects/${id}/learned/${factId}`),
+  consolidateProjectFacts: (id: string) => request<ProjectFact[]>('POST', `/api/projects/${id}/learned/consolidate`, {}),
+  instructionsProposal: (id: string) =>
+    request<{ path: string; exists: boolean; current: string; content: string; added: ProjectFact[] }>('GET', `/api/projects/${id}/learned/instructions`),
+  applyInstructions: (id: string) => request<{ path: string; added: number }>('POST', `/api/projects/${id}/learned/instructions`, {}),
   learnNow: (botId: string) => request<{ lessons: string[]; pending: number }>('POST', `/api/bots/${botId}/learn`, {}),
   outcomes: (q: { botId?: string; projectId?: string; chatId?: string; limit?: number } = {}) =>
     request<TaskOutcome[]>('GET', `/api/outcomes?${new URLSearchParams(Object.entries(q).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))}`),

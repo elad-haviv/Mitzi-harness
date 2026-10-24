@@ -1,8 +1,8 @@
 import { extractText, isDocument } from '../documents';
 import { ProjectUsage } from './Insights';
-import { BadgeCheck, BookOpen, FileText, FolderGit2, FolderOpen, FolderSearch, GitBranch, Loader2, RefreshCw, Layers, MessageSquare, MoreHorizontal, Pencil, Plus, ShieldCheck, SquarePen, Terminal, Trash2, Upload } from 'lucide-react';
+import { BadgeCheck, BookOpen, Brain, FilePlus2, X, FileText, FolderGit2, FolderOpen, FolderSearch, GitBranch, Loader2, RefreshCw, Layers, MessageSquare, MoreHorizontal, Pencil, Plus, ShieldCheck, SquarePen, Terminal, Trash2, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { api, ArtifactListItem, ChatListItem, PermissionMode, ProjectView, RepoStatus } from '../api';
+import { api, ArtifactListItem, ChatListItem, PermissionMode, ProjectFact, ProjectView, RepoStatus } from '../api';
 import { CloneRepoModal, FolderPicker } from '../components/Folders';
 import { ArtifactIcon, TYPE_LABEL } from '../components/Artifacts';
 import { Empty, Menu, Modal, readFileAsText, useConfirm } from '../components/ui';
@@ -325,6 +325,7 @@ export function ProjectPage({ id }: { id: string }) {
 
           <div className="side-cards">
             <ProjectUsage projectId={project.id} />
+            {project.folder && <LearnedCard projectId={project.id} />}
             <div className="card">
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <div className="card-title">
@@ -670,6 +671,120 @@ function VerifyField({ project, onSave }: { project: ProjectView; onSave(verify:
             {tr('Save')}
           </button>
         </form>
+      )}
+    </div>
+  );
+}
+
+/** What Mitzi learned about the repository: commands, conventions, layout and gotchas, kept in every chat's prompt. */
+function LearnedCard({ projectId }: { projectId: string }) {
+  const { toast } = useApp();
+  const [facts, setFacts] = useState<ProjectFact[]>();
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [proposal, setProposal] = useState<Awaited<ReturnType<typeof api.instructionsProposal>>>();
+  useEffect(() => {
+    api.projectFacts(projectId).then(setFacts, () => setFacts([]));
+  }, [projectId]);
+  const run = async (job: () => Promise<void>) => {
+    setBusy(true);
+    try {
+      await job();
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const sorted = [...(facts ?? [])].sort((a, b) => b.priority - a.priority || b.evidence - a.evidence);
+  return (
+    <div className="card">
+      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <div className="card-title">
+          <Brain size={15} /> {tr('Learned about this repository')}
+        </div>
+        {sorted.length > 1 && (
+          <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => void run(async () => setFacts(await api.consolidateProjectFacts(projectId)))} title={tr('Merge overlapping facts')}>
+            {tr('Tidy up')}
+          </button>
+        )}
+      </div>
+      {sorted.length ? (
+        <div style={{ marginTop: 6 }}>
+          {sorted.map((f) => (
+            <div key={f.id} className="row small" style={{ gap: 6, padding: '3px 0' }}>
+              <span className="grow" title={f.source === 'correction' || f.source === 'user' ? tr('You said so') : tr('Seen {0} time(s)', f.evidence)}>
+                {f.text}
+              </span>
+              <button className="icon-btn sm" aria-label={tr('Forget this')} title={tr('Forget')} onClick={() => void api.removeProjectFact(projectId, f.id).then(setFacts, (e) => toast(e.message))}>
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="muted small" style={{ margin: '6px 0 0' }}>
+          {tr('As Mitzi works here it notes how to build and test, the conventions you correct it on, and this computer’s quirks. Every chat in the project starts with them.')}
+        </p>
+      )}
+      <form
+        className="row"
+        style={{ gap: 6, marginTop: 8 }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (draft.trim()) void run(async () => (setFacts(await api.addProjectFact(projectId, draft.trim())), setDraft('')));
+        }}
+      >
+        <input className="input grow" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={tr('Add a fact, e.g. “We use pnpm”')} aria-label={tr('Add a fact')} />
+        <button className="btn btn-sm" type="submit" disabled={busy || !draft.trim()}>
+          {tr('Add')}
+        </button>
+      </form>
+      {sorted.length > 0 && (
+        <button className="btn btn-sm" style={{ marginTop: 8 }} disabled={busy} onClick={() => void run(async () => setProposal(await api.instructionsProposal(projectId)))}>
+          <FilePlus2 size={14} /> {tr('Suggest additions to MITZI.md')}
+        </button>
+      )}
+      {proposal && (
+        <Modal
+          title={tr('Add what Mitzi learned to {0}', proposal.path.split(/[\\/]/).pop() ?? 'MITZI.md')}
+          onClose={() => setProposal(undefined)}
+          footer={
+            <>
+              <button className="btn" onClick={() => setProposal(undefined)}>
+                {tr('Cancel')}
+              </button>
+              <button
+                className="btn btn-primary"
+                disabled={busy || !proposal.added.length}
+                onClick={() =>
+                  void run(async () => {
+                    const res = await api.applyInstructions(projectId);
+                    toast(tr('Added {0} item(s) to {1}', res.added, res.path), 'info');
+                    setProposal(undefined);
+                  })
+                }
+              >
+                {tr('Add to file')}
+              </button>
+            </>
+          }
+        >
+          {proposal.added.length ? (
+            <>
+              <p className="small muted" style={{ marginTop: 0 }}>
+                {proposal.exists ? tr('These aren’t in {0} yet. They go in a “Learned by Mitzi” section you can edit.', proposal.path) : tr('{0} doesn’t exist yet; it will be created with these.', proposal.path)}
+              </p>
+              <ul className="small">
+                {proposal.added.map((f) => (
+                  <li key={f.id}>{f.text}</li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="small">{tr('Everything Mitzi learned is already in the file.')}</p>
+          )}
+        </Modal>
       )}
     </div>
   );

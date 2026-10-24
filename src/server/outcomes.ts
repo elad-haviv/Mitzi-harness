@@ -85,7 +85,7 @@ export function summarizeRun(messages: Message[]): RunSummary {
       // unless the machine itself got in the way.
       const kind = failed ? classifyError(out) : exit ? (classifyError(out) === 'environment' ? 'environment' : undefined) : undefined;
       if (!kind) continue;
-      summary.errors.push({ tool: name, kind, text: out.replace(/^Error:\s*/, '').slice(0, 300) });
+      summary.errors.push({ tool: name, kind, text: out.replace(/^Error:\s*/, '').slice(0, 300), ...(name === 'Bash' && args.command ? { command: String(args.command).slice(0, 300) } : {}) });
       if (kind !== 'declined') summary.toolErrors++;
     }
   }

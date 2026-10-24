@@ -1,17 +1,20 @@
 // Routes for what Mitzi learns from experience: the outcome ledger and distilling it into lessons.
-import type { TaskOutcome } from '../shared/types.js';
+import type { ProjectFactKind, TaskOutcome } from '../shared/types.js';
 import type { OutcomeLearner, OutcomeLog } from './outcomes.js';
+import type { ProjectKnowledge } from './project-knowledge.js';
 import type { Store } from './store.js';
-import { fail, Route } from './util.js';
+import { fail, HttpError, Route, str } from './util.js';
 
 export interface LearningDeps {
   store: Store;
   outcomes: OutcomeLog;
   learner: OutcomeLearner;
+  projectKnowledge: ProjectKnowledge;
 }
 
 export function registerLearningRoutes(route: Route, deps: LearningDeps): void {
-  const { store, outcomes, learner } = deps;
+  const { store, outcomes, learner, projectKnowledge } = deps;
+  const getProject = (id: string) => store.projects.get(id) ?? fail(404, 'Project not found');
 
   /** Recorded outcomes, newest first, filtered by bot, project or chat. */
   route('GET', '/api/outcomes', ({ query }) => {
@@ -27,4 +30,27 @@ export function registerLearningRoutes(route: Route, deps: LearningDeps): void {
     const lessons = await learner.learn(bot.id);
     return { lessons, pending: learner.pending(bot.id).length };
   });
+
+  // ---- What Mitzi learned about a project's repository ------------------------------------
+
+  route('GET', '/api/projects/:id/learned', ({ params }) => projectKnowledge.facts(getProject(params.id).id));
+  route('POST', '/api/projects/:id/learned', ({ params, body }) => {
+    const project = getProject(params.id);
+    const text = str(body?.text).trim();
+    if (!text) throw new HttpError(400, 'Say what to remember about this project');
+    projectKnowledge.add(project.id, text, (str(body?.kind) || 'convention') as ProjectFactKind, 'user', 3);
+    return projectKnowledge.facts(project.id);
+  });
+  route('DELETE', '/api/projects/:id/learned/:factId', ({ params }) => projectKnowledge.remove(getProject(params.id).id, params.factId));
+  route('POST', '/api/projects/:id/learned/consolidate', async ({ params }) => {
+    const project = getProject(params.id);
+    await projectKnowledge.consolidate(project.id);
+    return projectKnowledge.facts(project.id);
+  });
+  /** The learned facts as an addition to the folder's MITZI.md (or AGENTS.md / CLAUDE.md), for the user to accept. */
+  route('GET', '/api/projects/:id/learned/instructions', ({ params }) => {
+    const p = projectKnowledge.proposal(getProject(params.id).id) ?? fail(400, 'This project has no folder');
+    return { path: p.path, exists: p.exists, current: p.current, content: p.content, added: p.added };
+  });
+  route('POST', '/api/projects/:id/learned/instructions', ({ params }) => projectKnowledge.applyProposal(getProject(params.id).id));
 }
