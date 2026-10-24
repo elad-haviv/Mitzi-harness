@@ -122,3 +122,10 @@
 - Learning metrics (`src/server/metrics.ts`, `GET /api/insights/outcomes`): first-try acceptance, finished-on-green
   (first harness check passed), final check pass rate, agent and environment errors per task, week by week with the
   lessons in effect (`lessonsAt`), and per model. Shown on Insights → Learning above the feedback-loop charts.
+- Playbooks (`src/server/playbooks.ts`): an outcome that `cleanRun` accepts (project task, real edits, no agent
+  mistakes, checks not failing, no redo) is turned into a playbook by the fast model (`store.playbooks`). Tasks that
+  match one (`similarity` on key words) get it in the prompt; `settings.toolTraceHints` also adds the tool-call trace
+  (`TaskOutcome.trace`). A later redo, low rating or user edit on the source outcome removes the playbook
+  (`OutcomeLog.amendListeners`).
+- Plan critique: after `/plan` proposes a plan, `checkPlan` asks the fast model where it goes against the bot's lessons
+  or the project's facts; findings are saved as `plan.notes` and shown on the plan before approval.

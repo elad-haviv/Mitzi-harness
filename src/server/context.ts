@@ -2,8 +2,9 @@ import type { Excerpt, KnowledgeDoc } from './knowledge.js';
 import { COMPACT_PROMPT, renderForTranscript } from '../agent.js';
 import type { LlmClient, Message, ToolSpec } from '../openrouter.js';
 import { buildSystemPrompt } from '../prompt.js';
-import type { Artifact, Bot, Chat, ContextBreakdown, ContextSection, ModelInfo, Project, ProjectFact, RecalledMemory, SkillInfo, UiSettings } from '../shared/types.js';
+import type { Artifact, Bot, Chat, ContextBreakdown, ContextSection, ModelInfo, Playbook, Project, ProjectFact, RecalledMemory, SkillInfo, UiSettings } from '../shared/types.js';
 import { projectFactsPrompt } from './project-knowledge.js';
+import { playbookPrompt } from './playbooks.js';
 import { focusPrompt } from './workspace.js';
 import { skillsPrompt } from './extensions/skills.js';
 import { teamPrompt } from './team.js';
@@ -40,6 +41,8 @@ export interface ChatSetup {
   planning?: boolean;
   /** What was learned about the project's repository, included in every prompt. */
   projectFacts?: ProjectFact[];
+  /** Playbooks from earlier work that match the task at hand. */
+  playbooks?: Playbook[];
 }
 
 interface PromptSection {
@@ -101,6 +104,15 @@ export function promptSections(setup: ChatSetup): PromptSection[] {
   }
   if (setup.projectFacts?.length) {
     sections.push({ label: `Learned about this repository (${setup.projectFacts.length})`, kind: 'project', text: projectFactsPrompt(setup.projectFacts) });
+  }
+  if (setup.playbooks?.length) {
+    sections.push({
+      label: `Playbooks (${setup.playbooks.length})`,
+      kind: 'project',
+      text:
+        '# Playbooks from earlier work here\nThese worked for similar tasks in this project. Follow them where they fit, and adapt where this task differs.\n\n' +
+        setup.playbooks.map((p) => playbookPrompt(p, !!setup.settings.toolTraceHints)).join('\n\n'),
+    });
   }
   const knowledge = setup.knowledge;
   if (knowledge?.mode === 'inline') {

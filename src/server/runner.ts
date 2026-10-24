@@ -35,8 +35,9 @@ import { askTool, AskAnswers, Asker } from './ask.js';
 import { bashTool } from '../tools/bash.js';
 import { OutcomeLog, summarizeRun } from './outcomes.js';
 import type { EditMiner } from './edits.js';
-import { changesFromMessages, critiqueMessage, critiquePrompt, parseCritique } from './critique.js';
+import { changesFromMessages, critiqueMessage, critiquePrompt, parseCritique, planCheckPrompt } from './critique.js';
 import { ProjectKnowledge, projectNoteTool } from './project-knowledge.js';
+import type { Playbooks } from './playbooks.js';
 import { lessonsInPrompt } from './lessons.js';
 import { git } from './git.js';
 import { MAX_VERIFY_ROUNDS, touchedFiles, verifyCommandFor, verifyMessage, verifyOutcome } from './verify.js';
@@ -219,6 +220,8 @@ export class ChatRunner {
   edits?: EditMiner;
   /** What was learned about project folders (set once it exists). */
   projectKnowledge?: ProjectKnowledge;
+  /** How kinds of tasks were done before (set once it exists). */
+  playbooks?: Playbooks;
 
   constructor(private readonly deps: RunnerDeps) {}
 
@@ -346,9 +349,17 @@ export class ChatRunner {
       skills: this.deps.skills.enabled(),
       knowledge: project ? this.knowledgeFor(project, chat) : undefined,
       projectFacts: project?.folder ? this.projectKnowledge?.core(project.id) : undefined,
+      playbooks: this.playbooks?.match(project?.id, this.currentTask(chat)),
       artifacts: store.artifacts.all().filter((a) => a.chatId === chat.id),
       focus: this.focusOf(chat),
     };
+  }
+
+  /** The task the user is on: their latest message of their own (not Mitzi's follow-ups), without attachments. */
+  private currentTask(chat: Chat): string {
+    const m = chat.messages.findLast((m) => m.role === 'user' && !m.auto);
+    const text = typeof m?.content === 'string' ? m.content : (m?.content ?? []).map((p) => (p.type === 'text' ? p.text : '')).join(' ');
+    return text.replace(/<attachment[\s\S]*?<\/attachment>/g, ' ').slice(0, 2000);
   }
 
   /** The project's knowledge for the chat: all of it when small, else the excerpts that match the latest messages. */
@@ -913,6 +924,7 @@ export class ChatRunner {
 
     agent.messages = contextMessages(chat);
     const before = agent.messages.length;
+    if (!planRequest) this.playbooks?.used(this.playbooks.match(project?.id, this.currentTask(chat)));
 
     const titleModel = this.deps.config().smallModel ?? model;
     // Name the chat in parallel with the answer, and show the title as soon as it's ready.
@@ -962,6 +974,7 @@ export class ChatRunner {
         chat.goal.status = 'paused';
         emit({ type: 'goal', goal: chat.goal });
       }
+      if (planRequest && chat.plan?.status === 'proposed' && chat.plan.request === planRequest) await this.checkPlan(chat, project, bot, model, emit, signal);
       if (working && !planRequest && bot.selfReview) await this.selfReview(project, bot, agent, before, firstText, model, emit, signal);
       if (working && !planRequest) await this.verifyWork(project, agent, before, permissions, emit, signal, verifications);
     } catch (err: any) {
@@ -1050,6 +1063,7 @@ export class ChatRunner {
       errorKinds: [...new Set(run.errors.map((e) => e.kind))],
       filesTouched: run.filesTouched,
       commands: run.commands,
+      trace: run.trace,
       testsPassed: lastCheck ? lastCheck.passed : run.testsPassed,
       ...(r.verifications.length ? { firstCheckPassed: r.verifications[0].passed, checkCommand: r.verifications[0].command } : {}),
       redone: false,
@@ -1058,6 +1072,26 @@ export class ChatRunner {
       durationMs: r.durationMs,
       cost: r.cost,
     });
+  }
+
+  /** Before approval, notes where a plan goes against the bot's lessons or the repository's facts. */
+  private async checkPlan(chat: Chat, project: Project | undefined, bot: Bot, model: string, emit: (e: StreamEvent) => void, signal: AbortSignal): Promise<void> {
+    const plan = chat.plan!;
+    const lessons = lessonsInPrompt(bot).map((l) => l.text);
+    const facts = project?.folder ? (this.projectKnowledge?.core(project.id) ?? []).map((f) => f.text) : [];
+    if (!lessons.length && !facts.length) return;
+    emit({ type: 'status', message: 'Checking the plan against what I learned…' });
+    try {
+      const res = await withUsage({ kind: 'review' }, () =>
+        this.deps.client().chat({ model: this.deps.config().smallModel ?? model, messages: [{ role: 'user', content: planCheckPrompt(plan.text, lessons, facts) }], maxTokens: 500, signal }),
+      );
+      const verdict = parseCritique(res.content);
+      if (verdict.ok || chat.plan !== plan) return;
+      plan.notes = verdict.issues;
+      emit({ type: 'plan', plan });
+    } catch (err: any) {
+      if (!signal.aborted) emit({ type: 'warn', message: `Couldn't check the plan: ${err.message}` });
+    }
   }
 
   /** Pre-final self-review: the fast model looks over the changes; real findings send the bot back to work once. */

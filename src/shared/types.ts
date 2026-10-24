@@ -40,6 +40,8 @@ export interface UiSettings {
   approval?: ApprovalLevel;
   /** Chatting with Mitzi through Telegram, Discord, Slack, WhatsApp or email. */
   channels?: Partial<Record<ChannelKind, ChannelSettings>>;
+  /** Offer the tool-call sequence of a matching playbook as a hint (off by default: traces can bloat prompts and go stale). */
+  toolTraceHints?: boolean;
   /** Telegram settings from before `channels` (moved there on start). */
   telegram?: TelegramSettings;
 }
@@ -489,6 +491,8 @@ export interface Plan {
   steps: string[];
   status: 'proposed' | 'approved' | 'revised';
   createdAt: string;
+  /** Where the plan goes against the bot's lessons or the repository's known facts, checked before approval. */
+  notes?: string[];
 }
 
 // ---------- Search ----------
@@ -719,6 +723,29 @@ export interface ProjectMemory {
   updatedAt: string;
 }
 
+// ---------- Playbooks ----------
+
+/** How a kind of task was done successfully here: steps, commands, files and the check, for next time. */
+export interface Playbook {
+  id: string;
+  botId: string;
+  projectId?: string;
+  title: string;
+  /** What kind of task it's for. */
+  when: string;
+  steps: string[];
+  /** How the work was checked. */
+  verification?: string;
+  /** The successful tool-call sequence (used only when tool-trace hints are on). */
+  trace?: string[];
+  /** The outcome it was learned from. */
+  outcomeId: string;
+  /** Times it was offered in a prompt. */
+  uses: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ---------- Outcomes ----------
 
 /** How a failed tool call is to be read: the agent's mistake, the machine's, or the user saying no. */
@@ -764,6 +791,8 @@ export interface TaskOutcome {
   firstCheckPassed?: boolean;
   /** The command the harness checked the work with. */
   checkCommand?: string;
+  /** The tool calls in order, briefly ("Edit src/a.ts", "Bash npm test"). */
+  trace?: string[];
   /** The user asked for a redo. */
   redone: boolean;
   /** 1–5: a review, or a thumbs up (5) / down (1). */

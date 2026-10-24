@@ -348,3 +348,63 @@ test('self-review: a bot that reviews its own changes goes back to fix what the 
   // One review round only: the fix isn't reviewed again.
   assert.equal(reviews, 1);
 });
+
+test('playbooks: a clean task becomes a playbook that similar tasks get; a redo takes it back', async () => {
+  const { project } = await codingProject('Playbooks');
+  const chat = (await call('POST', '/api/chats', { projectId: project.id })).data;
+  await call('PATCH', `/api/chats/${chat.id}`, { mode: 'work' });
+  jobReply = (body) => {
+    const prompt = JSON.stringify(body.messages);
+    if (!/reusable playbook/.test(prompt)) return undefined;
+    assert.match(prompt, /Read check\.js[\s\S]*Write ok\.txt[\s\S]*verified with `npm test`/);
+    return textChunks('{"title": "Make the checks pass", "when": "When the project checks fail and need fixing", "steps": ["Read check.js", "Write ok.txt"], "verification": "npm test"}');
+  };
+  let turn = 0;
+  reply = () => [toolCallChunks('r', 'Read', { file_path: 'check.js' }), toolCallChunks('l', 'LS', {}), toolCallChunks('w', 'Write', { file_path: 'ok.txt', content: 'fixed' })][turn++] ?? textChunks('Done.');
+  await stream(chat.id, { content: 'Make the project checks pass' });
+  const list = await eventually(async () => {
+    const l = (await call('GET', `/api/projects/${project.id}/playbooks`)).data;
+    return l.length ? l : undefined;
+  }, 'a playbook');
+  assert.equal(list[0].title, 'Make the checks pass');
+  jobReply = () => undefined;
+
+  // A similar task gets it; tool calls only with the hints setting on.
+  reply = (body) => {
+    const system = JSON.stringify(body.messages[0]);
+    assert.match(system, /# Playbooks from earlier work here[\s\S]*## Make the checks pass[\s\S]*1\. Read check\.js/);
+    assert.doesNotMatch(system, /Tool calls that worked last time/);
+    return textChunks('They pass already.');
+  };
+  await stream(chat.id, { content: 'The checks fail again, please fix them' });
+  await call('PUT', '/api/settings', { toolTraceHints: true });
+  reply = (body) => {
+    assert.match(JSON.stringify(body.messages[0]), /Tool calls that worked last time:[\s\S]*- Write ok\.txt/);
+    return textChunks('Still passing.');
+  };
+  await stream(chat.id, { content: 'Fix the failing checks' });
+  await call('PUT', '/api/settings', { toolTraceHints: false });
+  assert.equal((await call('GET', `/api/projects/${project.id}/playbooks`)).data[0].uses, 2);
+
+  // The task it came from was redone after all: not a good way to do it.
+  const saved = (await call('GET', `/api/chats/${chat.id}`)).data;
+  const first = saved.messages.findIndex((m: any) => m.outcomeId === list[0].outcomeId);
+  await call('POST', `/api/chats/${chat.id}/messages/${first}/review`, { rating: 2, redo: true });
+  assert.deepEqual((await call('GET', `/api/projects/${project.id}/playbooks`)).data, []);
+});
+
+test('plan critique: a proposed plan is checked against the lessons before approval', async () => {
+  const chat = (await call('POST', '/api/chats', {})).data;
+  jobReply = (body) => {
+    const prompt = JSON.stringify(body.messages);
+    if (!/Check it ONLY against the lessons/.test(prompt)) return undefined;
+    assert.match(prompt, /Check that a file exists with Glob before editing it/);
+    return textChunks('{"ok": false, "issues": ["Step 1 edits config.ts without checking it exists (lesson 1)."]}');
+  };
+  let turn = 0;
+  reply = () => (turn++ === 0 ? toolCallChunks('p1', 'SubmitPlan', { plan: '1. Edit config.ts\n2. Done', steps: ['Edit config.ts', 'Done'] }) : textChunks('Plan ready.'));
+  const events = await stream(chat.id, { content: '/plan change the config' });
+  jobReply = () => undefined;
+  assert.deepEqual(events.filter((e) => e.type === 'plan').at(-1).plan.notes, ['Step 1 edits config.ts without checking it exists (lesson 1).']);
+  assert.deepEqual((await call('GET', `/api/chats/${chat.id}`)).data.plan.notes, ['Step 1 edits config.ts without checking it exists (lesson 1).']);
+});

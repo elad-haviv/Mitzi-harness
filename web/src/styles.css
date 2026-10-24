@@ -7497,3 +7497,22 @@ img.zoomable {
   font-size: 15px;
   margin: 18px 0 8px;
 }
+
+.plan-notes {
+  margin: 8px 12px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 13px;
+}
+.plan-notes-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--warn, var(--text-2));
+}
+.plan-notes ul {
+  margin: 4px 0 0;
+  padding-inline-start: 18px;
+}

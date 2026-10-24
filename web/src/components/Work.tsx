@@ -11,6 +11,7 @@ import {
   ClipboardList,
   Gauge,
   Globe,
+  GraduationCap,
   Layers,
   ListChecks,
   Loader2,
@@ -287,6 +288,7 @@ export function TasksPanel({ chat, running, onCommand, onApprove, onRevise }: { 
           <div className="plan-body">
             <Markdown text={plan.text} />
           </div>
+          {plan.status === 'proposed' && <PlanNotes notes={plan.notes} />}
           {plan.status === 'proposed' && (
             <div className="row" style={{ gap: 6 }}>
               <button className="btn btn-primary btn-sm" onClick={onApprove} disabled={running}>
@@ -501,6 +503,23 @@ export function BtwCard({ state, onClose }: { state: BtwState; onClose(): void }
 
 // ---------- Plans in the conversation ----------
 
+/** Where the plan goes against what the bot learned, so the user can ask for changes before approving. */
+function PlanNotes({ notes }: { notes?: string[] }) {
+  if (!notes?.length) return null;
+  return (
+    <div className="plan-notes">
+      <div className="plan-notes-head">
+        <GraduationCap size={13} /> {tr('Against what Mitzi learned')}
+      </div>
+      <ul>
+        {notes.map((n, i) => (
+          <li key={i}>{n}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function PlanCard({ args, result, running }: { args: any; result?: { output: string; isError: boolean }; running?: boolean }) {
   const actions = useChatActions();
   const plan: Plan | undefined = actions?.chat?.plan;
@@ -518,6 +537,7 @@ export function PlanCard({ args, result, running }: { args: any; result?: { outp
       <div className="plan-card-body">
         <Markdown text={text} />
       </div>
+      {latest && status === 'proposed' && <PlanNotes notes={plan.notes} />}
       {latest && status === 'proposed' && actions && (
         <div className="plan-card-actions">
           <button className="btn btn-primary btn-sm" onClick={actions.approvePlan} disabled={actions.running}>

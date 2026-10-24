@@ -1702,4 +1702,13 @@ export const he: Record<string, string> = {
   'Library': 'ספרייה',
   'Show fewer': 'להציג פחות',
   'Show more: Scheduled, Workflows, Memory, Insights': 'להציג עוד: מתוזמנות, תהליכי עבודה, זיכרון, תובנות',
+  'Against what Mitzi learned': 'בניגוד למה שמיצי למדה',
+  'Playbooks': 'מדריכי עבודה',
+  'Learned from tasks that went cleanly here. Similar tasks get them as a guide.': 'נלמדו ממשימות שעברו כאן בלי תקלות. משימות דומות מקבלות אותם כמדריך.',
+  'used {0} time': 'שימוש אחד',
+  'used {0} times': '{0} שימושים',
+  'Verify: {0}': 'בדיקה: {0}',
+  'Learning from experience': 'למידה מניסיון',
+  'Show the tool calls that worked last time': 'להציג את קריאות הכלים שעבדו בפעם הקודמת',
+  'When a task matches a playbook Mitzi learned in the project, also include the exact sequence of tool calls that worked. It can help weaker models, but long or outdated sequences can mislead, so it’s off by default.': 'כשמשימה תואמת מדריך עבודה שמיצי למדה בפרויקט, לצרף גם את רצף קריאות הכלים המדויק שעבד. זה יכול לעזור למודלים חלשים יותר, אבל רצפים ארוכים או מיושנים עלולים להטעות, ולכן זה כבוי כברירת מחדל.',
 };

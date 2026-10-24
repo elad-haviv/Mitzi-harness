@@ -188,6 +188,19 @@ function GeneralSettings() {
       </section>
 
       <section className="settings-section card">
+        <h2>{tr('Learning from experience')}</h2>
+        <div className="tool-toggle" style={{ padding: 0, border: 0 }}>
+          <div className="grow">
+            <div className="t">{tr('Show the tool calls that worked last time')}</div>
+            <div className="s">
+              {tr('When a task matches a playbook Mitzi learned in the project, also include the exact sequence of tool calls that worked. It can help weaker models, but long or outdated sequences can mislead, so it’s off by default.')}
+            </div>
+          </div>
+          <Toggle label={tr('Show the tool calls that worked last time')} on={!!settings.toolTraceHints} onChange={(v) => void save({ toolTraceHints: v })} />
+        </div>
+      </section>
+
+      <section className="settings-section card">
         <h2>{tr('Long conversations')}</h2>
         <div className="field">
           <span className="field-label">{tr('Auto-compact when the context window is')}</span>

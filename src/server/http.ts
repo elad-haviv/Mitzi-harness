@@ -43,6 +43,7 @@ import { registerLearningRoutes } from './routes-learning.js';
 import { EditMiner } from './edits.js';
 import { LessonHygiene } from './lesson-hygiene.js';
 import { ProjectKnowledge } from './project-knowledge.js';
+import { Playbooks } from './playbooks.js';
 import { registerWorkflowRoutes } from './routes-workflows.js';
 import { WorkflowEngine, workflowTool } from './workflows.js';
 import { clamp, fail, Handler, HttpError, Req, STREAMED, str } from './util.js';
@@ -154,6 +155,8 @@ export function createApp(opts: AppOptions) {
   runner.edits = edits;
   const projectKnowledge = new ProjectKnowledge({ store, client, config, outcomes });
   runner.projectKnowledge = projectKnowledge;
+  const playbooks = new Playbooks({ store, client, config, outcomes });
+  runner.playbooks = playbooks;
   const starters = new StarterService({ store, memory, client, config, memoryOn: (bot) => runner.memoryOn(bot) });
   seedBots(store, opts.dataDir);
   ensureDefaultBot(store);
@@ -214,6 +217,7 @@ export function createApp(opts: AppOptions) {
     if (typeof update.autoCheckUpdates === 'boolean') ui.autoCheckUpdates = update.autoCheckUpdates;
     if (typeof update.browserHeaded === 'boolean') ui.browserHeaded = update.browserHeaded;
     if (typeof update.computerUse === 'boolean') ui.computerUse = update.computerUse;
+    if (typeof update.toolTraceHints === 'boolean') ui.toolTraceHints = update.toolTraceHints;
     if (typeof update.recallTokens === 'number') ui.recallTokens = clamp(Math.round(update.recallTokens), 200, 8000);
     if (update.media) ui.media = mediaUpdate(update.media, store.settings.media);
     if (update.budget && typeof update.budget === 'object') {
@@ -611,6 +615,7 @@ export function createApp(opts: AppOptions) {
     for (const t of store.tasks.all()) if (t.projectId === params.id) store.tasks.put({ ...t, projectId: undefined });
     store.projects.delete(params.id);
     store.projectMemory.delete(params.id);
+    for (const p of playbooks.list(params.id)) playbooks.remove(p.id);
     rmSync(join(opts.dataDir, 'repo-tokens', `${params.id}.json`), { force: true });
     return { ok: true };
   });
@@ -771,7 +776,7 @@ export function createApp(opts: AppOptions) {
     return hub.view();
   });
   registerWorkRoutes(route, { store, runner, client, config, memory, usage });
-  registerLearningRoutes(route, { store, outcomes, learner, projectKnowledge, hygiene });
+  registerLearningRoutes(route, { store, outcomes, learner, projectKnowledge, hygiene, playbooks });
 
   // Search across chats, artifacts and memories.
   const search = new SearchIndex(join(opts.dataDir, 'search'), store, memory, () => {

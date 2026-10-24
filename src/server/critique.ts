@@ -53,3 +53,16 @@ export function parseCritique(reply: string): { ok: boolean; issues: string[] } 
 export function critiqueMessage(issues: string[]): string {
   return `A quick review of your changes before finishing found possible problems. Check each one; fix what's real, and say briefly why any isn't.\n\n${issues.map((i) => `- ${i}`).join('\n')}`;
 }
+
+/** Checks a plan against what the bot learned, before the user approves it. */
+export function planCheckPrompt(plan: string, lessons: string[], facts: string[]): string {
+  return (
+    `An AI assistant proposed the plan below. Check it ONLY against the lessons it learned and the facts known about the ` +
+    `repository: point out each step that goes against one of them, or something they say is needed that the plan leaves ` +
+    `out (for example a test run after changing code that a lesson says breaks easily). Quote the lesson or fact. Don't ` +
+    `judge anything else about the plan.\n\n<plan>\n${plan.slice(0, 8000)}\n</plan>\n\n` +
+    (lessons.length ? `<lessons>\n${lessons.map((l, i) => `${i + 1}. ${l}`).join('\n')}\n</lessons>\n\n` : '') +
+    (facts.length ? `<repository-facts>\n${facts.map((f) => `- ${f}`).join('\n')}\n</repository-facts>\n\n` : '') +
+    'Reply with JSON only: {"ok": true|false, "issues": ["<the step, what it misses or contradicts, and which lesson or fact says so>"]}'
+  );
+}

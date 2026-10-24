@@ -4,6 +4,7 @@ import type { OutcomeLearner, OutcomeLog } from './outcomes.js';
 import type { ProjectKnowledge } from './project-knowledge.js';
 import type { LessonHygiene } from './lesson-hygiene.js';
 import { learningMetrics } from './metrics.js';
+import type { Playbooks } from './playbooks.js';
 import type { Store } from './store.js';
 import { fail, HttpError, Route, str } from './util.js';
 
@@ -13,10 +14,11 @@ export interface LearningDeps {
   learner: OutcomeLearner;
   projectKnowledge: ProjectKnowledge;
   hygiene: LessonHygiene;
+  playbooks: Playbooks;
 }
 
 export function registerLearningRoutes(route: Route, deps: LearningDeps): void {
-  const { store, outcomes, learner, projectKnowledge, hygiene } = deps;
+  const { store, outcomes, learner, projectKnowledge, hygiene, playbooks } = deps;
   const getBot = (id: string) => store.bots.get(id) ?? fail(404, 'Bot not found');
   const getProject = (id: string) => store.projects.get(id) ?? fail(404, 'Project not found');
 
@@ -84,4 +86,9 @@ export function registerLearningRoutes(route: Route, deps: LearningDeps): void {
     return { path: p.path, exists: p.exists, current: p.current, content: p.content, added: p.added };
   });
   route('POST', '/api/projects/:id/learned/instructions', ({ params }) => projectKnowledge.applyProposal(getProject(params.id).id));
+
+  // ---- Playbooks ---------------------------------------------------------------------------
+
+  route('GET', '/api/projects/:id/playbooks', ({ params }) => playbooks.list(getProject(params.id).id));
+  route('DELETE', '/api/playbooks/:id', ({ params }) => ({ ok: playbooks.remove(params.id) }));
 }

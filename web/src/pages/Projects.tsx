@@ -1,8 +1,8 @@
 import { extractText, isDocument } from '../documents';
 import { ProjectUsage } from './Insights';
-import { BadgeCheck, BookOpen, Brain, FilePlus2, X, FileText, FolderGit2, FolderOpen, FolderSearch, GitBranch, Loader2, RefreshCw, Layers, MessageSquare, MoreHorizontal, Pencil, Plus, ShieldCheck, SquarePen, Terminal, Trash2, Upload } from 'lucide-react';
+import { BadgeCheck, BookOpen, ListOrdered, Brain, FilePlus2, X, FileText, FolderGit2, FolderOpen, FolderSearch, GitBranch, Loader2, RefreshCw, Layers, MessageSquare, MoreHorizontal, Pencil, Plus, ShieldCheck, SquarePen, Terminal, Trash2, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { api, ArtifactListItem, ChatListItem, PermissionMode, ProjectFact, ProjectView, RepoStatus } from '../api';
+import { api, ArtifactListItem, ChatListItem, PermissionMode, Playbook, ProjectFact, ProjectView, RepoStatus } from '../api';
 import { CloneRepoModal, FolderPicker } from '../components/Folders';
 import { ArtifactIcon, TYPE_LABEL } from '../components/Artifacts';
 import { Empty, Menu, Modal, readFileAsText, useConfirm } from '../components/ui';
@@ -326,6 +326,7 @@ export function ProjectPage({ id }: { id: string }) {
           <div className="side-cards">
             <ProjectUsage projectId={project.id} />
             {project.folder && <LearnedCard projectId={project.id} />}
+            <PlaybooksCard projectId={project.id} />
             <div className="card">
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <div className="card-title">
@@ -786,6 +787,52 @@ function LearnedCard({ projectId }: { projectId: string }) {
           )}
         </Modal>
       )}
+    </div>
+  );
+}
+
+/** How kinds of tasks were done cleanly here; matching tasks get them in their prompt. */
+function PlaybooksCard({ projectId }: { projectId: string }) {
+  const { toast } = useApp();
+  const [list, setList] = useState<Playbook[]>([]);
+  useEffect(() => {
+    api.playbooks(projectId).then(setList, () => setList([]));
+  }, [projectId]);
+  if (!list.length) return null;
+  return (
+    <div className="card">
+      <div className="card-title">
+        <ListOrdered size={15} /> {tr('Playbooks')}
+      </div>
+      <p className="muted small" style={{ margin: '4px 0 6px' }}>
+        {tr('Learned from tasks that went cleanly here. Similar tasks get them as a guide.')}
+      </p>
+      {list.map((p) => (
+        <details key={p.id} className="small" style={{ padding: '3px 0' }}>
+          <summary className="row" style={{ gap: 6 }}>
+            <span className="grow">{p.title}</span>
+            <span className="muted">{plural(p.uses, 'used {0} time', 'used {0} times')}</span>
+            <button
+              className="icon-btn sm"
+              aria-label={tr('Forget this')}
+              title={tr('Forget')}
+              onClick={(e) => {
+                e.preventDefault();
+                void api.deletePlaybook(p.id).then(() => setList((l) => l.filter((x) => x.id !== p.id)), (err) => toast(err.message));
+              }}
+            >
+              <X size={12} />
+            </button>
+          </summary>
+          <div className="muted" style={{ margin: '4px 0' }}>{p.when}</div>
+          <ol style={{ margin: 0, paddingInlineStart: 18 }}>
+            {p.steps.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ol>
+          {p.verification && <div style={{ marginTop: 4 }}>{tr('Verify: {0}', p.verification)}</div>}
+        </details>
+      ))}
     </div>
   );
 }

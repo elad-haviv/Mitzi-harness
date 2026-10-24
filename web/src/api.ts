@@ -26,6 +26,7 @@ import type {
   ArtifactType,
   Lesson,
   TaskOutcome,
+  Playbook,
   RetiredLesson,
   ProjectFact,
   MediaKind,
@@ -468,6 +469,8 @@ export const api = {
     request<{ scores: { lessonId: string; uses: number; successRate?: number; baseline?: number; verdict: 'unproven' | 'helping' | 'neutral' | 'hurting' }[]; retired: RetiredLesson[] }>('GET', `/api/bots/${botId}/lessons/health`),
   tidyLessons: (botId: string) => request<{ retired: number; merged: number; lessons: Lesson[] }>('POST', `/api/bots/${botId}/lessons/tidy`, {}),
   restoreLesson: (botId: string, id: string) => request<Lesson[]>('POST', `/api/bots/${botId}/lessons/${id}/restore`, {}),
+  playbooks: (projectId: string) => request<Playbook[]>('GET', `/api/projects/${projectId}/playbooks`),
+  deletePlaybook: (id: string) => request<{ ok: boolean }>('DELETE', `/api/playbooks/${id}`),
   learnNow: (botId: string) => request<{ lessons: string[]; pending: number }>('POST', `/api/bots/${botId}/learn`, {}),
   outcomes: (q: { botId?: string; projectId?: string; chatId?: string; limit?: number } = {}) =>
     request<TaskOutcome[]>('GET', `/api/outcomes?${new URLSearchParams(Object.entries(q).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))}`),

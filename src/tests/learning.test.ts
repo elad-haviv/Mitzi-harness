@@ -13,6 +13,7 @@ import { factsFromOutcome, looksLikeCorrection, MD_START, proposeInstructions } 
 import { changesFromMessages, parseCritique } from '../server/critique.js';
 import { LessonHygiene, scoreLessons } from '../server/lesson-hygiene.js';
 import { learningMetrics, lessonsAt, weekOf } from '../server/metrics.js';
+import { cleanRun, similarity } from '../server/playbooks.js';
 import { tempDir } from './helpers.js';
 
 const call = (id: string, name: string, args: object) => ({ id, type: 'function' as const, function: { name, arguments: JSON.stringify(args) } });
@@ -243,4 +244,17 @@ test('learning metrics: rates over outcomes, week by week, with the lessons in e
   assert.equal(lessonsAt(monday, lessons, retired), 1);
   assert.equal(lessonsAt(monday + 2.5 * day, lessons, retired), 2);
   assert.deepEqual(m.lessonsBySource, { outcome: 1 });
+});
+
+test('playbooks: learned only from clean work, and offered to similar tasks', () => {
+  const clean = outcome({ projectId: 'p', toolCalls: 6, filesTouched: ['a.ts'], testsPassed: true });
+  assert.equal(cleanRun(clean), true);
+  assert.equal(cleanRun({ ...clean, redone: true }), false);
+  assert.equal(cleanRun({ ...clean, errors: [{ tool: 'Edit', kind: 'agent', text: '' }] }), false);
+  // The machine getting in the way doesn't spoil a clean run.
+  assert.equal(cleanRun({ ...clean, errors: [{ tool: 'Bash', kind: 'environment', text: '' }] }), true);
+  assert.equal(cleanRun({ ...clean, source: 'teammate' }), false);
+  const pb = { title: 'Add an API route', when: 'Adding a new HTTP endpoint to the server routes' };
+  assert.ok(similarity('Add a route to the server for exporting users', pb) >= 0.2);
+  assert.ok(similarity('Translate the README into Hebrew', pb) < 0.2);
 });

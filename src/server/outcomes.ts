@@ -53,12 +53,13 @@ export interface RunSummary {
   commands: { command: string; ok: boolean }[];
   /** The result of the bot's own last test run, if it ran one. */
   testsPassed?: boolean;
+  trace: string[];
 }
 
 /** What a run did, from its messages: tool calls, failures (classified), files written, commands run. */
 export function summarizeRun(messages: Message[]): RunSummary {
   const results = new Map(messages.filter((m) => m.role === 'tool').map((m) => [m.tool_call_id, typeof m.content === 'string' ? m.content : '']));
-  const summary: RunSummary = { toolCalls: 0, toolErrors: 0, errors: [], filesTouched: [], commands: [] };
+  const summary: RunSummary = { toolCalls: 0, toolErrors: 0, errors: [], filesTouched: [], commands: [], trace: [] };
   const files = new Set<string>();
   for (const m of messages) {
     if (m.role !== 'assistant') continue;
@@ -74,6 +75,8 @@ export function summarizeRun(messages: Message[]): RunSummary {
         // Counted below as a malformed call.
       }
       const failed = /^Error:|^The user declined|^The user interrupted/.test(out);
+      const target = args.command ?? args.file_path ?? args.pattern ?? args.path ?? args.url ?? '';
+      summary.trace.push(`${name}${target ? ` ${String(target).split('\n')[0].slice(0, 120)}` : ''}${failed ? ' (failed)' : ''}`);
       const exit = name === 'Bash' && /\[(Exit code \d+|Command timed out[^\]]*)\]\s*$/.test(out);
       if (name === 'Bash' && args.command) {
         const command = String(args.command).slice(0, 300);
@@ -92,6 +95,7 @@ export function summarizeRun(messages: Message[]): RunSummary {
   summary.filesTouched = [...files];
   if (summary.commands.length > 20) summary.commands = summary.commands.slice(-20);
   if (summary.errors.length > 12) summary.errors = summary.errors.slice(-12);
+  if (summary.trace.length > 40) summary.trace = [...summary.trace.slice(0, 20), '…', ...summary.trace.slice(-19)];
   return summary;
 }
 
@@ -122,6 +126,8 @@ export class OutcomeLog {
   private outcomes?: Map<string, TaskOutcome>;
   /** Told about each new outcome. */
   readonly listeners = new Set<(o: TaskOutcome) => void>();
+  /** Told about each later signal on an outcome. */
+  readonly amendListeners = new Set<(o: TaskOutcome, patch: Partial<TaskOutcome>) => void>();
 
   constructor(private readonly dir: string) {
     mkdirSync(dir, { recursive: true });
@@ -164,6 +170,7 @@ export class OutcomeLog {
     if (!o) return undefined;
     Object.assign(o, patch);
     this.append({ amend: id, patch });
+    for (const l of this.amendListeners) l(o, patch);
     return o;
   }
 
